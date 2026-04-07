@@ -1,10 +1,28 @@
+# Dependencies
 node_modules/
+
+# SvelteKit build output
 .svelte-kit/
+
+# Cloudflare local dev state
 .wrangler/
+
+# Secrets - NEVER commit these
 .dev.vars
+.env
+.env.local
+.env.*.local
+
+# OMC orchestration state
 .omc/
+
+# Build output
 build/
 dist/
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
 Thumbs.db

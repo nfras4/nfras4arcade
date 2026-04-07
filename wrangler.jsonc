@@ -1,14 +1,27 @@
 {
+  // JSON Schema for IDE autocompletion and validation of wrangler config
   "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Worker name - this becomes the subdomain: nfras4arcade.<account>.workers.dev
   "name": "nfras4arcade",
+
+  // Entry point for the Cloudflare Worker (built by vite + patch-worker.ts)
   "main": "worker/index.js",
+
+  // Workers runtime version - determines which APIs are available
+  // See: https://developers.cloudflare.com/workers/configuration/compatibility-dates/
   "compatibility_date": "2024-12-01",
 
+  // Static assets served by Cloudflare's edge CDN
+  // SvelteKit's adapter-cloudflare outputs built client files here
   "assets": {
     "directory": ".svelte-kit/cloudflare",
+    // ASSETS binding lets the Worker fetch static files programmatically
     "binding": "ASSETS"
   },
 
+  // Durable Objects provide per-room state + WebSocket hibernation for each game
+  // Each game type gets its own DO class with SQLite storage for game state
   "durable_objects": {
     "bindings": [
       { "name": "IMPOSTOR_ROOM", "class_name": "ImpostorRoom" },
@@ -17,12 +30,16 @@
     ]
   },
 
+  // DO migrations - each tag enables SQLite storage for a new DO class
+  // Tags are applied in order on deploy; never remove or reorder existing ones
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["ImpostorRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["PresidentRoom"] },
     { "tag": "v3", "new_sqlite_classes": ["ChaseTheQueenRoom"] }
   ],
 
+  // D1 is Cloudflare's serverless SQL database (SQLite at the edge)
+  // Used for user accounts, stats, and persistent data outside game rooms
   "d1_databases": [
     {
       "binding": "DB",
@@ -32,6 +49,8 @@
     }
   ],
 
+  // Environment variables available in the Worker via env.VARIABLE_NAME
+  // Secrets go in .dev.vars (local) or `wrangler secret put` (production)
   "vars": {
     "ENVIRONMENT": "production"
   }

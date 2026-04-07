@@ -1,0 +1,7 @@
+# Local development secrets for wrangler dev
+# Copy this file to .dev.vars and fill in values
+#
+# D1 runs locally via wrangler dev (no credentials needed)
+# Durable Objects use local SQLite storage in dev mode
+
+ENVIRONMENT=development

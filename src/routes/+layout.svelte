@@ -98,7 +98,12 @@
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 0.3rem 0.6rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     color: var(--text-muted);
     border: 1px solid var(--border);
@@ -121,6 +126,10 @@
     text-transform: uppercase;
     color: var(--text-muted);
     text-decoration: none;
+    padding: 0.5rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
     transition: color 0.15s ease;
   }
 
@@ -133,7 +142,8 @@
     align-items: center;
     gap: 0.4rem;
     text-decoration: none;
-    padding: 0.25rem 0.5rem;
+    padding: 0.4rem 0.6rem;
+    min-height: 44px;
     background: var(--accent-faint);
     border: 1px solid var(--accent-border);
     border-radius: 2px;
@@ -173,7 +183,12 @@
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    padding: 0.25rem 0.5rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
     color: var(--text-muted);
     border: 1px solid var(--border);

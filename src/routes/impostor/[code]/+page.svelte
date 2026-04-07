@@ -674,6 +674,7 @@
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
+    padding-top: 3.5rem;
   }
 
   /* ─── Header ─────────────────────────────────────────── */
@@ -860,6 +861,7 @@
   .mode-toggle button {
     flex: 1;
     padding: 0.5rem;
+    min-height: 44px;
     font-size: 0.8rem;
     background: transparent;
     color: var(--text-muted);
@@ -907,9 +909,9 @@
 
   .room-code-value {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 3rem;
+    font-size: clamp(1.75rem, 8vw, 3rem);
     font-weight: 700;
-    letter-spacing: 0.4em;
+    letter-spacing: 0.3em;
     color: var(--accent);
     cursor: pointer;
     transition: color 0.15s;

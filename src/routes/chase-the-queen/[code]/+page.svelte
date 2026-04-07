@@ -529,7 +529,7 @@
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text);
-    min-width: 80px;
+    min-width: 60px;
   }
 
   .summary-penalties {

@@ -54,8 +54,8 @@
 
 <style>
   .card-face {
-    width: 48px;
-    height: 68px;
+    width: 52px;
+    height: 72px;
     background: var(--bg-card);
     border: 2px solid var(--border);
     border-radius: 4px;
@@ -83,6 +83,10 @@
     transform: translateY(-6px);
     border-color: var(--accent);
     background: var(--accent-faint);
+  }
+
+  button.card-face:active:not(.disabled) {
+    transform: scale(0.95);
   }
 
   .card-face.disabled {

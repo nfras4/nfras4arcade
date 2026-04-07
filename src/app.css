@@ -167,7 +167,7 @@ button:disabled {
 
 input, select {
   font-family: 'Space Grotesk', system-ui, sans-serif;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 400;
   padding: 0.8rem 1rem;
   background: var(--bg-input);

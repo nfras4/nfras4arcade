@@ -322,6 +322,12 @@
     text-align: center;
   }
 
+  @media (max-width: 360px) {
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
   .stat-value {
     display: block;
     font-family: 'Rajdhani', system-ui, sans-serif;

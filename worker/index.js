@@ -124,7 +124,7 @@ var worker_default = {
   }
 };
 
-// --- Monkey Barrel: WebSocket upgrade + DO export patch ---
+// --- nfras4arcade: WebSocket upgrade + DO export patch ---
 const _svelteKitFetch = worker_default.fetch;
 worker_default.fetch = async function(req, env, ctx) {
   const url = new URL(req.url);

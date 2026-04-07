@@ -1,7 +1,7 @@
-# Monkey Barrel - Multiplayer Party Games Platform
+# nfras4arcade - Multiplayer Party Games Platform
 
 ## Project Overview
-Monkey Barrel is a multi-game party platform. The first game is Impostor, a real-time multiplayer browser game where one player is secretly the "impostor" who doesn't know the secret word but gets a vague hint. Players take turns giving clues, then vote on who the impostor is.
+nfras4arcade is a multi-game party platform. The first game is Impostor, a real-time multiplayer browser game where one player is secretly the "impostor" who doesn't know the secret word but gets a vague hint. Players take turns giving clues, then vote on who the impostor is.
 
 ## Tech Stack
 - **Frontend:** SvelteKit 5 (runes mode) with `adapter-cloudflare`
@@ -23,7 +23,7 @@ src/                        # SvelteKit frontend
       password.ts           # PBKDF2-SHA256 password hashing (Web Crypto)
       session.ts            # Session management (D1 + cookies)
   routes/
-    +page.svelte            # Monkey Barrel hub (game cards)
+    +page.svelte            # nfras4arcade hub (game cards)
     impostor/
       +page.svelte          # Impostor lobby (create/join room)
       [code]/+page.svelte   # Main game UI (all phases)

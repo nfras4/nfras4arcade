@@ -4,7 +4,7 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async () => {
   return json({
     status: 'ok',
-    game: 'monkey-barrel',
+    game: 'nfras4arcade',
     timestamp: Date.now(),
   });
 };

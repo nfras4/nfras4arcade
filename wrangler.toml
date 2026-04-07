@@ -1,4 +1,4 @@
-name = "monkey-barrel"
+name = "nfras4arcade"
 main = "worker/index.js"
 compatibility_date = "2024-12-01"
 
@@ -27,7 +27,7 @@ new_classes = ["ChaseTheQueenRoom"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "monkey-barrel-db"
+database_name = "nfras4arcade-db"
 database_id = "local"
 
 [vars]

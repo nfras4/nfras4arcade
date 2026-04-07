@@ -35,7 +35,7 @@
 </script>
 
 <nav class="top-nav">
-  <a href="/" class="nav-brand geo-title">Monkey Barrel</a>
+  <a href="/" class="nav-brand geo-title">nfras4arcade</a>
 
   <div class="nav-right">
     <button

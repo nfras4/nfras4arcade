@@ -41,7 +41,7 @@
     <header class="hub-hero">
       <div class="title-frame">
         <span class="diamond-accent" aria-hidden="true"></span>
-        <h1 class="wordmark geo-title">Monkey Barrel</h1>
+        <h1 class="wordmark geo-title">nfras4arcade</h1>
         <span class="diamond-accent" aria-hidden="true"></span>
       </div>
       <p class="tagline">Party games for friends</p>

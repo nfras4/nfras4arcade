@@ -1,5 +1,5 @@
 {
-  "name": "monkey-barrel",
+  "name": "nfras4arcade",
   "version": "1.0.0",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260405.1",
@@ -18,8 +18,8 @@
     "dev:server": "bun --watch server/index.ts",
     "build": "vite build && bun scripts/patch-worker.ts",
     "deploy": "bun run build && wrangler deploy",
-    "db:migrate:local": "wrangler d1 execute monkey-barrel-db --local --file=migrations/0001_initial.sql",
-    "db:migrate:prod": "wrangler d1 execute monkey-barrel-db --remote --file=migrations/0001_initial.sql",
+    "db:migrate:local": "wrangler d1 execute nfras4arcade-db --local --file=migrations/0001_initial.sql",
+    "db:migrate:prod": "wrangler d1 execute nfras4arcade-db --remote --file=migrations/0001_initial.sql",
     "preview": "vite preview"
   },
   "type": "module"

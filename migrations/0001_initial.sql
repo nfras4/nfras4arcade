@@ -1,4 +1,4 @@
--- Monkey Barrel: Initial schema
+-- nfras4arcade: Initial schema
 -- All timestamps are integer (unix epoch seconds)
 
 CREATE TABLE users (

@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "monkey-barrel",
+  "main": "worker/index.js",
+  "compatibility_date": "2024-12-01",
+
+  "assets": {
+    "directory": ".svelte-kit/cloudflare",
+    "binding": "ASSETS"
+  },
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "IMPOSTOR_ROOM", "class_name": "ImpostorRoom" },
+      { "name": "PRESIDENT_ROOM", "class_name": "PresidentRoom" },
+      { "name": "CHASE_QUEEN_ROOM", "class_name": "ChaseTheQueenRoom" }
+    ]
+  },
+
+  "migrations": [
+    { "tag": "v1", "new_classes": ["ImpostorRoom"] },
+    { "tag": "v2", "new_classes": ["PresidentRoom"] },
+    { "tag": "v3", "new_classes": ["ChaseTheQueenRoom"] }
+  ],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "monkey-barrel-db",
+      // Replace with your actual D1 database ID from `wrangler d1 list`
+      "database_id": "local"
+    }
+  ],
+
+  "vars": {
+    "ENVIRONMENT": "production"
+  }
+}

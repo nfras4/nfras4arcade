@@ -1,0 +1,10 @@
+node_modules/
+.svelte-kit/
+.wrangler/
+.dev.vars
+.omc/
+build/
+dist/
+*.log
+.DS_Store
+Thumbs.db

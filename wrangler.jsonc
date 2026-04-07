@@ -18,9 +18,9 @@
   },
 
   "migrations": [
-    { "tag": "v1", "new_classes": ["ImpostorRoom"] },
-    { "tag": "v2", "new_classes": ["PresidentRoom"] },
-    { "tag": "v3", "new_classes": ["ChaseTheQueenRoom"] }
+    { "tag": "v1", "new_sqlite_classes": ["ImpostorRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["PresidentRoom"] },
+    { "tag": "v3", "new_sqlite_classes": ["ChaseTheQueenRoom"] }
   ],
 
   "d1_databases": [
@@ -28,7 +28,7 @@
       "binding": "DB",
       "database_name": "nfras4arcade-db",
       // Replace with your actual D1 database ID from `wrangler d1 list`
-      "database_id": "local"
+      "database_id": "8cabb797-7996-4c0a-b351-d1101ad97925"
     }
   ],
 

@@ -15,20 +15,20 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["ImpostorRoom"]
+new_sqlite_classes = ["ImpostorRoom"]
 
 [[migrations]]
 tag = "v2"
-new_classes = ["PresidentRoom"]
+new_sqlite_classes = ["PresidentRoom"]
 
 [[migrations]]
 tag = "v3"
-new_classes = ["ChaseTheQueenRoom"]
+new_sqlite_classes = ["ChaseTheQueenRoom"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "nfras4arcade-db"
-database_id = "local"
+database_id = "8cabb797-7996-4c0a-b351-d1101ad97925"
 
 [vars]
 ENVIRONMENT = "production"

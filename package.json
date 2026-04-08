@@ -4,7 +4,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260405.1",
     "@sveltejs/adapter-cloudflare": "^7.2.8",
-    "@sveltejs/kit": "^2.0.0",
+    "@sveltejs/kit": "2.57.0",
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
     "svelte": "^5.0.0",
     "typescript": "^5.0.0",
@@ -20,7 +20,8 @@
     "deploy": "bun run build && wrangler deploy",
     "db:migrate:local": "wrangler d1 execute nfras4arcade-db --local --yes --file=migrations/0001_initial.sql",
     "db:migrate:prod": "wrangler d1 execute nfras4arcade-db --remote --file=migrations/0001_initial.sql",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "bun scripts/patch-sveltekit-guard.ts"
   },
   "type": "module",
   "dependencies": {

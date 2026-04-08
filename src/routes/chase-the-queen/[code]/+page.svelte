@@ -65,6 +65,39 @@
   let wonTricks = $derived((state?.tableState?.wonTricks ?? {}) as Record<string, any[]>);
   let isMoonChooser = $derived(awaitingMoonChoice === pid);
   let scores = $derived((state?.scores ?? {}) as Record<string, number>);
+  let lastCompletedTrick = $derived((state?.tableState?.lastCompletedTrick ?? []) as any[]);
+  let lastTrickWinner = $derived(state?.tableState?.lastTrickWinner as string | null);
+
+  // Show completed trick for 1.2s before transitioning
+  let showingCompletedTrick = $state(false);
+  let displayTrick = $state<any[]>([]);
+  let displayTrickWinner = $state<string | null>(null);
+  let prevTrickNumber = $state(0);
+  let delayedPhase = $state<string | null>(null);
+
+  // Delay phase transitions when a trick just completed (so players can see the result)
+  let displayPhase = $derived(delayedPhase ?? state?.phase);
+
+  $effect(() => {
+    const tn = trickNumber;
+    const phase = state?.phase;
+    if (tn > prevTrickNumber && prevTrickNumber > 0 && lastCompletedTrick.length > 0) {
+      displayTrick = lastCompletedTrick;
+      displayTrickWinner = lastTrickWinner;
+      showingCompletedTrick = true;
+      // If round just ended, hold the playing phase briefly so the last trick is visible
+      if (phase === 'round_over') {
+        delayedPhase = 'playing';
+      }
+      setTimeout(() => {
+        showingCompletedTrick = false;
+        displayTrick = [];
+        displayTrickWinner = null;
+        delayedPhase = null;
+      }, 1200);
+    }
+    prevTrickNumber = tn;
+  });
 
   const SUIT_SYMBOLS: Record<string, string> = { clubs: '\u2663', diamonds: '\u2666', hearts: '\u2665', spades: '\u2660' };
 
@@ -110,26 +143,35 @@
     return state?.players?.find((p: any) => p.id === id)?.name ?? 'Unknown';
   }
 
+  function isCardPlayable(card: { suit: string; rank: string }): boolean {
+    if (!isMyTurn) return false;
+    if (currentTrick.length === 0) return true; // leading — any card
+    const ledSuit = currentTrick[0].card.suit;
+    const hasSuit = myHand.some((c: any) => c.suit === ledSuit);
+    if (!hasSuit) return true; // can't follow suit — any card
+    return card.suit === ledSuit; // must follow suit
+  }
+
   function penaltyCardsForPlayer(id: string): any[] {
     const cards = wonTricks[id] ?? [];
     return cards.filter((c: any) => isPenaltyCard(c));
   }
 
   let gameEnding = $derived(
-    state?.phase === 'round_over' &&
+    displayPhase === 'round_over' &&
     state?.turnOrder?.some((id: string) => (scores[id] ?? 0) >= 500)
   );
 
   // VFX: confetti when you win (lowest score at game over)
   let vfxFired = $state(false);
   $effect(() => {
-    if (state?.phase === 'game_over' && !vfxFired && pid) {
+    if (displayPhase === 'game_over' && !vfxFired && pid) {
       vfxFired = true;
       // Winner is the player with lowest score
       const sorted = state.turnOrder?.slice().sort((a: string, b: string) => (scores[a] ?? 0) - (scores[b] ?? 0));
       if (sorted?.[0] === pid) fireWinConfetti();
     }
-    if (state?.phase !== 'game_over') vfxFired = false;
+    if (displayPhase !== 'game_over') vfxFired = false;
   });
 
   let addingBot = $state(false);
@@ -174,7 +216,7 @@
     </div>
 
     <!-- LOBBY -->
-    {#if state.phase === 'lobby'}
+    {#if displayPhase === 'lobby'}
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Lobby</h2>
         <div class="player-list">
@@ -217,7 +259,7 @@
       </div>
 
     <!-- PLAYING -->
-    {:else if state.phase === 'playing'}
+    {:else if displayPhase === 'playing'}
       <div class="phase-panel">
 
         <!-- Shoot the Moon Decision -->
@@ -267,16 +309,29 @@
             {/each}
           </div>
 
-          <!-- Current trick -->
-          <TablePile
-            mode="trick"
-            label="Current Trick"
-            warning={queenInTrick}
-            warningText="Queen of Spades in play!"
-            trickCards={currentTrick}
-            {playerName}
-            emptyText={isMyTurn ? 'Lead any card' : 'Waiting for lead...'}
-          />
+          <!-- Current trick (or completed trick during transition) -->
+          {#if showingCompletedTrick && displayTrick.length > 0}
+            <div class="trick-result-banner">Won by {playerName(displayTrickWinner!)}</div>
+            <TablePile
+              mode="trick"
+              label="Trick Complete"
+              warning={displayTrick.some((tc: any) => tc.card.suit === 'spades' && tc.card.rank === 'Q')}
+              warningText="Queen of Spades in play!"
+              trickCards={displayTrick}
+              {playerName}
+              emptyText=""
+            />
+          {:else}
+            <TablePile
+              mode="trick"
+              label="Current Trick"
+              warning={queenInTrick}
+              warningText="Queen of Spades in play!"
+              trickCards={currentTrick}
+              {playerName}
+              emptyText={isMyTurn ? 'Lead any card' : 'Waiting for lead...'}
+            />
+          {/if}
 
           <!-- My hand -->
           <div class="hand-area">
@@ -286,6 +341,7 @@
               disabled={!isMyTurn}
               {selectedCards}
               multiSelect={false}
+              {isCardPlayable}
               onchange={(cards) => { selectedCards = cards; }}
             />
           </div>
@@ -302,7 +358,7 @@
       </div>
 
     <!-- ROUND OVER -->
-    {:else if state.phase === 'round_over'}
+    {:else if displayPhase === 'round_over'}
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Round {state.roundNumber} Complete</h2>
 
@@ -342,7 +398,7 @@
       </div>
 
     <!-- GAME OVER -->
-    {:else if state.phase === 'game_over'}
+    {:else if displayPhase === 'game_over'}
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Game Over</h2>
         <div class="final-results">
@@ -374,7 +430,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 4.5rem 1rem 2rem;
+    padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
   }
 
   .loading {
@@ -523,6 +579,21 @@
   .trick-count {
     font-size: 0.7rem;
     color: var(--text-subtle);
+  }
+
+  .trick-result-banner {
+    text-align: center;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 0.375rem 0.75rem;
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    animation: fadeUp 0.3s ease both;
   }
 
   /* Player bar */

@@ -34,6 +34,8 @@ interface ChaseTheQueenTableState {
   totalTricks: number;
   cardsOutOfPlay: Card[];
   awaitingMoonChoice: string | null; // player ID choosing shoot-the-moon
+  lastCompletedTrick: TrickCard[]; // previous trick cards for display
+  lastTrickWinner: string | null;
 }
 
 type ChaseTheQueenAction = CardAction & (
@@ -58,6 +60,8 @@ export class ChaseTheQueenRoom extends CardRoom {
       totalTricks: 0,
       cardsOutOfPlay: [],
       awaitingMoonChoice: null,
+      lastCompletedTrick: [],
+      lastTrickWinner: null,
     };
   }
 
@@ -116,6 +120,8 @@ export class ChaseTheQueenRoom extends CardRoom {
       totalTricks: cardsEach,
       cardsOutOfPlay,
       awaitingMoonChoice: null,
+      lastCompletedTrick: [],
+      lastTrickWinner: null,
     });
   }
 
@@ -255,6 +261,10 @@ export class ChaseTheQueenRoom extends CardRoom {
     for (const tc of table.currentTrick) {
       table.wonTricks[winnerId].push(tc.card);
     }
+
+    // Preserve completed trick for client display
+    table.lastCompletedTrick = [...table.currentTrick];
+    table.lastTrickWinner = winnerId;
 
     // Clear trick
     table.currentTrick = [];
@@ -418,6 +428,8 @@ export class ChaseTheQueenRoom extends CardRoom {
         leadPlayer: table.leadPlayer,
         queenInTrick,
         awaitingMoonChoice: table.awaitingMoonChoice,
+        lastCompletedTrick: table.lastCompletedTrick,
+        lastTrickWinner: table.lastTrickWinner,
         dealerIndex: table.dealerIndex,
       },
     };

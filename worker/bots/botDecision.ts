@@ -38,13 +38,25 @@ export function presidentBotDecision(
   );
 
   if (currentPile.length === 0) {
-    // Opening the trick — play the lowest single card
-    // Prefer 3s and 4s to get rid of low cards early
+    // Opening the trick — consider playing multi-card combos
+    // Find all ranks where we have 2+ cards (potential combos)
+    const comboRanks = sortedRanks.filter(r => groups.get(r)!.length >= 2);
+
+    // ~40% chance to play a combo when one is available
+    if (comboRanks.length > 0 && Math.random() < 0.4) {
+      // Pick the lowest combo rank
+      const rank = comboRanks[0];
+      const cards = groups.get(rank)!;
+      // Play all cards of that rank (pair/triple/quad)
+      return cards.slice();
+    }
+
+    // Otherwise play the lowest single card
     for (const rank of sortedRanks) {
       const cards = groups.get(rank)!;
-      return [cards[0]]; // Play one card of the lowest rank
+      return [cards[0]];
     }
-    return 'pass'; // Should never happen if hand is non-empty
+    return 'pass';
   }
 
   // Must beat the pile with the same card count

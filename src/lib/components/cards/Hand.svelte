@@ -7,20 +7,28 @@
     selectedCards = [],
     onchange = () => {},
     multiSelect = false,
+    isCardPlayable,
   }: {
     cards?: { suit: string; rank: string }[];
     disabled?: boolean;
     selectedCards?: { suit: string; rank: string }[];
     onchange?: (selected: { suit: string; rank: string }[]) => void;
     multiSelect?: boolean;
+    isCardPlayable?: (card: { suit: string; rank: string }) => boolean;
   } = $props();
 
   function isSelected(card: { suit: string; rank: string }): boolean {
     return selectedCards.some(c => c.suit === card.suit && c.rank === card.rank);
   }
 
+  function cardDisabled(card: { suit: string; rank: string }): boolean {
+    if (disabled) return true;
+    if (isCardPlayable && !isCardPlayable(card)) return true;
+    return false;
+  }
+
   function toggle(card: { suit: string; rank: string }) {
-    if (disabled) return;
+    if (cardDisabled(card)) return;
     const idx = selectedCards.findIndex(c => c.suit === card.suit && c.rank === card.rank);
     if (idx >= 0) {
       onchange(selectedCards.filter((_, i) => i !== idx));
@@ -43,7 +51,7 @@
       {card}
       faceUp={true}
       selected={isSelected(card)}
-      {disabled}
+      disabled={cardDisabled(card)}
       onclick={() => toggle(card)}
     />
   {/each}

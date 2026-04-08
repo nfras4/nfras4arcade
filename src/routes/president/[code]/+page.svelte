@@ -94,6 +94,23 @@
     prevPileLen = pLen;
   });
 
+  const PRESIDENT_ORDER: Record<string, number> = {
+    '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+    '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14, '2': 15,
+  };
+
+  function isCardPlayable(card: { suit: string; rank: string }): boolean {
+    if (!isMyTurn) return false;
+    if (finishOrder.includes(pid!)) return false;
+    if (pile.length === 0) return true; // leading — any card
+    // Must beat the top of pile, and need enough cards of this rank
+    const topRank = pile[pile.length - 1].rank;
+    if ((PRESIDENT_ORDER[card.rank] ?? 0) <= (PRESIDENT_ORDER[topRank] ?? 0)) return false;
+    // Check if player has enough of this rank to match pilePlayCount
+    const countOfRank = myHand.filter((c: any) => c.rank === card.rank).length;
+    return countOfRank >= pilePlayCount;
+  }
+
   function canPlay(): boolean {
     if (!isMyTurn || selectedCards.length === 0) return false;
     if (finishOrder.includes(pid!)) return false;
@@ -113,6 +130,7 @@
   }
 
   function startGame() { socket.send({ type: 'start_game' }); }
+  function nextRound() { socket.send({ type: 'next_round' }); }
   function playAgain() { socket.send({ type: 'play_again' }); }
   function endGame() { socket.send({ type: 'end_game' }); }
 
@@ -267,6 +285,7 @@
             disabled={!isMyTurn}
             {selectedCards}
             multiSelect={true}
+            {isCardPlayable}
             onchange={(cards) => { selectedCards = cards; }}
           />
         </div>
@@ -297,7 +316,7 @@
         </div>
         {#if isHost}
           <div class="action-bar">
-            <button class="btn-primary" onclick={playAgain}>Next Round</button>
+            <button class="btn-primary" onclick={nextRound}>Next Round</button>
             <button class="btn-secondary" onclick={endGame}>End Game</button>
           </div>
         {:else}
@@ -327,7 +346,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 4.5rem 1rem 2rem;
+    padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
   }
 
   .loading {

@@ -26,6 +26,7 @@ interface PresidentTableStored {
 type PresidentAction = CardAction & (
   | { type: 'play_cards'; cards: Card[] }
   | { type: 'pass' }
+  | { type: 'next_round' }
 );
 
 /** President card ranking: 3 is lowest, 2 is highest. */
@@ -152,6 +153,25 @@ export class PresidentRoom extends CardRoom {
   }
 
   protected async handleAction(playerId: string, action: PresidentAction): Promise<void> {
+    // Host can start next round from round_over (preserves titles for card swap)
+    if (action.type === 'next_round' && playerId === this.hostId) {
+      if (this.phase !== 'round_over') return;
+      this.roundNumber++;
+      this.phase = 'playing';
+      // Re-derive turnOrder from current players (connected humans + bots)
+      this.turnOrder = Array.from(this.players.keys()).filter(id => {
+        const p = this.players.get(id)!;
+        return p.isBot || p.connected;
+      });
+      this.currentTurn = this.turnOrder[0];
+      this.initRound();
+      this.broadcastState();
+      if (this.isBotTurn()) {
+        await this.scheduleBotTurn();
+      }
+      return;
+    }
+
     if (this.phase !== 'playing') return;
     if (this.currentTurn !== playerId) {
       this.sendTo(playerId, { type: 'error', message: 'Not your turn' });
@@ -253,7 +273,20 @@ export class PresidentRoom extends CardRoom {
         table.finishOrder.push(playerId);
       }
 
-      this.advanceToNextActive(table);
+      // 2 is the highest card — auto-clears the pile
+      if (rank === '2') {
+        table.pile = [];
+        table.pilePlayCount = 0;
+        table.passedPlayers.clear();
+        // Same player leads again (or next active if they finished)
+        if (table.finishOrder.includes(playerId)) {
+          this.advanceToNextActive(table);
+        } else {
+          this.currentTurn = playerId;
+        }
+      } else {
+        this.advanceToNextActive(table);
+      }
       this.setTable(table);
       this.checkAndHandleRoundEnd(table);
       this.broadcastState();

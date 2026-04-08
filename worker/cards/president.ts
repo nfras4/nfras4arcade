@@ -287,6 +287,18 @@ export class PresidentRoom extends CardRoom {
       } else {
         this.advanceToNextActive(table);
       }
+
+      // Stuck detection: if all remaining (non-finished) players have passed,
+      // clear the pile so they get a fresh start. This happens when the last
+      // active player finishes while everyone else has passed.
+      const remaining = this.turnOrder.filter(id => !table.finishOrder.includes(id));
+      if (remaining.length > 0 && remaining.every(id => table.passedPlayers.has(id))) {
+        table.pile = [];
+        table.pilePlayCount = 0;
+        table.passedPlayers.clear();
+        this.currentTurn = remaining[0];
+      }
+
       this.setTable(table);
       this.checkAndHandleRoundEnd(table);
       this.broadcastState();

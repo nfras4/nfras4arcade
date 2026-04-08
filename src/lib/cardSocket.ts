@@ -6,8 +6,11 @@ import { getGuestId } from './guest';
 
 type MessageHandler = (msg: any) => void;
 
-function getWsUrl(roomCode: string, wsPath: string, isGuest: boolean): string {
-  const guestParam = isGuest ? `&guestId=${getGuestId()}` : '';
+function getWsUrl(roomCode: string, wsPath: string): string {
+  // Always include guestId — logged-in users' session cookie takes priority
+  // in the worker, so this is harmless for authenticated users but ensures
+  // guests can always connect.
+  const guestParam = `&guestId=${getGuestId()}`;
 
   if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}`;
 
@@ -27,17 +30,15 @@ export class CardGameSocket {
   private pendingJoin: boolean = false;
   private currentRoom: string | null = null;
   private wsPath: string;
-  private isGuest: boolean = false;
 
   constructor(wsPath: string) {
     this.wsPath = wsPath;
   }
 
-  connect(roomCode: string, isGuest: boolean = false): Promise<void> {
+  connect(roomCode: string, _isGuest?: boolean): Promise<void> {
     this.currentRoom = roomCode;
-    this.isGuest = isGuest;
     return new Promise((resolve, reject) => {
-      const url = getWsUrl(roomCode, this.wsPath, isGuest);
+      const url = getWsUrl(roomCode, this.wsPath);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -123,7 +124,7 @@ export class CardGameSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
-        this.connect(this.currentRoom, this.isGuest).catch(() => {});
+        this.connect(this.currentRoom).catch(() => {});
       }
     }, 2000);
   }

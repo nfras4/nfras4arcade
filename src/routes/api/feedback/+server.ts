@@ -29,23 +29,28 @@ export const POST: RequestHandler = async ({ request, locals, platform, cookies 
   const playerName = user?.displayName ?? `Guest-${(cookies.get('session') ?? crypto.randomUUID()).slice(0, 8)}`;
   const sessionId = cookies.get('session')?.split('.').pop() ?? null;
 
-  await db
-    .prepare(
-      `INSERT INTO feedback (id, player_id, player_name, session_id, room_code, game_type, category, message, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .bind(
-      crypto.randomUUID(),
-      playerId,
-      playerName,
-      sessionId,
-      roomCode ?? null,
-      gameType ?? null,
-      category,
-      message.trim(),
-      Math.floor(Date.now() / 1000)
-    )
-    .run();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO feedback (id, player_id, player_name, session_id, room_code, game_type, category, message, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        playerId,
+        playerName,
+        sessionId,
+        roomCode ?? null,
+        gameType ?? null,
+        category,
+        message.trim(),
+        Math.floor(Date.now() / 1000)
+      )
+      .run();
+  } catch (err) {
+    console.error('Feedback insert failed:', err);
+    return json({ error: 'Failed to save feedback — please try again' }, { status: 500 });
+  }
 
   return json({ ok: true });
 };

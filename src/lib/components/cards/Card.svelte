@@ -1,5 +1,11 @@
 <script lang="ts">
-  const SUIT_SYMBOLS: Record<string, string> = { clubs: '\u2663', diamonds: '\u2666', hearts: '\u2665', spades: '\u2660' };
+  // Inline SVG paths for crisp rendering on all devices
+  const SUIT_PATHS: Record<string, string> = {
+    hearts: 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
+    diamonds: 'M12 2L6 12l6 10 6-10z',
+    clubs: 'M12 2C9.24 2 7 4.24 7 7c0 1.2.44 2.3 1.16 3.15C6.28 10.58 5 12.13 5 14c0 2.76 2.24 5 5 5 .71 0 1.39-.15 2-.42V22h0 0v-3.42c.61.27 1.29.42 2 .42 2.76 0 5-2.24 5-5 0-1.87-1.28-3.42-3.16-3.85A4.98 4.98 0 0017 7c0-2.76-2.24-5-5-5z',
+    spades: 'M12 2C9 7 3 10.5 3 14.5c0 2.76 2.24 5 5 5 .71 0 1.39-.15 2-.42V22h4v-2.92c.61.27 1.29.42 2 .42 2.76 0 5-2.24 5-5C21 10.5 15 7 12 2z',
+  };
 
   let {
     card = null,
@@ -16,7 +22,7 @@
   } = $props();
 
   let isRed = $derived(card?.suit === 'hearts' || card?.suit === 'diamonds');
-  let symbol = $derived(card ? (SUIT_SYMBOLS[card.suit] ?? card.suit) : '');
+  let suitPath = $derived(card ? (SUIT_PATHS[card.suit] ?? '') : '');
 </script>
 
 {#if onclick}
@@ -31,7 +37,7 @@
   >
     {#if faceUp && card}
       <span class="rank">{card.rank}</span>
-      <span class="suit">{symbol}</span>
+      <svg class="suit-icon" viewBox="0 0 24 24"><path d={suitPath}/></svg>
     {:else}
       <span class="back-pattern"></span>
     {/if}
@@ -45,7 +51,7 @@
   >
     {#if faceUp && card}
       <span class="rank">{card.rank}</span>
-      <span class="suit">{symbol}</span>
+      <svg class="suit-icon" viewBox="0 0 24 24"><path d={suitPath}/></svg>
     {:else}
       <span class="back-pattern"></span>
     {/if}
@@ -123,11 +129,13 @@
     line-height: 1;
   }
 
-  .suit {
-    font-size: 0.8rem;
-    line-height: 1;
-    color: var(--text);
+  .suit-icon {
+    width: 16px;
+    height: 16px;
+    fill: var(--text);
+    flex-shrink: 0;
   }
 
-  .red .rank, .red .suit { color: #e74c3c; }
+  .red .rank { color: #e63232; }
+  .red .suit-icon { fill: #e63232; }
 </style>

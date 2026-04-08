@@ -6,6 +6,7 @@
   let message = $state('');
   let submitting = $state(false);
   let toast = $state('');
+  let toastType = $state<'success' | 'error'>('success');
 
   function close() {
     open = false;
@@ -16,6 +17,7 @@
   async function submit() {
     if (!message.trim() || submitting) return;
     submitting = true;
+    toast = '';
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -28,18 +30,27 @@
         }),
       });
       if (!res.ok) {
-        const errData = await res.json();
-        toast = (errData as { error?: string }).error || 'Something went wrong';
+        let errMsg = 'Something went wrong';
+        try {
+          const errData = await res.json();
+          errMsg = (errData as { error?: string }).error || errMsg;
+        } catch {}
+        toastType = 'error';
+        toast = errMsg;
+        // Keep modal open so user can retry
       } else {
+        toastType = 'success';
         toast = 'Thanks for your feedback!';
         close();
       }
     } catch {
-      toast = 'Failed to send feedback';
+      toastType = 'error';
+      toast = 'Network error — check your connection';
+      // Keep modal open so user can retry
     } finally {
       submitting = false;
     }
-    setTimeout(() => { toast = ''; }, 3000);
+    setTimeout(() => { toast = ''; }, toastType === 'error' ? 5000 : 3000);
   }
 
   function handleBackdrop(e: MouseEvent) {
@@ -110,7 +121,7 @@
 {/if}
 
 {#if toast}
-  <div class="feedback-toast">{toast}</div>
+  <div class="feedback-toast" class:toast-error={toastType === 'error'} class:toast-success={toastType === 'success'}>{toast}</div>
 {/if}
 
 <style>
@@ -293,20 +304,30 @@
   .feedback-toast {
     position: fixed;
     bottom: 4rem;
-    right: 1.25rem;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 300;
     background: var(--bg-card);
-    color: var(--accent);
-    border: 1px solid var(--accent-border);
-    padding: 0.6rem 1.25rem;
+    padding: 0.7rem 1.5rem;
     border-radius: 2px;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-weight: 600;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     animation: toastSlide 0.25s cubic-bezier(0.22, 1, 0.36, 1);
     white-space: nowrap;
+    max-width: 90vw;
+  }
+
+  .toast-success {
+    color: #2ecc71;
+    border: 1px solid rgba(46, 204, 113, 0.4);
+  }
+
+  .toast-error {
+    color: #e74c3c;
+    border: 1px solid rgba(231, 76, 60, 0.4);
   }
 
   @keyframes fadeIn {

@@ -80,10 +80,23 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.lastActivity = stored.lastActivity;
       this.gameSessionId = stored.gameSessionId ?? null;
 
-      // Mark all players as reconnecting on wake (they'll reconnect via WS)
-      for (const cp of this.players.values()) {
-        cp.player.connected = false;
-        cp.player.connectionStatus = 'reconnecting';
+      // Reconcile connected status with actual live WebSocket connections.
+      // The Hibernation API keeps WebSockets alive across hibernation, so
+      // check which players still have an open socket rather than marking
+      // everyone disconnected.
+      const livePlayerIds = new Set<string>();
+      for (const ws of this.ctx.getWebSockets()) {
+        const tags = this.ctx.getTags(ws);
+        if (tags[0]) livePlayerIds.add(tags[0]);
+      }
+      for (const [id, cp] of this.players) {
+        if (livePlayerIds.has(id)) {
+          cp.player.connected = true;
+          cp.player.connectionStatus = 'connected';
+        } else {
+          cp.player.connected = false;
+          cp.player.connectionStatus = 'reconnecting';
+        }
       }
     }
   }

@@ -2,18 +2,21 @@
  * WebSocket client for card games. Reuses the same pattern as the Impostor socket
  * but allows specifying the WS path per game type.
  */
+import { getGuestId } from './guest';
 
 type MessageHandler = (msg: any) => void;
 
-function getWsUrl(roomCode: string, wsPath: string): string {
-  if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}`;
+function getWsUrl(roomCode: string, wsPath: string, isGuest: boolean): string {
+  const guestParam = isGuest ? `&guestId=${getGuestId()}` : '';
+
+  if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}`;
 
   if (window.location.hostname !== 'localhost') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}${wsPath}?room=${roomCode}`;
+    return `${protocol}//${window.location.host}${wsPath}?room=${roomCode}${guestParam}`;
   }
 
-  return `ws://localhost:8787${wsPath}?room=${roomCode}`;
+  return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}`;
 }
 
 export class CardGameSocket {
@@ -24,15 +27,17 @@ export class CardGameSocket {
   private pendingJoin: boolean = false;
   private currentRoom: string | null = null;
   private wsPath: string;
+  private isGuest: boolean = false;
 
   constructor(wsPath: string) {
     this.wsPath = wsPath;
   }
 
-  connect(roomCode: string): Promise<void> {
+  connect(roomCode: string, isGuest: boolean = false): Promise<void> {
     this.currentRoom = roomCode;
+    this.isGuest = isGuest;
     return new Promise((resolve, reject) => {
-      const url = getWsUrl(roomCode, this.wsPath);
+      const url = getWsUrl(roomCode, this.wsPath, isGuest);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -118,7 +123,7 @@ export class CardGameSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
-        this.connect(this.currentRoom).catch(() => {});
+        this.connect(this.currentRoom, this.isGuest).catch(() => {});
       }
     }, 2000);
   }

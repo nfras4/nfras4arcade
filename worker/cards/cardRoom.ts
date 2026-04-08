@@ -1,6 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
 import type { Card, CardPlayer, CardGamePhase, CardGameState, CardAction, CardRoomStoredState } from './types';
+import type { BotPlayer } from '../bots/botPlayer';
+import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
@@ -25,6 +27,13 @@ export abstract class CardRoom extends DurableObject<Env> {
   protected tableState: unknown = null;
   protected lastActivity: number = Date.now();
   protected gameSessionId: string | null = null;
+
+  /** Bot players in this room. */
+  protected bots: Map<string, BotPlayer> = new Map();
+  /** Whether a bot turn alarm is pending. */
+  protected botTurnPending: boolean = false;
+  /** Timestamp when bot turn was scheduled (for watchdog). */
+  private botTurnScheduledAt: number = 0;
 
   private initialized = false;
   private rateLimits: Map<string, number[]> = new Map();
@@ -70,15 +79,28 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.tableState = stored.tableState;
       this.lastActivity = stored.lastActivity;
 
-      // Mark all players disconnected on wake
+      // Restore bot map from players
+      this.bots = new Map();
+      for (const [id, p] of this.players) {
+        if (p.isBot) {
+          this.bots.set(id, { id, name: p.name, isBot: true, difficulty: 'easy' });
+        }
+      }
+
+      // Restore bot turn pending flag
+      this.botTurnPending = (stored as any).botTurnPending ?? false;
+
+      // Mark all non-bot players disconnected on wake; bots stay connected
       for (const p of this.players.values()) {
-        p.connected = false;
+        if (!p.isBot) {
+          p.connected = false;
+        }
       }
     }
   }
 
   protected async saveState(): Promise<void> {
-    const state: CardRoomStoredState = {
+    const state: CardRoomStoredState & { botTurnPending: boolean } = {
       code: this.code,
       phase: this.phase,
       players: Array.from(this.players.entries()),
@@ -89,6 +111,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       scores: Array.from(this.scores.entries()),
       tableState: this.tableState,
       lastActivity: this.lastActivity,
+      botTurnPending: this.botTurnPending,
     };
     await this.ctx.storage.put('room', state);
   }
@@ -109,8 +132,18 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.code = roomCode;
     }
 
-    // Non-WebSocket: return room info
+    // Non-WebSocket: handle commands or return room info
     if (request.headers.get('Upgrade') !== 'websocket') {
+      const action = url.searchParams.get('action');
+
+      if (action === 'add-bot' && request.method === 'POST') {
+        return await this.handleAddBotRequest();
+      }
+
+      if (action === 'remove-bots' && request.method === 'POST') {
+        return await this.handleRemoveBotsRequest();
+      }
+
       return Response.json({
         code: this.code,
         playerCount: this.players.size,
@@ -191,6 +224,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.currentTurn = null;
       this.turnOrder = [];
       this.gameSessionId = null;
+      this.scores = new Map();
       for (const p of this.players.values()) {
         p.hand = [];
       }
@@ -201,6 +235,11 @@ export abstract class CardRoom extends DurableObject<Env> {
     } else {
       // Delegate to game-specific handler
       await this.handleAction(playerId, msg as CardAction);
+    }
+
+    // After any action, if it's now a bot's turn, schedule it
+    if (this.isBotTurn() && this.phase === 'playing') {
+      await this.scheduleBotTurn();
     }
 
     await this.saveState();
@@ -226,6 +265,41 @@ export abstract class CardRoom extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     await this.loadState();
+
+    // Bot turn alarm
+    if (this.botTurnPending && this.phase === 'playing') {
+      this.botTurnPending = false;
+      try {
+        await this.processBotTurn();
+      } catch (err) {
+        // Bot turn failed — force a pass to prevent game freeze
+        console.error(`Bot turn error for ${this.currentTurn}:`, err);
+        if (this.currentTurn && this.bots.has(this.currentTurn)) {
+          this.advanceTurn();
+          this.broadcastState();
+          // If next turn is also a bot, schedule it
+          if (this.isBotTurn() && this.phase === 'playing') {
+            await this.scheduleBotTurn();
+          }
+        }
+      }
+      await this.saveState();
+      return;
+    }
+
+    // Watchdog: if it's a bot's turn but no alarm is pending, force-advance
+    if (this.phase === 'playing' && this.isBotTurn() && !this.botTurnPending) {
+      console.error(`Bot watchdog: force-advancing stuck bot ${this.currentTurn}`);
+      this.advanceTurn();
+      this.broadcastState();
+      if (this.isBotTurn()) {
+        await this.scheduleBotTurn();
+      }
+      await this.saveState();
+      return;
+    }
+
+    // Room expiry
     if (Date.now() - this.lastActivity > ROOM_EXPIRY_MS) {
       for (const ws of this.ctx.getWebSockets()) {
         try {
@@ -267,12 +341,20 @@ export abstract class CardRoom extends DurableObject<Env> {
 
     const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
     const name = storedName || 'Player';
-    const isHost = this.players.size === 0;
+    // First human player becomes host (even if bots were added first via create-solo)
+    const noHumanHost = !this.hostId || this.bots.has(this.hostId);
+    const isHost = this.players.size === 0 || noHumanHost;
 
     const player: CardPlayer = { id: playerId, name, hand: [], connected: true, isHost };
     this.players.set(playerId, player);
 
-    if (isHost) this.hostId = playerId;
+    if (isHost) {
+      // Remove host from any bot that had it
+      if (this.hostId && this.players.has(this.hostId)) {
+        this.players.get(this.hostId)!.isHost = false;
+      }
+      this.hostId = playerId;
+    }
 
     this.sendToWs(ws, {
       type: 'joined',
@@ -285,12 +367,14 @@ export abstract class CardRoom extends DurableObject<Env> {
 
   private handleDisconnect(playerId: string): void {
     const player = this.players.get(playerId);
-    if (!player) return;
+    if (!player || player.isBot) return; // Bots never disconnect
 
     if (this.phase === 'lobby') {
       this.players.delete(playerId);
       if (playerId === this.hostId && this.players.size > 0) {
-        const newHost = this.players.values().next().value!;
+        // Find next non-bot player to be host
+        const newHost = Array.from(this.players.values()).find(p => !p.isBot)
+          || this.players.values().next().value!;
         newHost.isHost = true;
         this.hostId = newHost.id;
       }
@@ -312,7 +396,11 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
 
     this.roundNumber = 1;
-    this.turnOrder = this.getConnectedPlayerIds();
+    // Include all players: connected humans + bots (always "connected")
+    this.turnOrder = Array.from(this.players.keys()).filter(id => {
+      const p = this.players.get(id)!;
+      return p.isBot || p.connected;
+    });
     // Shuffle turn order
     const bytes = crypto.getRandomValues(new Uint32Array(this.turnOrder.length));
     for (let i = this.turnOrder.length - 1; i > 0; i--) {
@@ -334,6 +422,95 @@ export abstract class CardRoom extends DurableObject<Env> {
     } catch {}
 
     this.broadcastState();
+
+    // If first turn is a bot, schedule it
+    if (this.isBotTurn()) {
+      await this.scheduleBotTurn();
+    }
+  }
+
+  // --- Bot management ---
+
+  /** Add a bot player to the room. Returns the bot or null if room is full / not in lobby. */
+  protected addBot(customName?: string): BotPlayer | null {
+    if (this.phase !== 'lobby') return null;
+    if (this.players.size >= this.maxPlayers) return null;
+
+    const usedNames = new Set(Array.from(this.players.values()).map(p => p.name));
+    const name = customName || generateBotName(usedNames);
+    const id = generateBotId();
+
+    const bot: BotPlayer = { id, name, isBot: true, difficulty: 'easy' };
+    this.bots.set(id, bot);
+
+    const player: CardPlayer = {
+      id,
+      name,
+      hand: [],
+      connected: true,
+      isHost: false,
+      isBot: true,
+    };
+    this.players.set(id, player);
+
+    return bot;
+  }
+
+  /** Remove all bots from the room. Only works in lobby. */
+  protected removeAllBots(): void {
+    if (this.phase !== 'lobby') return;
+    for (const [id] of this.bots) {
+      this.players.delete(id);
+    }
+    this.bots.clear();
+  }
+
+  /** Returns true if the current turn belongs to a bot. */
+  protected isBotTurn(): boolean {
+    if (!this.currentTurn) return false;
+    return this.bots.has(this.currentTurn);
+  }
+
+  /** Schedule a bot turn via the alarm API. */
+  protected async scheduleBotTurn(): Promise<void> {
+    if (!this.isBotTurn() || this.phase !== 'playing') return;
+    this.botTurnPending = true;
+    this.botTurnScheduledAt = Date.now();
+    const delay = botThinkDelay();
+    await this.ctx.storage.setAlarm(Date.now() + delay);
+  }
+
+  /**
+   * Process the current bot's turn. Subclasses override this
+   * to call game-specific bot decision logic and then handleAction.
+   */
+  protected async processBotTurn(): Promise<void> {
+    // Default no-op — subclasses must implement
+  }
+
+  /** Handle the add-bot HTTP request from SvelteKit API route. */
+  private async handleAddBotRequest(): Promise<Response> {
+    if (this.phase !== 'lobby') {
+      return Response.json({ error: 'Game already in progress' }, { status: 400 });
+    }
+    if (this.players.size >= this.maxPlayers) {
+      return Response.json({ error: 'Room is full' }, { status: 400 });
+    }
+    const bot = this.addBot();
+    if (!bot) {
+      return Response.json({ error: 'Could not add bot' }, { status: 400 });
+    }
+    this.broadcastState();
+    await this.saveState();
+    return Response.json({ name: bot.name, id: bot.id });
+  }
+
+  /** Handle the remove-bots HTTP request. */
+  private async handleRemoveBotsRequest(): Promise<Response> {
+    this.removeAllBots();
+    this.broadcastState();
+    await this.saveState();
+    return Response.json({ ok: true });
   }
 
   // --- Helpers ---
@@ -365,6 +542,9 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
 
       for (const [id] of this.players) {
+        // Skip D1 updates for bots — they have no profile
+        if (this.bots.has(id)) continue;
+
         stmts.push(
           db.prepare('UPDATE player_profiles SET games_played = games_played + 1, updated_at = ? WHERE id = ?')
             .bind(now, id)
@@ -385,6 +565,18 @@ export abstract class CardRoom extends DurableObject<Env> {
           stmts.push(
             db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
               .bind(id, 'b_champion', now)
+          );
+        }
+      }
+
+      // Lone Monkey badge: winner is human and all other players are bots
+      if (winnerId && !this.bots.has(winnerId)) {
+        const otherPlayers = Array.from(this.players.keys()).filter(id => id !== winnerId);
+        const allOthersBots = otherPlayers.length > 0 && otherPlayers.every(id => this.bots.has(id));
+        if (allOthersBots) {
+          stmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(winnerId, 'b_lone_monkey', now)
           );
         }
       }

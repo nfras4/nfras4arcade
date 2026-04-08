@@ -11,14 +11,7 @@ function generateCode(): string {
 }
 
 export const POST: RequestHandler = async ({ locals, platform }) => {
-  if (!locals.user) {
-    return json({ error: 'Not authenticated' }, { status: 401 });
-  }
-
-  // Generate a unique room code
+  // Room creation allowed for both authenticated and guest users
   const code = generateCode();
-
-  // The Durable Object will be lazily created when the first WebSocket connects
-  // via idFromName(code). We just return the code here.
   return json({ code });
 };

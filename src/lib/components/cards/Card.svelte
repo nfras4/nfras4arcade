@@ -73,6 +73,7 @@
 
   button.card-face {
     cursor: pointer;
+    padding: 4px;
   }
 
   button.card-face:hover:not(.disabled) {

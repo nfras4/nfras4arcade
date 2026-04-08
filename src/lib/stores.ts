@@ -71,6 +71,12 @@ export function initSocketListeners(): () => void {
       case 'vote_cast':
         votesIn.update(n => n + 1);
         break;
+
+      case 'lobby_dissolved':
+        error.set(msg.message);
+        gameState.set(null);
+        connected.set(false);
+        break;
     }
   });
 

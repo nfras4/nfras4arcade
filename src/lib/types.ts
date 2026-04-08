@@ -1,11 +1,14 @@
 export type GamePhase = 'lobby' | 'hints' | 'discussion' | 'voting' | 'reveal' | 'game_over';
 export type GameMode = 'text' | 'voice';
 
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
+
 export interface Player {
   id: string;
   name: string;
   isHost: boolean;
   connected: boolean;
+  connectionStatus: ConnectionStatus;
 }
 
 export interface HintEntry {
@@ -72,6 +75,7 @@ export type ClientMessage =
   | { type: 'vote'; targetId: string }
   | { type: 'play_again' }
   | { type: 'end_game' }
+  | { type: 'leave_game' }
   | { type: 'ping' };
 
 // Server → Client messages
@@ -84,4 +88,5 @@ export type ServerMessage =
   | { type: 'vote_cast'; voterId: string }
   | { type: 'round_result'; result: RoundResult }
   | { type: 'error'; message: string }
+  | { type: 'lobby_dissolved'; message: string }
   | { type: 'pong' };

@@ -29,30 +29,44 @@ worker_default.fetch = async function(req, env, ctx) {
     const room = url.searchParams.get('room');
     if (!room) return new Response('Missing room code', { status: 400 });
 
-    // Validate session cookie
+    // Validate session cookie (optional — guests allowed)
     const cookie = req.headers.get('Cookie') || '';
     const match = cookie.match(/(?:^|;\\s*)session=([^;]+)/);
-    if (!match) return new Response('Not authenticated', { status: 401 });
+    let userId = null;
+    let displayName = null;
 
-    const sessionValue = match[1];
-    const dotIndex = sessionValue.indexOf('.');
-    if (dotIndex === -1) return new Response('Invalid session', { status: 401 });
-    const sessionId = sessionValue.slice(dotIndex + 1);
-    const now = Math.floor(Date.now() / 1000);
+    if (match) {
+      const sessionValue = match[1];
+      const dotIndex = sessionValue.indexOf('.');
+      if (dotIndex !== -1) {
+        const sessionId = sessionValue.slice(dotIndex + 1);
+        const now = Math.floor(Date.now() / 1000);
+        const row = await env.DB.prepare(
+          'SELECT u.id, p.display_name FROM sessions s JOIN users u ON u.id = s.user_id JOIN player_profiles p ON p.id = u.id WHERE s.id = ? AND s.expires_at > ?'
+        ).bind(sessionId, now).first();
+        if (row) {
+          userId = row.id;
+          displayName = row.display_name;
+        }
+      }
+    }
 
-    const row = await env.DB.prepare(
-      'SELECT u.id, p.display_name FROM sessions s JOIN users u ON u.id = s.user_id JOIN player_profiles p ON p.id = u.id WHERE s.id = ? AND s.expires_at > ?'
-    ).bind(sessionId, now).first();
-
-    if (!row) return new Response('Session expired', { status: 401 });
+    // Guest fallback: use X-Guest-Id header or generate from URL param
+    if (!userId) {
+      const guestId = url.searchParams.get('guestId');
+      if (!guestId) return new Response('Missing authentication or guest ID', { status: 400 });
+      userId = 'guest_' + guestId;
+      displayName = 'Guest_' + guestId.slice(0, 4);
+    }
 
     // Forward to the appropriate DO with user info in custom headers
     const ns = env[doBinding];
     const id = ns.idFromName(room.toUpperCase());
     const stub = ns.get(id);
     const headers = new Headers(req.headers);
-    headers.set('X-User-Id', row.id);
-    headers.set('X-Display-Name', row.display_name);
+    headers.set('X-User-Id', userId);
+    headers.set('X-Display-Name', displayName);
+    headers.set('X-Is-Guest', userId.startsWith('guest_') ? 'true' : 'false');
     return stub.fetch(new Request(req.url, { method: req.method, headers }));
   }
 

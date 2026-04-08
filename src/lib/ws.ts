@@ -1,19 +1,22 @@
 import type { ClientMessage, ServerMessage } from './types';
+import { getGuestId } from './guest';
 
 type MessageHandler = (msg: ServerMessage) => void;
 
-function getWsUrl(roomCode: string): string {
-  if (typeof window === 'undefined') return `ws://localhost:8787/ws?room=${roomCode}`;
+function getWsUrl(roomCode: string, isGuest: boolean): string {
+  const guestParam = isGuest ? `&guestId=${getGuestId()}` : '';
+
+  if (typeof window === 'undefined') return `ws://localhost:8787/ws?room=${roomCode}${guestParam}`;
 
   const envUrl = import.meta.env.PUBLIC_WS_URL;
-  if (envUrl) return `${envUrl}/ws?room=${roomCode}`;
+  if (envUrl) return `${envUrl}/ws?room=${roomCode}${guestParam}`;
 
   if (window.location.hostname !== 'localhost') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws?room=${roomCode}`;
+    return `${protocol}//${window.location.host}/ws?room=${roomCode}${guestParam}`;
   }
 
-  return `ws://localhost:8787/ws?room=${roomCode}`;
+  return `ws://localhost:8787/ws?room=${roomCode}${guestParam}`;
 }
 
 export class GameSocket {
@@ -23,11 +26,13 @@ export class GameSocket {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pendingJoin: ClientMessage | null = null;
   private currentRoom: string | null = null;
+  private isGuest: boolean = false;
 
-  connect(roomCode: string): Promise<void> {
+  connect(roomCode: string, isGuest: boolean = false): Promise<void> {
     this.currentRoom = roomCode;
+    this.isGuest = isGuest;
     return new Promise((resolve, reject) => {
-      const url = getWsUrl(roomCode);
+      const url = getWsUrl(roomCode, isGuest);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -116,7 +121,7 @@ export class GameSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
-        this.connect(this.currentRoom).catch(() => {});
+        this.connect(this.currentRoom, this.isGuest).catch(() => {});
       }
     }, 2000);
   }

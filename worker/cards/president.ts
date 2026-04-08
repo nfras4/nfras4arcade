@@ -1,6 +1,7 @@
 import { CardRoom } from './cardRoom';
 import type { Card, CardAction, CardGameState, CardGamePhase } from './types';
 import { createDeck, shuffle, dealHands } from './deck';
+import { presidentBotDecision } from '../bots/botDecision';
 
 /** President-specific table state. */
 interface PresidentTableState {
@@ -86,8 +87,15 @@ export class PresidentRoom extends CardRoom {
 
   protected initRound(): void {
     const deck = shuffle(createDeck());
-    const playerIds = this.turnOrder;
+    // Deal to ALL players in the room, not just turnOrder (which may be stale)
+    const playerIds = Array.from(this.players.keys());
     const { hands } = dealHands(deck, playerIds.length);
+
+    // Sanity check: total cards dealt must equal 52
+    const totalDealt = hands.reduce((sum, h) => sum + h.length, 0);
+    if (totalDealt !== 52) {
+      console.error(`President deal error: dealt ${totalDealt} cards to ${playerIds.length} players, expected 52`);
+    }
 
     // Sort each hand by president ranking for convenience
     for (let i = 0; i < playerIds.length; i++) {
@@ -239,7 +247,6 @@ export class PresidentRoom extends CardRoom {
       // Add to pile
       table.pile.push(...cards);
       table.lastPlayerId = playerId;
-      table.passedPlayers.clear();
 
       // Check if player is now out of cards
       if (player.hand.length === 0) {
@@ -309,6 +316,42 @@ export class PresidentRoom extends CardRoom {
     return null;
   }
 
+  protected async processBotTurn(): Promise<void> {
+    if (!this.currentTurn || !this.bots.has(this.currentTurn)) return;
+    if (this.phase !== 'playing') return;
+
+    const botId = this.currentTurn;
+    const player = this.players.get(botId);
+    if (!player) return;
+
+    const table = this.getTable();
+
+    // Skip if bot already finished
+    if (table.finishOrder.includes(botId)) {
+      this.advanceToNextActive(table);
+      this.setTable(table);
+      this.broadcastState();
+      // If next turn is also a bot, schedule it
+      if (this.isBotTurn() && this.phase === 'playing') {
+        await this.scheduleBotTurn();
+      }
+      return;
+    }
+
+    const decision = presidentBotDecision(player.hand, table.pile, table.pilePlayCount);
+
+    if (decision === 'pass') {
+      await this.handleAction(botId, { type: 'pass' });
+    } else {
+      await this.handleAction(botId, { type: 'play_cards', cards: decision });
+    }
+
+    // If next turn is also a bot, schedule it
+    if (this.isBotTurn() && this.phase === 'playing') {
+      await this.scheduleBotTurn();
+    }
+  }
+
   protected getGameStateForPlayer(playerId: string): CardGameState {
     const table = this.getTable();
     const player = this.players.get(playerId);
@@ -319,6 +362,7 @@ export class PresidentRoom extends CardRoom {
       cardCount: p.hand.length,
       connected: p.connected,
       isHost: p.isHost,
+      isBot: p.isBot,
     }));
 
     return {

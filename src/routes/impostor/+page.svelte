@@ -3,6 +3,7 @@
   import { socket } from '$lib/ws';
   import { initSocketListeners, gameState, error, resetStores } from '$lib/stores';
   import { currentUser, isLoggedIn, fetchUser } from '$lib/auth';
+  import { getGuestDisplayName } from '$lib/guest';
 
   let roomCode = $state('');
   let joining = $state(false);
@@ -23,7 +24,6 @@
   });
 
   async function createRoom() {
-    if (!$isLoggedIn) { goto('/login'); return; }
     joining = true;
     try {
       const res = await fetch('/api/create', { method: 'POST' });
@@ -33,7 +33,7 @@
         joining = false;
         return;
       }
-      await socket.connect(data.code);
+      await socket.connect(data.code, !$isLoggedIn);
       socket.joinRoom(data.code);
     } catch {
       error.set('Could not connect to server');
@@ -42,12 +42,11 @@
   }
 
   async function joinRoom() {
-    if (!$isLoggedIn) { goto('/login'); return; }
     if (!roomCode.trim()) return;
     joining = true;
     try {
       const code = roomCode.trim().toUpperCase();
-      await socket.connect(code);
+      await socket.connect(code, !$isLoggedIn);
       socket.joinRoom(code);
     } catch {
       error.set('Could not connect to server');
@@ -83,12 +82,10 @@
 
       {#if mode === 'menu'}
         <div class="panel-inner fade-in">
-          {#if $isLoggedIn}
-            <div class="identity">
-              <span class="identity-label">Playing as</span>
-              <span class="identity-name">{$currentUser?.displayName}</span>
-            </div>
-          {/if}
+          <div class="identity">
+            <span class="identity-label">Playing as</span>
+            <span class="identity-name">{$isLoggedIn ? $currentUser?.displayName : getGuestDisplayName()}</span>
+          </div>
           <div class="action-row">
             <button
               class="btn-primary btn-full"
@@ -102,6 +99,12 @@
             >
               Join Room
             </button>
+            <button
+              class="btn-tutorial btn-full"
+              onclick={() => goto('/impostor/tutorial')}
+            >
+              How to Play
+            </button>
           </div>
         </div>
 
@@ -109,7 +112,7 @@
         <div class="panel-inner fade-in">
           <div class="identity">
             <span class="identity-label">Playing as</span>
-            <span class="identity-name">{$currentUser?.displayName}</span>
+            <span class="identity-name">{$isLoggedIn ? $currentUser?.displayName : getGuestDisplayName()}</span>
           </div>
           <p class="panel-description">
             A new room will be created with a shareable 4-letter code.
@@ -128,7 +131,7 @@
         <div class="panel-inner fade-in">
           <div class="identity">
             <span class="identity-label">Playing as</span>
-            <span class="identity-name">{$currentUser?.displayName}</span>
+            <span class="identity-name">{$isLoggedIn ? $currentUser?.displayName : getGuestDisplayName()}</span>
           </div>
           <label class="field-label" for="room-code-input">Room code</label>
           <input
@@ -394,6 +397,17 @@
     color: var(--accent);
     margin-top: 0.2rem;
     line-height: 1;
+  }
+
+  .btn-tutorial {
+    background: var(--accent-faint) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--accent-border) !important;
+    font-size: 0.85rem;
+  }
+
+  .btn-tutorial:hover {
+    background: var(--accent-border) !important;
   }
 
   @media (min-width: 480px) {

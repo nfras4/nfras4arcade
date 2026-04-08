@@ -11,6 +11,7 @@ const MAX_MESSAGE_SIZE = 2048;
 const MAX_TEXT_LENGTH = 200;
 const MAX_NAME_LENGTH = 20;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+const RECONNECT_TIMEOUT_MS = 45 * 1000; // 45 seconds to reconnect
 const RATE_WINDOW_MS = 5000;
 const RATE_MAX_MESSAGES = 20;
 
@@ -19,8 +20,9 @@ function sanitizeText(text: string, maxLength: number): string {
 }
 
 function shuffleArray<T>(array: T[]): T[] {
+  const bytes = crypto.getRandomValues(new Uint32Array(array.length));
   for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = bytes[i] % (i + 1);
     [array[i], array[j]] = [array[j], array[i]];
   }
   return array;
@@ -49,6 +51,9 @@ export class ImpostorRoom extends DurableObject<Env> {
   // Rate limiting (in-memory only, resets on hibernation -- acceptable)
   private rateLimits: Map<string, number[]> = new Map();
 
+  // Track disconnect timestamps for reconnection timeouts
+  private disconnectTimestamps: Map<string, number> = new Map();
+
   // Track if state has been loaded from storage
   private initialized = false;
 
@@ -75,9 +80,10 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.lastActivity = stored.lastActivity;
       this.gameSessionId = stored.gameSessionId ?? null;
 
-      // Mark all players as disconnected on wake (they'll reconnect)
+      // Mark all players as reconnecting on wake (they'll reconnect via WS)
       for (const cp of this.players.values()) {
         cp.player.connected = false;
+        cp.player.connectionStatus = 'reconnecting';
       }
     }
   }
@@ -134,13 +140,17 @@ export class ImpostorRoom extends DurableObject<Env> {
     // WebSocket upgrade
     const userId = request.headers.get('X-User-Id');
     const displayName = request.headers.get('X-Display-Name');
+    const isGuest = request.headers.get('X-Is-Guest') === 'true';
 
     if (!userId || !displayName) {
       return new Response('Missing user info', { status: 400 });
     }
 
-    // Store display name for use during join
+    // Store display name and guest status for use during join
     await this.ctx.storage.put(`name:${userId}`, displayName);
+    if (isGuest) {
+      await this.ctx.storage.put(`guest:${userId}`, true);
+    }
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
@@ -227,6 +237,21 @@ export class ImpostorRoom extends DurableObject<Env> {
   async alarm(): Promise<void> {
     await this.loadState();
     const now = Date.now();
+
+    // Check reconnect timeouts first
+    if (this.disconnectTimestamps.size > 0) {
+      const changed = this.handleReconnectTimeouts();
+      if (changed) {
+        this.broadcastState();
+        await this.saveState();
+      }
+      // Re-schedule if there are still pending disconnects
+      if (this.disconnectTimestamps.size > 0) {
+        await this.scheduleReconnectCheck();
+        return;
+      }
+    }
+
     if (now - this.lastActivity > ROOM_EXPIRY_MS) {
       // Expire the room
       for (const ws of this.ctx.getWebSockets()) {
@@ -237,6 +262,9 @@ export class ImpostorRoom extends DurableObject<Env> {
       }
       await this.ctx.storage.deleteAll();
       this.initialized = false;
+    } else {
+      // Re-set expiry alarm
+      await this.setExpireAlarm();
     }
   }
 
@@ -249,8 +277,10 @@ export class ImpostorRoom extends DurableObject<Env> {
     const existingPlayer = this.players.get(playerId);
 
     if (existingPlayer) {
-      // Reconnection
+      // Reconnection — restore player and clear timeout
       existingPlayer.player.connected = true;
+      existingPlayer.player.connectionStatus = 'connected';
+      this.disconnectTimestamps.delete(playerId);
       const joinMsg: ServerMessage = {
         type: 'joined',
         playerId,
@@ -286,7 +316,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     }
 
     const isHost = this.players.size === 0;
-    const player: Player = { id: playerId, name, isHost, connected: true };
+    const player: Player = { id: playerId, name, isHost, connected: true, connectionStatus: 'connected' };
     this.players.set(playerId, { player });
 
     if (isHost) {
@@ -308,6 +338,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     if (!cp) return;
 
     if (this.phase === 'lobby') {
+      // In lobby, remove immediately
       this.players.delete(playerId);
       if (playerId === this.hostId && this.players.size > 0) {
         const newHost = this.players.values().next().value!;
@@ -315,15 +346,85 @@ export class ImpostorRoom extends DurableObject<Env> {
         this.hostId = newHost.player.id;
       }
     } else {
+      // Mid-game: mark as reconnecting with timeout
       cp.player.connected = false;
+      cp.player.connectionStatus = 'reconnecting';
+      this.disconnectTimestamps.set(playerId, Date.now());
+
+      // Schedule alarm to check reconnect timeout
+      this.scheduleReconnectCheck();
+
+      // If it's this player's turn in hints, skip after timeout handled by alarm
     }
 
     if (this.players.size === 0) {
-      // Room is empty, let alarm handle cleanup
       return;
     }
 
     this.broadcastState();
+  }
+
+  private async scheduleReconnectCheck(): Promise<void> {
+    // Set an alarm to check for reconnection timeouts
+    const existing = await this.ctx.storage.getAlarm();
+    const nextCheck = Date.now() + RECONNECT_TIMEOUT_MS;
+    // Only set if no alarm or this one is sooner
+    if (!existing || nextCheck < existing) {
+      await this.ctx.storage.setAlarm(nextCheck);
+    }
+  }
+
+  private handleReconnectTimeouts(): boolean {
+    const now = Date.now();
+    let changed = false;
+
+    for (const [pid, timestamp] of this.disconnectTimestamps) {
+      if (now - timestamp >= RECONNECT_TIMEOUT_MS) {
+        const cp = this.players.get(pid);
+        if (cp && !cp.player.connected) {
+          cp.player.connectionStatus = 'disconnected';
+          this.disconnectTimestamps.delete(pid);
+          changed = true;
+
+          // Skip this player's turn if they're current
+          if (this.phase === 'hints') {
+            const currentPlayerId = this.turnOrder[this.currentTurnIndex];
+            if (currentPlayerId === pid) {
+              this.skipDisconnectedTurn(pid);
+            }
+          }
+
+          // Host promotion if host disconnected
+          if (pid === this.hostId) {
+            this.promoteNewHost(pid);
+          }
+        }
+      }
+    }
+
+    return changed;
+  }
+
+  private skipDisconnectedTurn(playerId: string): void {
+    // Skip this player's turn by advancing the index
+    this.currentTurnIndex++;
+    if (this.currentTurnIndex >= this.turnOrder.length) {
+      this.phase = 'discussion';
+    }
+  }
+
+  private promoteNewHost(oldHostId: string): void {
+    // Find a connected player to be the new host
+    for (const [id, cp] of this.players) {
+      if (id !== oldHostId && cp.player.connected) {
+        cp.player.isHost = true;
+        this.hostId = id;
+        // Remove host from old player
+        const oldCp = this.players.get(oldHostId);
+        if (oldCp) oldCp.player.isHost = false;
+        return;
+      }
+    }
   }
 
   // --- Game logic (ported from server/game.ts) ---
@@ -452,9 +553,54 @@ export class ImpostorRoom extends DurableObject<Env> {
         this.broadcastState();
         break;
       }
+
+      case 'leave_game': {
+        this.handlePlayerLeave(playerId);
+        break;
+      }
     }
 
     await this.saveState();
+  }
+
+  private handlePlayerLeave(playerId: string): void {
+    const wasHost = playerId === this.hostId;
+    this.players.delete(playerId);
+    this.disconnectTimestamps.delete(playerId);
+
+    // Close the leaving player's websocket
+    const sockets = this.ctx.getWebSockets(playerId);
+    for (const ws of sockets) {
+      try { ws.close(1000, 'Left game'); } catch {}
+    }
+
+    if (this.players.size === 0) {
+      return;
+    }
+
+    if (wasHost) {
+      // Try to promote a new host
+      let promoted = false;
+      for (const [id, cp] of this.players) {
+        if (cp.player.connected) {
+          cp.player.isHost = true;
+          this.hostId = id;
+          promoted = true;
+          break;
+        }
+      }
+
+      if (!promoted) {
+        // No connected players to promote — dissolve the lobby
+        this.broadcast({ type: 'lobby_dissolved', message: 'The host left and no players are available to take over.' });
+        for (const ws of this.ctx.getWebSockets()) {
+          try { ws.close(1000, 'Lobby dissolved'); } catch {}
+        }
+        return;
+      }
+    }
+
+    this.broadcastState();
   }
 
   // --- Game methods (faithfully ported from GameRoom) ---
@@ -478,7 +624,8 @@ export class ImpostorRoom extends DurableObject<Env> {
     const playerIds = Array.from(this.players.keys()).filter(
       (id) => this.players.get(id)!.player.connected
     );
-    this.impostorId = playerIds[Math.floor(Math.random() * playerIds.length)];
+    const rng = crypto.getRandomValues(new Uint32Array(1));
+    this.impostorId = playerIds[rng[0] % playerIds.length];
 
     for (const [id, cp] of this.players) {
       if (id === this.impostorId) {
@@ -686,7 +833,10 @@ export class ImpostorRoom extends DurableObject<Env> {
       }
 
       // Increment games_played for all players, games_won for winners
+      // Skip D1 stats for guest players (ids starting with "guest_")
       for (const [id, cp] of this.players) {
+        if (id.startsWith('guest_')) continue;
+
         stmts.push(
           db.prepare('UPDATE player_profiles SET games_played = games_played + 1, updated_at = ? WHERE id = ?')
             .bind(now, id)
@@ -729,18 +879,18 @@ export class ImpostorRoom extends DurableObject<Env> {
         const allCorrect = votes.every(v => v.targetId === this.impostorId);
         if (allCorrect) {
           for (const [id] of this.players) {
-            if (id !== this.impostorId) {
-              stmts.push(
-                db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
-                  .bind(id, 'b_perfect_detective', now)
-              );
-            }
+            if (id.startsWith('guest_') || id === this.impostorId) continue;
+            stmts.push(
+              db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+                .bind(id, 'b_perfect_detective', now)
+            );
           }
         }
       }
 
-      // Check veteran badge (10 games) for all players
+      // Check veteran badge (10 games) for registered players
       for (const [id] of this.players) {
+        if (id.startsWith('guest_')) continue;
         const profile = await db.prepare('SELECT games_played FROM player_profiles WHERE id = ?').bind(id).first<{ games_played: number }>();
         if (profile && profile.games_played >= 10) {
           stmts.push(
@@ -802,7 +952,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       turnOrder: this.turnOrder,
       currentTurnIndex: this.currentTurnIndex,
       hints: this.hints,
-      allHints: [...this.allHintsHistory, ...(this.hints.length > 0 ? [this.hints] : [])],
+      allHints: this.allHintsHistory,
       hasVoted: cp?.hasVoted ?? false,
       roundResult:
         this.phase === 'reveal' || this.phase === 'game_over'

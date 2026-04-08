@@ -6,6 +6,7 @@
   import Hand from '$lib/components/cards/Hand.svelte';
   import PlayerSeat from '$lib/components/cards/PlayerSeat.svelte';
   import TablePile from '$lib/components/cards/TablePile.svelte';
+  import { fireWinConfetti } from '$lib/vfx';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/president');
@@ -61,6 +62,38 @@
   let finishOrder = $derived((state?.tableState?.finishOrder ?? []) as string[]);
   let passedPlayers = $derived(new Set(state?.tableState?.passedPlayers ?? []));
 
+  // VFX: confetti on round over (you finished first = President)
+  let vfxFired = $state(false);
+  $effect(() => {
+    if (state?.phase === 'round_over' && !vfxFired) {
+      vfxFired = true;
+      if (finishOrder[0] === pid) fireWinConfetti();
+    }
+    if (state?.phase !== 'round_over') vfxFired = false;
+  });
+
+  // VFX: combo callout for pairs/triples/quads
+  let comboText = $state('');
+  let comboClass = $state('');
+  let prevPileLen = $state(0);
+  $effect(() => {
+    const pLen = pile.length;
+    if (pLen > prevPileLen && pilePlayCount > 1 && state?.phase === 'playing') {
+      if (pilePlayCount === 2) {
+        comboText = 'Pair!';
+        comboClass = 'combo-pair';
+      } else if (pilePlayCount === 3) {
+        comboText = 'Triple!';
+        comboClass = 'combo-triple';
+      } else if (pilePlayCount >= 4) {
+        comboText = 'QUAD!';
+        comboClass = 'combo-quad';
+      }
+      setTimeout(() => { comboText = ''; comboClass = ''; }, pilePlayCount >= 4 ? 1500 : pilePlayCount === 3 ? 1200 : 800);
+    }
+    prevPileLen = pLen;
+  });
+
   function canPlay(): boolean {
     if (!isMyTurn || selectedCards.length === 0) return false;
     if (finishOrder.includes(pid!)) return false;
@@ -97,6 +130,29 @@
   function playerName(id: string): string {
     return state?.players?.find((p: any) => p.id === id)?.name ?? 'Unknown';
   }
+
+  let addingBot = $state(false);
+
+  async function addBot() {
+    addingBot = true;
+    try {
+      await fetch(`/api/add-bot?room=${code}&game=president`, { method: 'POST' });
+    } catch {}
+    addingBot = false;
+  }
+
+  async function fillWithBots() {
+    addingBot = true;
+    const needed = 3 - (state?.players?.length ?? 0);
+    for (let i = 0; i < needed; i++) {
+      await fetch(`/api/add-bot?room=${code}&game=president`, { method: 'POST' });
+    }
+    addingBot = false;
+  }
+
+  async function removeAllBots() {
+    await fetch(`/api/remove-bots?room=${code}&game=president`, { method: 'POST' });
+  }
 </script>
 
 {#if $error}
@@ -124,16 +180,35 @@
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
               <span class="player-name">{player.name}</span>
+              {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
               {#if player.isHost}<span class="host-badge">HOST</span>{/if}
-              {#if !player.connected}<span class="dc-badge">DC</span>{/if}
+              {#if !player.connected && !player.isBot}<span class="dc-badge">DC</span>{/if}
             </div>
           {/each}
         </div>
-        <p class="player-count">{state.players.length} / 6 players (min 3)</p>
+        <p class="player-count">
+          {state.players.length} / 6 players
+          {#if state.players.length < 3}
+            — Need {3 - state.players.length} more to start
+          {/if}
+        </p>
         {#if isHost}
           <button class="btn-primary" onclick={startGame} disabled={state.players.length < 3}>
             Start Game
           </button>
+          <div class="bot-controls">
+            <button class="btn-secondary btn-sm" onclick={addBot} disabled={state.players.length >= 6 || addingBot}>
+              {addingBot ? 'Adding...' : 'Add Bot'}
+            </button>
+            <button class="btn-secondary btn-sm" onclick={fillWithBots} disabled={state.players.length >= 3 || addingBot}>
+              Fill with Bots
+            </button>
+            {#if state.players.some((p: any) => p.isBot)}
+              <button class="btn-secondary btn-sm btn-danger" onclick={removeAllBots}>
+                Remove All Bots
+              </button>
+            {/if}
+          </div>
         {:else}
           <p class="waiting-text">Waiting for host to start...</p>
         {/if}
@@ -177,6 +252,11 @@
         />
         {#if pilePlayCount > 0}
           <div class="pile-info">Play {pilePlayCount} card{pilePlayCount > 1 ? 's' : ''}</div>
+        {/if}
+
+        <!-- Combo VFX callout -->
+        {#if comboText}
+          <div class="combo-callout {comboClass}">{comboText}</div>
         {/if}
 
         <!-- My hand -->
@@ -324,7 +404,7 @@
     color: var(--text);
   }
 
-  .host-badge, .dc-badge {
+  .host-badge, .dc-badge, .bot-badge {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.6rem;
     font-weight: 700;
@@ -335,6 +415,28 @@
 
   .host-badge { background: var(--accent-faint); color: var(--accent); }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
+  .bot-badge { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
+
+  .bot-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-sm {
+    padding: 0.5rem 0.875rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  .btn-danger {
+    color: #e74c3c !important;
+    border-color: rgba(231, 76, 60, 0.3) !important;
+  }
+
+  .btn-danger:hover {
+    background: rgba(231, 76, 60, 0.1) !important;
+  }
 
   .player-count {
     font-size: 0.8rem;
@@ -442,5 +544,48 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--accent);
+  }
+
+  /* Combo VFX callouts */
+  .combo-callout {
+    text-align: center;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    pointer-events: none;
+    animation: comboIn 0.4s ease-out both;
+  }
+
+  .combo-pair {
+    font-size: 1rem;
+    color: var(--accent);
+    opacity: 0.85;
+  }
+
+  .combo-triple {
+    font-size: 1.3rem;
+    color: #ffcc00;
+    text-shadow: 0 0 12px rgba(255, 204, 0, 0.5);
+  }
+
+  .combo-quad {
+    font-size: 1.8rem;
+    color: #ff2d55;
+    text-shadow: 0 0 20px rgba(255, 45, 85, 0.6), 0 0 40px rgba(255, 45, 85, 0.3);
+    animation: quadIn 0.5s ease-out both;
+  }
+
+  @keyframes comboIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    60% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes quadIn {
+    0% { transform: scale(0.3) rotate(-3deg); opacity: 0; filter: blur(4px); }
+    50% { transform: scale(1.2) rotate(1deg); opacity: 1; filter: blur(0); }
+    70% { transform: scale(0.95) rotate(0deg); }
+    100% { transform: scale(1); }
   }
 </style>

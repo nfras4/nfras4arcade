@@ -1,6 +1,7 @@
 import { CardRoom } from './cardRoom';
 import type { Card, CardAction, CardGameState } from './types';
 import { createDeck, shuffle } from './deck';
+import { chaseQueenBotDecision } from '../bots/botDecision';
 
 /** Penalty value of a card in Chase the Queen. */
 function penaltyValue(card: Card): number {
@@ -76,9 +77,9 @@ export class ChaseTheQueenRoom extends CardRoom {
       const player = this.players.get(playerIds[i]);
       if (player) {
         player.hand = deck.slice(i * cardsEach, (i + 1) * cardsEach);
-        // Sort hand by suit then rank for readability
+        // Sort hand by alternating red/black suits, then rank within suit
         player.hand.sort((a, b) => {
-          const suitOrder = ['spades', 'hearts', 'diamonds', 'clubs'];
+          const suitOrder = ['hearts', 'spades', 'diamonds', 'clubs'];
           const si = suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit);
           if (si !== 0) return si;
           return a.value - b.value;
@@ -142,6 +143,10 @@ export class ChaseTheQueenRoom extends CardRoom {
       this.phase = 'playing';
       this.initRound();
       this.broadcastState();
+      // If first turn of new round is a bot, schedule it
+      if (this.isBotTurn()) {
+        await this.scheduleBotTurn();
+      }
       return;
     }
 
@@ -219,7 +224,7 @@ export class ChaseTheQueenRoom extends CardRoom {
 
       // Check if trick is complete (all players have played)
       if (table.currentTrick.length === this.turnOrder.length) {
-        this.resolveTrick(table);
+        await this.resolveTrick(table);
       } else {
         // Advance to next player in turn order
         this.advanceTurn();
@@ -231,7 +236,7 @@ export class ChaseTheQueenRoom extends CardRoom {
     }
   }
 
-  private resolveTrick(table: ChaseTheQueenTableState): void {
+  private async resolveTrick(table: ChaseTheQueenTableState): Promise<void> {
     const ledSuit = table.currentTrick[0].card.suit;
 
     // Find highest card of led suit
@@ -255,6 +260,15 @@ export class ChaseTheQueenRoom extends CardRoom {
     table.currentTrick = [];
     table.trickNumber++;
 
+    // Update running round scores after each trick
+    for (const id of this.turnOrder) {
+      let score = 0;
+      for (const card of table.wonTricks[id]) {
+        score += penaltyValue(card);
+      }
+      table.roundScores[id] = score;
+    }
+
     // Winner leads next trick
     table.leadPlayer = winnerId;
     this.currentTurn = winnerId;
@@ -266,11 +280,11 @@ export class ChaseTheQueenRoom extends CardRoom {
     });
 
     if (allHandsEmpty) {
-      this.handleRoundEnd(table);
+      await this.handleRoundEnd(table);
     }
   }
 
-  private handleRoundEnd(table: ChaseTheQueenTableState): void {
+  private async handleRoundEnd(table: ChaseTheQueenTableState): Promise<void> {
     // Tally penalty cards from won tricks
     for (const id of this.turnOrder) {
       let score = 0;
@@ -303,6 +317,11 @@ export class ChaseTheQueenRoom extends CardRoom {
       this.setTable(table);
       // Phase stays 'playing' so the choice screen shows
       this.broadcastState();
+      // If moon shooter is a bot, auto-resolve after delay
+      if (this.bots.has(moonShooter)) {
+        this.botTurnPending = true;
+        await this.ctx.storage.setAlarm(Date.now() + 1500);
+      }
       return;
     }
 
@@ -332,6 +351,37 @@ export class ChaseTheQueenRoom extends CardRoom {
     return null;
   }
 
+  protected async processBotTurn(): Promise<void> {
+    if (this.phase !== 'playing') return;
+
+    const table = this.getTable();
+
+    // Handle bot shoot the moon choice (not tied to currentTurn)
+    if (table.awaitingMoonChoice && this.bots.has(table.awaitingMoonChoice)) {
+      const botId = table.awaitingMoonChoice;
+      await this.handleAction(botId, { type: 'moon_choice', choice: 'halve_self' });
+      return;
+    }
+
+    if (!this.currentTurn || !this.bots.has(this.currentTurn)) return;
+
+    const botId = this.currentTurn;
+    const player = this.players.get(botId);
+    if (!player || player.hand.length === 0) return;
+
+    const ledSuit = table.currentTrick.length > 0
+      ? table.currentTrick[0].card.suit
+      : null;
+
+    const card = chaseQueenBotDecision(player.hand, table.currentTrick, ledSuit);
+    await this.handleAction(botId, { type: 'play_card', card });
+
+    // If next turn is also a bot, schedule it
+    if (this.isBotTurn() && this.phase === 'playing') {
+      await this.scheduleBotTurn();
+    }
+  }
+
   protected getGameStateForPlayer(playerId: string): CardGameState {
     const table = this.getTable();
     const player = this.players.get(playerId);
@@ -342,6 +392,7 @@ export class ChaseTheQueenRoom extends CardRoom {
       cardCount: p.hand.length,
       connected: p.connected,
       isHost: p.isHost,
+      isBot: p.isBot,
     }));
 
     // Check if Queen of Spades is in the current trick

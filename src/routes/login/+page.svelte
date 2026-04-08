@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { login } from '$lib/auth';
+  import { getGuestDisplayName } from '$lib/guest';
 
   let email = $state('');
   let password = $state('');
@@ -56,6 +57,15 @@
         {loading ? 'Logging in...' : 'Login'}
       </button>
     </form>
+    <div class="guest-divider">
+      <span>or</span>
+    </div>
+    <button class="btn-secondary btn-guest" onclick={() => goto('/')}>
+      Continue as Guest
+    </button>
+    <p class="guest-note">
+      Login is optional, but signing in lets us save your stats and helps us improve the game during development.
+    </p>
     <p class="auth-link">
       Don't have an account? <a href="/register">Register</a>
     </p>
@@ -143,5 +153,43 @@
 
   .auth-link a:hover {
     text-decoration: underline;
+  }
+
+  .guest-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.5rem 0;
+  }
+
+  .guest-divider::before,
+  .guest-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .guest-divider span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-weight: 600;
+  }
+
+  .btn-guest {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
+
+  .guest-note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    text-align: center;
+    margin-top: 0.5rem;
   }
 </style>

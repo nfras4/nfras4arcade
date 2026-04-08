@@ -15,36 +15,54 @@ nfras4arcade is a multi-game party platform. The first game is Impostor, a real-
 ```
 src/                        # SvelteKit frontend
   lib/
-    types.ts                # Shared TypeScript types
-    ws.ts                   # WebSocket client singleton
+    types.ts                # Shared TypeScript types (Player, GameState, messages)
+    ws.ts                   # WebSocket client singleton (supports guest mode)
+    cardSocket.ts           # WebSocket client for card games (supports guest mode)
     stores.ts               # Svelte stores + message handlers
     auth.ts                 # Auth client (login, register, fetchUser)
+    guest.ts                # Guest identity (sessionStorage-based guest IDs)
     server/auth/
       password.ts           # PBKDF2-SHA256 password hashing (Web Crypto)
       session.ts            # Session management (D1 + cookies)
+    components/
+      FeedbackWidget.svelte # Global feedback button + modal
   routes/
-    +page.svelte            # nfras4arcade hub (game cards)
+    +layout.svelte          # Global nav + FeedbackWidget
+    +page.svelte            # nfras4arcade hub (game cards, guest banner)
     impostor/
       +page.svelte          # Impostor lobby (create/join room)
-      [code]/+page.svelte   # Main game UI (all phases)
-    login/+page.svelte      # Login form
-    register/+page.svelte   # Registration form
+      [code]/+page.svelte   # Main game UI (all phases incl. post-game)
+    president/              # President card game
+    chase-the-queen/        # Chase the Queen card game
+    login/+page.svelte      # Login form + "Continue as Guest"
+    register/+page.svelte   # Registration form + "Continue as Guest"
     profile/+page.svelte    # Player profile, stats, badges
+    admin/
+      feedback/             # Admin feedback viewer (sortable table)
     api/                    # SvelteKit server routes
       auth/                 # Auth endpoints (login, register, logout, me, profile)
-      create/               # Room code generation
+      create/               # Room code generation (no auth required)
+      create-solo/          # Solo game creation with bots
+      feedback/             # Feedback submission endpoint
       categories/           # Word categories list
       room/[code]/          # Room info via DO
 worker/
   impostor/
-    room.ts                 # ImpostorRoom Durable Object
+    room.ts                 # ImpostorRoom Durable Object (reconnect, guest, leave)
     types.ts                # DO state types
     words.ts                # Word bank (8 categories)
+  cards/
+    cardRoom.ts             # Base CardRoom DO (abstract, shared card game logic)
+    president.ts            # PresidentRoom DO
+    chaseTheQueen.ts        # ChaseTheQueenRoom DO
+  bots/                     # Bot player AI for solo/card games
   index.ts                  # Placeholder (overwritten by adapter-cloudflare)
 scripts/
-  patch-worker.ts           # Post-build: patches worker with DO export + WS upgrade + auth
+  patch-worker.ts           # Post-build: patches worker with DO export + WS upgrade + guest auth
 migrations/
   0001_initial.sql          # D1 schema (users, sessions, profiles, badges, game_sessions)
+  0002_lone_monkey_badge.sql # Badge migration
+  0003_feedback.sql         # Feedback table for in-game feedback system
 ```
 
 ## Key Commands
@@ -61,8 +79,28 @@ bun run db:migrate:prod     # Run D1 migrations in production
 2. **Hints** - 2 standard hint rounds (+ optional 3rd). Players take turns giving text hints or speaking (voice mode)
 3. **Discussion** - Host chooses: next hint round or start voting
 4. **Voting** - Single-click lock-in vote for who you think is the impostor
-5. **Reveal** - Shows impostor, word, hint, vote breakdown. D1 stats updated.
-6. **Play Again** or **End Game**
+5. **Reveal** - Shows impostor, word, hint, vote breakdown. D1 stats updated. Non-host can leave.
+6. **Game Over** - Full post-game screen with player list, votes. Host clicks "Play Again" or everyone can "Leave".
+
+## Auth & Guest Mode
+- Login is **optional**. All gameplay is accessible to guests.
+- Guests get a session-persistent identity via `sessionStorage` (e.g. `Guest_a1b2`).
+- Guest player IDs are prefixed with `guest_` — D1 stats/badges are skipped for guests.
+- WebSocket auth: logged-in users authenticate via session cookie; guests pass `guestId` URL param.
+- Login/register pages show "Continue as Guest" button with benefit explanation.
+
+## Player Reconnection
+- On disconnect mid-game, players get 45 seconds to reconnect (shown as "Reconnecting..." to others).
+- After timeout, player is marked "Disconnected" — their turn is skipped in hints phase.
+- Host promotion: if the host disconnects/leaves, the next connected player becomes host.
+- If no connected players can be promoted, the lobby is dissolved with a message.
+- Guests reconnect via the same `guestId` stored in `sessionStorage`.
+
+## Feedback System
+- Persistent feedback widget (bottom-right corner) available on every page via `+layout.svelte`.
+- Players submit feedback with category (Bug/Suggestion/Other) + free text (max 2000 chars).
+- Stored in D1 `feedback` table, tagged with player info, room code, game type, timestamp.
+- Admin view at `/admin/feedback` — sortable table (TODO: add auth protection).
 
 ## Svelte 5 Runes
 - **Do NOT use `onMount`/`onDestroy`** - they get tree-shaken in production builds. Use `$effect` instead.

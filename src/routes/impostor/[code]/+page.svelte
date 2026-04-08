@@ -8,7 +8,9 @@
     isHost, myTurn, currentTurnPlayer,
     initSocketListeners, resetStores
   } from '$lib/stores';
+  import { isLoggedIn } from '$lib/auth';
   import type { GameMode } from '$lib/types';
+  import { fireWinConfetti, fireImpostorVfx } from '$lib/vfx';
 
   const code = $page.params.code!;
 
@@ -54,7 +56,7 @@
     // If no game state (page refresh), try to reconnect
     if (!$gameState && !socket.connected) {
       reconnecting = true;
-      socket.connect(code)
+      socket.connect(code, !$isLoggedIn)
         .then(() => {
           socket.joinRoom(code);
           // Give the server a moment to respond with state
@@ -102,6 +104,20 @@
         chatContainer.scrollTop = chatContainer.scrollHeight;
       });
     }
+  });
+
+  // VFX on game over
+  let vfxFired = $state(false);
+  $effect(() => {
+    if ($gameState?.phase === 'game_over' && !vfxFired) {
+      vfxFired = true;
+      if ($gameState.roundResult?.impostorCaught) {
+        fireWinConfetti();
+      } else {
+        fireImpostorVfx();
+      }
+    }
+    if ($gameState?.phase !== 'game_over') vfxFired = false;
   });
 
   function sendHint() {
@@ -156,6 +172,7 @@
   }
 
   function leaveGame() {
+    socket.send({ type: 'leave_game' });
     socket.disconnect();
     resetStores();
     goto('/impostor');
@@ -289,9 +306,14 @@
 
           <div class="player-list">
             {#each $gameState.players as player}
-              <div class="player-chip" class:host={player.isHost}>
+              <div class="player-chip" class:host={player.isHost} class:reconnecting={player.connectionStatus === 'reconnecting'} class:disconnected={player.connectionStatus === 'disconnected'}>
                 {player.name}
                 {#if player.isHost}<span class="host-badge">HOST</span>{/if}
+                {#if player.connectionStatus === 'reconnecting'}
+                  <span class="status-badge reconnecting-badge">Reconnecting...</span>
+                {:else if player.connectionStatus === 'disconnected'}
+                  <span class="status-badge disconnected-badge">Disconnected</span>
+                {/if}
               </div>
             {/each}
           </div>
@@ -470,6 +492,15 @@
                 {/each}
               {/if}
             {/each}
+            {#if $gameState.hints.length > 0}
+              <div class="hints-round-divider">Round {$gameState.hintRound}</div>
+              {#each $gameState.hints as hint}
+                <div class="hint-bubble" class:mine={hint.playerId === $playerId}>
+                  <span class="bubble-name">{hint.playerName}</span>
+                  <div class="bubble-body">{hint.text}</div>
+                </div>
+              {/each}
+            {/if}
           </div>
 
           {#if $isHost}
@@ -602,35 +633,92 @@
                 </button>
               </div>
             {:else}
-              <p class="waiting-text">Waiting for host<span class="loading-dots"></span></p>
+              <div class="reveal-actions">
+                <p class="waiting-text">Waiting for host to restart<span class="loading-dots"></span></p>
+                <button class="btn-secondary btn-full" onclick={leaveGame}>
+                  Leave
+                </button>
+              </div>
             {/if}
           {/if}
         </div>
 
       {:else if $gameState?.phase === 'game_over'}
-        <!-- GAME OVER -->
+        <!-- GAME OVER / POST-GAME SCREEN -->
         <div class="phase-content phase-enter">
-          <h2>Game Over!</h2>
+          <h2 class="postgame-title">Game Over</h2>
 
           {#if $gameState.roundResult}
             {@const result = $gameState.roundResult}
-            <div class="result-card card">
-              <p>
-                Impostor: <strong>{result.impostorName}</strong>
-                — {result.impostorCaught ? 'Caught!' : 'Escaped!'}
-              </p>
-              <p class="result-word">Word: {result.word} ({result.category})</p>
+
+            <div class="reveal-card postgame-card" class:caught={result.impostorCaught} class:escaped={!result.impostorCaught}>
+              <div class="reveal-headline">
+                <span class="reveal-icon">{result.impostorCaught ? '&#10003;' : '&#10007;'}</span>
+                {#if result.impostorCaught}
+                  <h3>Impostor Caught!</h3>
+                {:else}
+                  <h3 class="impostor-wins-text">Impostor Wins!</h3>
+                {/if}
+              </div>
+
+              <div class="reveal-details">
+                <div class="reveal-detail-card">
+                  <span class="reveal-detail-label">Impostor</span>
+                  <span class="reveal-detail-value impostor-name">{result.impostorName}</span>
+                </div>
+                <div class="reveal-detail-card">
+                  <span class="reveal-detail-label">Secret Word</span>
+                  <span class="reveal-detail-value word-value">{result.word}</span>
+                </div>
+              </div>
+
+              <!-- Final player list with status -->
+              <div class="postgame-players">
+                <h4 class="postgame-section-title">Players</h4>
+                {#each $gameState.players as player}
+                  <div class="postgame-player-row">
+                    <span class="postgame-player-name" class:impostor-highlight={player.id === result.impostorId}>
+                      {player.name}
+                      {#if player.id === result.impostorId}
+                        <span class="impostor-tag">Impostor</span>
+                      {/if}
+                    </span>
+                    <span class="postgame-player-status">
+                      {#if player.connectionStatus === 'disconnected'}
+                        <span class="disconnected-badge">Left</span>
+                      {:else if player.connectionStatus === 'reconnecting'}
+                        <span class="reconnecting-badge">Away</span>
+                      {/if}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+
+              <div class="vote-breakdown">
+                <h4 class="postgame-section-title">Votes</h4>
+                {#each result.votes as v}
+                  <div class="vote-row" class:correct-vote={v.targetId === result.impostorId}>
+                    <span class="voter-name">{v.voterName}</span>
+                    <span class="vote-arrow">&#8594;</span>
+                    <strong class:correct={v.targetId === result.impostorId}>{v.targetName}</strong>
+                  </div>
+                {/each}
+              </div>
             </div>
           {/if}
 
-          {#if $isHost}
-            <button class="btn-primary btn-full" onclick={playAgain}>
-              Play Again
+          <div class="postgame-actions">
+            {#if $isHost}
+              <button class="btn-primary btn-full" onclick={playAgain}>
+                Play Again
+              </button>
+            {:else}
+              <p class="waiting-text">Waiting for host to restart<span class="loading-dots"></span></p>
+            {/if}
+            <button class="btn-secondary btn-full" onclick={leaveGame}>
+              Leave
             </button>
-          {/if}
-          <button class="btn-secondary btn-full" onclick={leaveGame}>
-            Back to Home
-          </button>
+          </div>
         </div>
       {/if}
     </main>
@@ -674,7 +762,7 @@
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
-    padding-top: 3.5rem;
+    padding-top: 4.5rem;
   }
 
   /* ─── Header ─────────────────────────────────────────── */
@@ -832,6 +920,39 @@
     color: #000;
     padding: 0.1rem 0.4rem;
     clip-path: var(--clip-btn);
+  }
+
+  .player-chip.reconnecting {
+    opacity: 0.6;
+  }
+
+  .player-chip.disconnected {
+    opacity: 0.35;
+  }
+
+  .status-badge {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 0.1rem 0.4rem;
+    clip-path: var(--clip-btn);
+  }
+
+  .reconnecting-badge {
+    background: var(--yellow, #f1c40f);
+    color: #000;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  .disconnected-badge {
+    background: var(--red, #e74c3c);
+    color: #fff;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
 
   /* ─── Lobby settings ─────────────────────────────────── */
@@ -1476,6 +1597,24 @@
     color: var(--red);
   }
 
+  .impostor-wins-text {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #ff0033;
+    text-shadow: 0 0 20px rgba(255, 0, 51, 0.6), 0 0 40px rgba(255, 0, 51, 0.3);
+    animation: impostorReveal 0.6s ease-out both;
+  }
+
+  @keyframes impostorReveal {
+    0% { transform: scale(0.3); opacity: 0; filter: blur(8px); }
+    50% { transform: scale(1.15); opacity: 1; filter: blur(0); }
+    70% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+  }
+
   .reveal-details {
     margin: 1rem 0;
     display: flex;
@@ -1575,29 +1714,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-  }
-
-  /* ─── Game Over ──────────────────────────────────────── */
-
-  .results-summary {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .result-card h3 {
-    font-size: 1rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .result-card p {
-    font-size: 0.9rem;
-    color: var(--text-muted);
-  }
-
-  .result-word {
-    font-size: 0.85rem !important;
-    margin-top: 0.25rem;
   }
 
   /* ─── Chat panel ─────────────────────────────────────── */
@@ -1720,6 +1836,74 @@
   .stagger-item {
     opacity: 0;
     animation: staggerIn 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* ─── Post-game screen ─────────────────────────────── */
+
+  .postgame-title {
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .postgame-card {
+    margin-top: 0;
+  }
+
+  .postgame-players {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .postgame-section-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .postgame-player-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .postgame-player-row:last-child {
+    border-bottom: none;
+  }
+
+  .postgame-player-name {
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .impostor-highlight {
+    color: var(--red, #e74c3c);
+  }
+
+  .impostor-tag {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    background: var(--red, #e74c3c);
+    color: #fff;
+    padding: 0.1rem 0.4rem;
+    clip-path: var(--clip-btn);
+  }
+
+  .postgame-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
   }
 
   /* ─── Particles ──────────────────────────────────────── */

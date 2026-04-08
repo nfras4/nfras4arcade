@@ -16,12 +16,13 @@ export interface CardPlayer {
   hand: Card[];
   connected: boolean;
   isHost: boolean;
+  isBot?: boolean;
 }
 
 export interface CardGameState {
   code: string;
   phase: CardGamePhase;
-  players: { id: string; name: string; cardCount: number; connected: boolean; isHost: boolean }[];
+  players: { id: string; name: string; cardCount: number; connected: boolean; isHost: boolean; isBot?: boolean }[];
   turnOrder: string[];
   currentTurn: string | null;
   roundNumber: number;

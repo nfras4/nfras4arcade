@@ -6,6 +6,7 @@
   import Hand from '$lib/components/cards/Hand.svelte';
   import PlayerSeat from '$lib/components/cards/PlayerSeat.svelte';
   import TablePile from '$lib/components/cards/TablePile.svelte';
+  import { fireWinConfetti } from '$lib/vfx';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/chase-the-queen');
@@ -118,6 +119,41 @@
     state?.phase === 'round_over' &&
     state?.turnOrder?.some((id: string) => (scores[id] ?? 0) >= 500)
   );
+
+  // VFX: confetti when you win (lowest score at game over)
+  let vfxFired = $state(false);
+  $effect(() => {
+    if (state?.phase === 'game_over' && !vfxFired && pid) {
+      vfxFired = true;
+      // Winner is the player with lowest score
+      const sorted = state.turnOrder?.slice().sort((a: string, b: string) => (scores[a] ?? 0) - (scores[b] ?? 0));
+      if (sorted?.[0] === pid) fireWinConfetti();
+    }
+    if (state?.phase !== 'game_over') vfxFired = false;
+  });
+
+  let addingBot = $state(false);
+
+  async function addBot() {
+    addingBot = true;
+    try {
+      await fetch(`/api/add-bot?room=${code}&game=chase-the-queen`, { method: 'POST' });
+    } catch {}
+    addingBot = false;
+  }
+
+  async function fillWithBots() {
+    addingBot = true;
+    const needed = 3 - (state?.players?.length ?? 0);
+    for (let i = 0; i < needed; i++) {
+      await fetch(`/api/add-bot?room=${code}&game=chase-the-queen`, { method: 'POST' });
+    }
+    addingBot = false;
+  }
+
+  async function removeAllBots() {
+    await fetch(`/api/remove-bots?room=${code}&game=chase-the-queen`, { method: 'POST' });
+  }
 </script>
 
 {#if $error}
@@ -145,16 +181,35 @@
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
               <span class="player-name">{player.name}</span>
+              {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
               {#if player.isHost}<span class="host-badge">HOST</span>{/if}
-              {#if !player.connected}<span class="dc-badge">DC</span>{/if}
+              {#if !player.connected && !player.isBot}<span class="dc-badge">DC</span>{/if}
             </div>
           {/each}
         </div>
-        <p class="player-count">{state.players.length} / 6 players (min 3)</p>
+        <p class="player-count">
+          {state.players.length} / 6 players
+          {#if state.players.length < 3}
+            — Need {3 - state.players.length} more to start
+          {/if}
+        </p>
         {#if isHost}
           <button class="btn-primary" onclick={startGame} disabled={state.players.length < 3}>
             Start Game
           </button>
+          <div class="bot-controls">
+            <button class="btn-secondary btn-sm" onclick={addBot} disabled={state.players.length >= 6 || addingBot}>
+              {addingBot ? 'Adding...' : 'Add Bot'}
+            </button>
+            <button class="btn-secondary btn-sm" onclick={fillWithBots} disabled={state.players.length >= 3 || addingBot}>
+              Fill with Bots
+            </button>
+            {#if state.players.some((p: any) => p.isBot)}
+              <button class="btn-secondary btn-sm btn-danger" onclick={removeAllBots}>
+                Remove All Bots
+              </button>
+            {/if}
+          </div>
         {:else}
           <p class="waiting-text">Waiting for host to start...</p>
         {/if}
@@ -396,7 +451,7 @@
     color: var(--text);
   }
 
-  .host-badge, .dc-badge {
+  .host-badge, .dc-badge, .bot-badge {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.6rem;
     font-weight: 700;
@@ -407,6 +462,28 @@
 
   .host-badge { background: var(--accent-faint); color: var(--accent); }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
+  .bot-badge { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
+
+  .bot-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-sm {
+    padding: 0.5rem 0.875rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  .btn-danger {
+    color: #e74c3c !important;
+    border-color: rgba(231, 76, 60, 0.3) !important;
+  }
+
+  .btn-danger:hover {
+    background: rgba(231, 76, 60, 0.1) !important;
+  }
 
   .player-count {
     font-size: 0.8rem;

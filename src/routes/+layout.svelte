@@ -2,6 +2,7 @@
   import '../app.css';
   import { goto } from '$app/navigation';
   import { currentUser, isLoggedIn, logout, fetchUser } from '$lib/auth';
+  import FeedbackWidget from '$lib/components/FeedbackWidget.svelte';
   import type { Snippet } from 'svelte';
 
   let { children }: { children: Snippet } = $props();
@@ -62,6 +63,8 @@
 </nav>
 
 {@render children()}
+
+<FeedbackWidget />
 
 <style>
   .top-nav {

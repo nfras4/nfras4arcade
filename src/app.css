@@ -77,6 +77,12 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Ensure all page content sits above the fixed background pseudo-elements */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 /* Low-poly tessellated triangle background */
 body::before {
   content: '';

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { currentUser, isLoggedIn, fetchUser } from '$lib/auth';
+  import { getGuestDisplayName } from '$lib/guest';
 
   const games = [
     {
@@ -11,6 +12,7 @@
       maxPlayers: 8,
       type: 'social deduction',
       route: '/impostor',
+      soloAction: 'tutorial' as const,
     },
     {
       id: 'president',
@@ -20,6 +22,7 @@
       maxPlayers: 6,
       type: 'card game',
       route: '/president',
+      soloAction: 'solo' as const,
     },
     {
       id: 'chase-the-queen',
@@ -29,8 +32,30 @@
       maxPlayers: 6,
       type: 'card game',
       route: '/chase-the-queen',
+      soloAction: 'solo' as const,
     },
   ];
+
+  let creatingSolo = $state<string | null>(null);
+
+  async function playSolo(game: typeof games[0]) {
+    if (game.soloAction === 'tutorial') {
+      goto('/impostor/tutorial');
+      return;
+    }
+    creatingSolo = game.id;
+    try {
+      const res = await fetch(`/api/create-solo?game=${game.id}`, { method: 'POST' });
+      const data: { code?: string; error?: string } = await res.json();
+      if (data.error || !data.code) {
+        creatingSolo = null;
+        return;
+      }
+      goto(`${game.route}/${data.code}`);
+    } catch {
+      creatingSolo = null;
+    }
+  }
 
 </script>
 
@@ -47,53 +72,66 @@
       <p class="tagline">Party games for friends</p>
     </header>
 
-    {#if $isLoggedIn}
-      <!-- Game grid -->
-      <section class="games-section">
-        <h2 class="section-heading geo-title">Games</h2>
-        <div class="game-grid">
-          {#each games as game}
-            <button class="game-card card" onclick={() => goto(game.route)}>
-              <div class="game-card-inner">
-                <h3 class="game-name geo-title">{game.name}</h3>
-                <p class="game-desc">{game.description}</p>
-                <div class="game-meta">
-                  <span class="game-players">{game.minPlayers}-{game.maxPlayers} players</span>
-                  <span class="game-type">{game.type}</span>
-                </div>
-              </div>
-            </button>
-          {/each}
-
-          <!-- Coming soon placeholder -->
-          <div class="game-card card coming-soon">
-            <div class="game-card-inner">
-              <h3 class="game-name geo-title">More Games</h3>
-              <p class="game-desc">Coming soon...</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-    {:else}
-      <!-- Landing for logged out users -->
-      <div class="landing-panel">
+    {#if !$isLoggedIn}
+      <!-- Soft login encouragement for guests -->
+      <div class="guest-banner">
         <div class="panel">
           <div class="panel-border" aria-hidden="true"></div>
           <div class="panel-inner">
-            <p class="landing-text">Play party games with friends online. Create an account to get started.</p>
+            <p class="guest-identity">Playing as <strong>{getGuestDisplayName()}</strong></p>
+            <p class="guest-hint">Login is optional, but signing in lets us save your stats and helps us improve the game during development.</p>
             <div class="action-row">
-              <button class="btn-primary btn-full" onclick={() => goto('/register')}>
-                Create Account
-              </button>
-              <button class="btn-secondary btn-full" onclick={() => goto('/login')}>
+              <button class="btn-secondary btn-full btn-small-text" onclick={() => goto('/login')}>
                 Log In
+              </button>
+              <button class="btn-secondary btn-full btn-small-text" onclick={() => goto('/register')}>
+                Create Account
               </button>
             </div>
           </div>
         </div>
       </div>
     {/if}
+
+    <!-- Game grid (visible to all users) -->
+    <section class="games-section">
+      <h2 class="section-heading geo-title">Games</h2>
+      <div class="game-grid">
+        {#each games as game}
+          <div class="game-card card" role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
+            <div class="game-card-inner">
+              <h3 class="game-name geo-title">{game.name}</h3>
+              <p class="game-desc">{game.description}</p>
+              <div class="game-meta">
+                <span class="game-players">{game.minPlayers}-{game.maxPlayers} players</span>
+                <span class="game-type">{game.type}</span>
+              </div>
+            </div>
+            <div class="game-card-footer">
+              <button
+                class="solo-btn"
+                onclick={(e) => { e.stopPropagation(); playSolo(game); }}
+                disabled={creatingSolo === game.id}
+              >
+                {#if game.soloAction === 'tutorial'}
+                  How to Play
+                {:else}
+                  {creatingSolo === game.id ? 'Starting...' : 'Play Solo'}
+                {/if}
+              </button>
+            </div>
+          </div>
+        {/each}
+
+        <!-- Coming soon placeholder -->
+        <div class="game-card card coming-soon">
+          <div class="game-card-inner">
+            <h3 class="game-name geo-title">More Games</h3>
+            <p class="game-desc">Coming soon...</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
   </div>
 </div>
@@ -173,13 +211,13 @@
 
   .game-card {
     text-align: left;
-    cursor: pointer;
-    padding: 0;
-    clip-path: var(--clip-card);
     background: var(--bg-card);
     border: none;
     font-family: inherit;
+    cursor: pointer;
     transition: background 0.15s ease, transform 0.15s ease;
+    display: flex;
+    flex-direction: column;
   }
 
   .game-card:hover:not(.coming-soon) {
@@ -188,10 +226,41 @@
   }
 
   .game-card-inner {
-    padding: 1.5rem;
+    padding: 0 0 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .game-card-footer {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .solo-btn {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    clip-path: none;
+  }
+
+  .solo-btn:hover:not(:disabled) {
+    background: var(--accent-border);
+  }
+
+  .solo-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 
   .game-name {
@@ -239,11 +308,6 @@
     cursor: default;
   }
 
-  /* Landing panel */
-  .landing-panel {
-    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
-  }
-
   .panel {
     background: var(--bg-card);
     clip-path: var(--clip-card);
@@ -267,13 +331,6 @@
     padding: 1.5rem;
   }
 
-  .landing-text {
-    font-size: 0.9375rem;
-    color: var(--text-muted);
-    line-height: 1.6;
-    text-align: center;
-  }
-
   .action-row {
     display: flex;
     flex-direction: column;
@@ -285,6 +342,33 @@
     width: 100%;
     padding: 0.875rem 1.25rem;
     font-size: 0.9375rem;
+  }
+
+  /* Guest banner */
+  .guest-banner {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
+  }
+
+  .guest-identity {
+    font-size: 0.9rem;
+    color: var(--text);
+    text-align: center;
+  }
+
+  .guest-identity strong {
+    color: var(--accent);
+  }
+
+  .guest-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  .btn-small-text {
+    font-size: 0.8rem;
+    padding: 0.6rem 1rem;
   }
 
   @media (min-width: 480px) {

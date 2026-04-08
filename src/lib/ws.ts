@@ -3,8 +3,11 @@ import { getGuestId } from './guest';
 
 type MessageHandler = (msg: ServerMessage) => void;
 
-function getWsUrl(roomCode: string, isGuest: boolean): string {
-  const guestParam = isGuest ? `&guestId=${getGuestId()}` : '';
+function getWsUrl(roomCode: string): string {
+  // Always include guestId — logged-in users' session cookie takes priority
+  // in the worker, so this is harmless for authenticated users but ensures
+  // guests can always connect.
+  const guestParam = `&guestId=${getGuestId()}`;
 
   if (typeof window === 'undefined') return `ws://localhost:8787/ws?room=${roomCode}${guestParam}`;
 
@@ -26,13 +29,11 @@ export class GameSocket {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pendingJoin: ClientMessage | null = null;
   private currentRoom: string | null = null;
-  private isGuest: boolean = false;
 
-  connect(roomCode: string, isGuest: boolean = false): Promise<void> {
+  connect(roomCode: string, _isGuest?: boolean): Promise<void> {
     this.currentRoom = roomCode;
-    this.isGuest = isGuest;
     return new Promise((resolve, reject) => {
-      const url = getWsUrl(roomCode, isGuest);
+      const url = getWsUrl(roomCode);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -121,7 +122,7 @@ export class GameSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
-        this.connect(this.currentRoom, this.isGuest).catch(() => {});
+        this.connect(this.currentRoom).catch(() => {});
       }
     }, 2000);
   }

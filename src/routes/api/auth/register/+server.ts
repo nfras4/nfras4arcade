@@ -17,7 +17,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   };
 
   // Validate email
-  if (!email || typeof email !== 'string' || !email.includes('@') || email.length > 255) {
+  if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
     return json({ error: 'Valid email is required' }, { status: 400 });
   }
 
@@ -27,7 +27,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   }
 
   // Validate display name
-  const name = (displayName || '').trim();
+  const name = (displayName || '').replace(/<[^>]*>/g, '').trim();
   if (!name || name.length < 1 || name.length > 20) {
     return json({ error: 'Display name must be 1-20 characters' }, { status: 400 });
   }

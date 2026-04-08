@@ -14,7 +14,7 @@ export const PUT: RequestHandler = async ({ request, locals, platform }) => {
 
   const { displayName, avatar } = body as { displayName?: string; avatar?: string };
 
-  const name = (displayName || '').trim();
+  const name = (displayName || '').replace(/<[^>]*>/g, '').trim();
   if (!name || name.length < 1 || name.length > 20) {
     return json({ error: 'Display name must be 1-20 characters' }, { status: 400 });
   }

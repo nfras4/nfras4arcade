@@ -462,8 +462,8 @@
   }
 
   .room-code-hint {
-    font-size: 0.7rem;
-    color: var(--text-subtle);
+    font-size: 0.875rem;
+    color: var(--text-muted);
   }
 
   .phase-panel {
@@ -509,7 +509,7 @@
 
   .host-badge, .dc-badge, .bot-badge {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     padding: 0.15rem 0.4rem;
@@ -529,7 +529,7 @@
 
   .btn-sm {
     padding: 0.5rem 0.875rem !important;
-    font-size: 0.8rem !important;
+    font-size: 0.875rem !important;
   }
 
   .btn-danger {
@@ -542,13 +542,13 @@
   }
 
   .player-count {
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
   }
 
   .waiting-text {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
   }
@@ -572,13 +572,13 @@
   }
 
   .waiting-turn {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
   }
 
   .trick-count {
-    font-size: 0.7rem;
-    color: var(--text-subtle);
+    font-size: 0.875rem;
+    color: var(--text-muted);
   }
 
   .trick-result-banner {
@@ -611,7 +611,7 @@
     gap: 0.5rem;
   }
 
-  .hand-label { font-size: 0.6rem; letter-spacing: 0.14em; color: var(--text-subtle); text-align: center; }
+  .hand-label { font-size: 0.85rem; letter-spacing: 0.14em; color: var(--text-muted); text-align: center; }
 
   /* Actions */
   .action-bar {
@@ -674,7 +674,7 @@
   }
 
   .summary-name {
-    font-size: 0.85rem;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text);
     min-width: 60px;
@@ -689,7 +689,7 @@
 
   .mini-card {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-weight: 700;
     padding: 0.1rem 0.3rem;
     background: var(--bg-input);
@@ -702,14 +702,14 @@
 
   .summary-round-score {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: #e74c3c;
   }
 
   .summary-total {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -724,7 +724,7 @@
   }
 
   .ending-text {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     color: var(--accent);
     font-weight: 600;
   }
@@ -753,7 +753,7 @@
 
   .result-position {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--accent);
     min-width: 2rem;
@@ -761,14 +761,40 @@
 
   .result-name {
     flex: 1;
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: var(--text);
   }
 
   .result-score {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: var(--text-muted);
+  }
+
+  /* Mobile responsiveness */
+  @media (max-width: 420px) {
+    .game-page {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+
+    .player-bar {
+      gap: 0.375rem;
+    }
+
+    .summary-row {
+      gap: 0.375rem;
+      padding: 0.5rem 0.6rem;
+    }
+
+    .action-bar {
+      gap: 0.375rem;
+    }
+
+    .action-bar .btn-primary,
+    .action-bar .btn-secondary {
+      max-width: 160px;
+    }
   }
 </style>

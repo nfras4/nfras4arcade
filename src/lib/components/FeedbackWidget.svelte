@@ -157,6 +157,27 @@
     pointer-events: none;
   }
 
+  @media (max-width: 600px) {
+    .feedback-trigger {
+      right: auto;
+      left: 0.75rem;
+      bottom: 0.75rem;
+      padding: 0.4rem;
+      opacity: 0.5;
+      border-radius: 50%;
+      transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .feedback-trigger:hover,
+    .feedback-trigger:active {
+      opacity: 1;
+    }
+
+    .feedback-trigger .feedback-trigger-label {
+      display: none;
+    }
+  }
+
   .feedback-backdrop {
     position: fixed;
     inset: 0;

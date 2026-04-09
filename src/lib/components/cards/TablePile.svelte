@@ -82,9 +82,9 @@
   }
 
   .pile-label {
-    font-size: 0.6rem;
+    font-size: 0.8rem;
     letter-spacing: 0.14em;
-    color: var(--text-subtle);
+    color: var(--text-muted);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -106,7 +106,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 80px;
+    min-height: 100px;
     gap: 0.25rem;
     position: relative;
   }
@@ -116,8 +116,8 @@
   }
 
   .pile-empty {
-    font-size: 0.8rem;
-    color: var(--text-subtle);
+    font-size: 0.875rem;
+    color: var(--text-muted);
     font-style: italic;
     padding: 1rem 0;
   }
@@ -126,7 +126,7 @@
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    min-height: 100px;
+    min-height: 110px;
     gap: 0.75rem;
     flex-wrap: wrap;
   }
@@ -139,12 +139,22 @@
   }
 
   .trick-name {
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
-    max-width: 60px;
+    max-width: 72px;
     text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  @media (max-width: 420px) {
+    .table-area {
+      padding: 0.75rem;
+    }
+
+    .trick-cards {
+      gap: 0.5rem;
+    }
   }
 </style>

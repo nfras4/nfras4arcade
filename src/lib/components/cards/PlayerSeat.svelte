@@ -54,41 +54,52 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.125rem;
-    padding: 0.4rem 0.6rem;
+    gap: 0.2rem;
+    padding: 0.5rem 0.75rem;
     background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    min-width: 75px;
-    transition: border-color 0.15s;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    min-width: 85px;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   }
 
-  .seat.active { border-color: var(--accent); }
+  .seat.active {
+    border-color: var(--accent);
+    background: var(--accent-faint);
+    box-shadow: 0 0 12px rgba(108, 180, 130, 0.25);
+  }
   .seat.finished { opacity: 0.5; }
   .seat.passed { opacity: 0.6; }
   .seat.disconnected { opacity: 0.4; }
 
-  .seat-name { font-size: 0.75rem; font-weight: 600; color: var(--text); }
-  .seat-cards { font-size: 0.65rem; color: var(--text-muted); }
-  .seat-score { font-size: 0.65rem; color: var(--text-subtle); }
-  .seat-penalty { font-size: 0.6rem; color: #e74c3c; font-weight: 600; }
+  .seat-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+  .seat-cards { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
+  .seat-score { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
+  .seat-penalty { font-size: 0.75rem; color: #e74c3c; font-weight: 600; }
   .seat-title {
-    font-size: 0.6rem;
+    font-size: 0.7rem;
     font-weight: 700;
     color: var(--accent);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  .seat-out { font-size: 0.6rem; color: var(--text-subtle); }
-  .seat-passed { font-size: 0.6rem; color: var(--text-subtle); font-style: italic; }
+  .seat-out { font-size: 0.7rem; color: var(--text-muted); }
+  .seat-passed { font-size: 0.7rem; color: var(--text-muted); font-style: italic; }
   .seat-dc {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.55rem;
+    font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     padding: 0.1rem 0.3rem;
     background: var(--bg-input);
     color: var(--text-subtle);
     border-radius: 2px;
+  }
+
+  @media (max-width: 420px) {
+    .seat {
+      min-width: 78px;
+      padding: 0.4rem 0.5rem;
+    }
   }
 </style>

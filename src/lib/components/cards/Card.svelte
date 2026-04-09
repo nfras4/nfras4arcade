@@ -60,16 +60,16 @@
 
 <style>
   .card-face {
-    width: 52px;
-    height: 72px;
+    width: 68px;
+    height: 94px;
     background: var(--bg-card);
     border: 2px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.125rem;
+    gap: 0.2rem;
     transition: transform 0.1s, border-color 0.1s;
     padding: 0;
     clip-path: none;
@@ -108,8 +108,8 @@
 
   .back-pattern {
     display: block;
-    width: 30px;
-    height: 44px;
+    width: 40px;
+    height: 58px;
     background: repeating-linear-gradient(
       45deg,
       var(--border) 0px,
@@ -123,15 +123,15 @@
 
   .rank {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1rem;
+    font-size: 1.35rem;
     font-weight: 700;
     color: var(--text);
     line-height: 1;
   }
 
   .suit-icon {
-    width: 16px;
-    height: 16px;
+    width: 22px;
+    height: 22px;
     fill: var(--text);
     flex-shrink: 0;
   }

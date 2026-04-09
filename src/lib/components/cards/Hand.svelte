@@ -68,4 +68,14 @@
   .hand.many {
     gap: 0.125rem;
   }
+
+  @media (max-width: 420px) {
+    .hand {
+      gap: 0.25rem;
+    }
+
+    .hand.many {
+      gap: 0.1rem;
+    }
+  }
 </style>

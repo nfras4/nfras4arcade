@@ -306,11 +306,22 @@
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Round Over!</h2>
         <div class="results-list">
-          {#each finishOrder as pid, i}
-            <div class="result-row">
+          {#each finishOrder as fpid, i}
+            {@const role = titles[fpid]?.toUpperCase?.() ?? ''}
+            {@const roleClass = role === 'PRESIDENT' ? 'role-president' : role === 'SCUM' ? 'role-scum' : 'role-neutral'}
+            {@const isWinner = i === 0}
+            {@const isMe = fpid === pid}
+            <div class="result-row {roleClass}" class:result-winner={isWinner}>
               <span class="result-position">#{i + 1}</span>
-              <span class="result-name">{playerName(pid)}</span>
-              <span class="result-title">{titles[pid]}</span>
+              <span class="result-name">{playerName(fpid)}</span>
+              <div class="result-right">
+                <span class="result-title {roleClass}">{titles[fpid]}</span>
+                {#if isMe}
+                  <span class="result-context">
+                    {#if role === 'PRESIDENT'}You won this round!{:else if role === 'SCUM'}You lost this round.{:else}Middle of the pack.{/if}
+                  </span>
+                {/if}
+              </div>
             </div>
           {/each}
         </div>
@@ -378,7 +389,7 @@
   }
 
   .room-code-hint {
-    font-size: 0.7rem;
+    font-size: 0.875rem;
     color: var(--text-subtle);
   }
 
@@ -425,7 +436,7 @@
 
   .host-badge, .dc-badge, .bot-badge {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     padding: 0.15rem 0.4rem;
@@ -445,7 +456,7 @@
 
   .btn-sm {
     padding: 0.5rem 0.875rem !important;
-    font-size: 0.8rem !important;
+    font-size: 0.875rem !important;
   }
 
   .btn-danger {
@@ -458,13 +469,13 @@
   }
 
   .player-count {
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
   }
 
   .waiting-text {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
   }
@@ -485,7 +496,7 @@
   }
 
   .waiting-turn {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
   }
 
@@ -498,7 +509,7 @@
   }
 
   .pile-info {
-    font-size: 0.7rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
   }
@@ -510,7 +521,7 @@
     gap: 0.5rem;
   }
 
-  .hand-label { font-size: 0.6rem; letter-spacing: 0.14em; color: var(--text-subtle); text-align: center; }
+  .hand-label { font-size: 0.85rem; letter-spacing: 0.14em; color: var(--text-muted); text-align: center; }
 
   /* Actions */
   .action-bar {
@@ -536,15 +547,37 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.6rem 0.75rem;
+    padding: 0.75rem 1rem;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-left: 4px solid var(--border);
+    border-radius: 4px;
+    transition: transform 0.2s;
+  }
+
+  .result-row.role-president { border-left-color: #4ade80; }
+  .result-row.role-neutral { border-left-color: #facc15; }
+  .result-row.role-scum { border-left-color: #f87171; }
+
+  .result-row.result-winner {
+    background: rgba(108, 180, 130, 0.1);
+    border-color: rgba(108, 180, 130, 0.4);
+    box-shadow: 0 0 16px rgba(108, 180, 130, 0.15);
+    padding: 1rem 1rem;
+  }
+
+  .result-row.result-winner .result-position {
+    font-size: 1.5rem;
+  }
+
+  .result-row.result-winner .result-name {
+    font-size: 1.15rem;
+    font-weight: 700;
   }
 
   .result-position {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--accent);
     min-width: 2rem;
@@ -552,17 +585,33 @@
 
   .result-name {
     flex: 1;
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: var(--text);
+  }
+
+  .result-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.15rem;
   }
 
   .result-title {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--accent);
+  }
+
+  .result-title.role-president { color: #4ade80; }
+  .result-title.role-neutral { color: #facc15; }
+  .result-title.role-scum { color: #f87171; }
+
+  .result-context {
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-muted);
   }
 
   /* Combo VFX callouts */
@@ -599,6 +648,36 @@
     0% { transform: scale(0.5); opacity: 0; }
     60% { transform: scale(1.1); opacity: 1; }
     100% { transform: scale(1); }
+  }
+
+  /* Mobile responsiveness */
+  @media (max-width: 420px) {
+    .game-page {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+
+    .player-bar {
+      gap: 0.375rem;
+    }
+
+    .result-row {
+      gap: 0.5rem;
+      padding: 0.6rem 0.75rem;
+    }
+
+    .result-row.result-winner {
+      padding: 0.75rem 0.75rem;
+    }
+
+    .action-bar {
+      gap: 0.375rem;
+    }
+
+    .action-bar .btn-primary,
+    .action-bar .btn-secondary {
+      max-width: 160px;
+    }
   }
 
   @keyframes quadIn {

@@ -71,7 +71,8 @@ export class ChaseTheQueenRoom extends CardRoom {
 
   protected initRound(): void {
     const deck = shuffle(createDeck());
-    const playerIds = this.turnOrder;
+    // Use all players, not just turnOrder (which may be stale after hibernation)
+    const playerIds = Array.from(this.players.keys());
     const n = playerIds.length;
     const cardsEach = Math.floor(52 / n);
     const totalDealt = cardsEach * n;

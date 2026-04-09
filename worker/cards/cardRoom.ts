@@ -179,6 +179,13 @@ export abstract class CardRoom extends DurableObject<Env> {
     const playerId = tags[0];
     if (!playerId) return;
 
+    // Mark player as connected — receiving a WS message proves they are.
+    // This fixes stale connected=false after DO hibernation wake.
+    const sender = this.players.get(playerId);
+    if (sender && !sender.isBot) {
+      sender.connected = true;
+    }
+
     if (this.isRateLimited(playerId)) {
       this.sendToWs(ws, { type: 'error', message: 'Too many messages, slow down' });
       return;
@@ -396,11 +403,8 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
 
     this.roundNumber = 1;
-    // Include all players: connected humans + bots (always "connected")
-    this.turnOrder = Array.from(this.players.keys()).filter(id => {
-      const p = this.players.get(id)!;
-      return p.isBot || p.connected;
-    });
+    // Include ALL players in the game — everyone in the lobby plays
+    this.turnOrder = Array.from(this.players.keys());
     // Shuffle turn order
     const bytes = crypto.getRandomValues(new Uint32Array(this.turnOrder.length));
     for (let i = this.turnOrder.length - 1; i > 0; i--) {

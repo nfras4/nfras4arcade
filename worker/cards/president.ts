@@ -158,11 +158,8 @@ export class PresidentRoom extends CardRoom {
       if (this.phase !== 'round_over') return;
       this.roundNumber++;
       this.phase = 'playing';
-      // Re-derive turnOrder from current players (connected humans + bots)
-      this.turnOrder = Array.from(this.players.keys()).filter(id => {
-        const p = this.players.get(id)!;
-        return p.isBot || p.connected;
-      });
+      // Re-derive turnOrder from all players in the game
+      this.turnOrder = Array.from(this.players.keys());
       this.currentTurn = this.turnOrder[0];
       this.initRound();
       this.broadcastState();

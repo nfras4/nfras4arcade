@@ -130,6 +130,7 @@
 
   function leaveGame() {
     socket.disconnect();
+    gameState.set(null);
     goto('/chase-the-queen');
   }
 

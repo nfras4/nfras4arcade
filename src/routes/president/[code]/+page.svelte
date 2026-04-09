@@ -655,6 +655,7 @@
     .game-page {
       padding-left: 0.5rem;
       padding-right: 0.5rem;
+      padding-bottom: max(4.5rem, env(safe-area-inset-bottom, 4.5rem));
     }
 
     .player-bar {
@@ -671,12 +672,22 @@
     }
 
     .action-bar {
-      gap: 0.375rem;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
     }
 
     .action-bar .btn-primary,
     .action-bar .btn-secondary {
-      max-width: 160px;
+      max-width: none;
+      flex: 1;
     }
   }
 

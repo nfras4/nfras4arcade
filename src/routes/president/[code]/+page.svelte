@@ -232,6 +232,12 @@
           <p class="waiting-text">Waiting for host to start...</p>
         {/if}
         <button class="btn-secondary" onclick={leaveGame}>Leave</button>
+        <div class="tutorial-warning">
+          <p class="tutorial-warning-text">New to President?</p>
+          <button class="btn-tutorial" onclick={() => goto('/president/tutorial')}>
+            Read the rules first
+          </button>
+        </div>
       </div>
 
     <!-- PLAYING -->
@@ -473,6 +479,39 @@
     font-size: 0.875rem;
     color: var(--text-muted);
     text-align: center;
+  }
+
+  .tutorial-warning {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: rgba(233, 69, 96, 0.06);
+    border: 1px solid rgba(233, 69, 96, 0.2);
+    border-radius: 4px;
+  }
+
+  .tutorial-warning-text {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--yellow);
+  }
+
+  .btn-tutorial {
+    background: var(--accent-faint) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--accent-border) !important;
+    font-size: 0.8rem;
+    padding: 0.4rem 1rem;
+  }
+
+  .btn-tutorial:hover {
+    background: var(--accent-border) !important;
   }
 
   .waiting-text {

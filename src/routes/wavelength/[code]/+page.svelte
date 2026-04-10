@@ -4,6 +4,7 @@
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
   import Dial from '$lib/components/wavelength/Dial.svelte';
+  import { CATEGORY_LABELS, getCategories } from '$lib/wavelength/cards';
 
   const PLAYER_COLORS = [
     '#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
@@ -163,7 +164,21 @@
   let hasLockedIn = $derived(state?.lockedIn?.includes(pid) ?? false);
 
   // Actions
-  function startGame() { socket.send({ type: 'start_game', ...(selectedRounds > 0 ? { rounds: selectedRounds } : {}) }); }
+  function startGame() {
+    socket.send({
+      type: 'start_game',
+      ...(selectedRounds > 0 ? { rounds: selectedRounds } : {}),
+      ...(selectedCategories.length > 0 ? { categories: selectedCategories } : {}),
+    });
+  }
+
+  function toggleCategory(cat: string) {
+    if (selectedCategories.includes(cat)) {
+      selectedCategories = selectedCategories.filter(c => c !== cat);
+    } else {
+      selectedCategories = [...selectedCategories, cat];
+    }
+  }
   function nextRound() { socket.send({ type: 'next_round' }); }
   function playAgain() { socket.send({ type: 'play_again' }); }
   function endGame() { socket.send({ type: 'end_game' }); }
@@ -200,6 +215,7 @@
 
   let addingBot = $state(false);
   let selectedRounds = $state(0); // 0 = default (one rotation)
+  let selectedCategories = $state<string[]>([]); // empty = all categories
 
   async function addBot() {
     addingBot = true;
@@ -282,6 +298,18 @@
                 <option value={n}>{n} rounds</option>
               {/each}
             </select>
+          </div>
+          <div class="category-config">
+            <span class="field-label">Categories {selectedCategories.length > 0 ? `(${selectedCategories.length} selected)` : '(all)'}</span>
+            <div class="category-chips">
+              {#each getCategories() as cat}
+                <button
+                  class="chip"
+                  class:chip-active={selectedCategories.includes(cat)}
+                  onclick={() => toggleCategory(cat)}
+                >{CATEGORY_LABELS[cat]}</button>
+              {/each}
+            </div>
           </div>
           <button class="btn-primary" onclick={startGame} disabled={state.players.length < 2}>
             Start Game
@@ -850,6 +878,44 @@
   .rounds-select {
     width: 100%;
     cursor: pointer;
+  }
+
+  .category-config {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .category-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .chip {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 0.3rem 0.6rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    clip-path: none;
+  }
+
+  .chip:hover {
+    border-color: var(--accent-border);
+    color: var(--text);
+  }
+
+  .chip-active {
+    background: var(--accent-faint);
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   /* Clue input */

@@ -4,8 +4,20 @@ export interface SpectrumCard {
 	category: string;
 }
 
+export const CATEGORY_LABELS: Record<string, string> = {
+	opinions: 'Opinions',
+	physical: 'Physical',
+	abstract: 'Abstract',
+	pop_culture: 'Pop Culture',
+	food: 'Food & Drink',
+	social: 'Social',
+	absurd: 'Absurd',
+	nba: 'NBA',
+	friend_group: 'Friend Group',
+};
+
 const deck: SpectrumCard[] = [
-	// opinions (~18 cards)
+	// opinions
 	{ left: 'Overrated', right: 'Underrated', category: 'opinions' },
 	{ left: 'Guilty Pleasure', right: 'Genuinely Great', category: 'opinions' },
 	{ left: 'Overhyped', right: 'Underhyped', category: 'opinions' },
@@ -25,7 +37,7 @@ const deck: SpectrumCard[] = [
 	{ left: 'Underachieved', right: 'Overachieved', category: 'opinions' },
 	{ left: 'Secretly Terrible', right: 'Secretly Amazing', category: 'opinions' },
 
-	// physical (~18 cards)
+	// physical
 	{ left: 'Hot', right: 'Cold', category: 'physical' },
 	{ left: 'Soft', right: 'Hard', category: 'physical' },
 	{ left: 'Fast', right: 'Slow', category: 'physical' },
@@ -45,7 +57,7 @@ const deck: SpectrumCard[] = [
 	{ left: 'Paper Thin', right: 'Solid Rock', category: 'physical' },
 	{ left: 'Glacially Slow', right: 'Lightning Fast', category: 'physical' },
 
-	// abstract (~18 cards)
+	// abstract
 	{ left: 'Bad Superpower', right: 'Great Superpower', category: 'abstract' },
 	{ left: 'Unethical', right: 'Ethical', category: 'abstract' },
 	{ left: 'Simple', right: 'Complex', category: 'abstract' },
@@ -65,7 +77,7 @@ const deck: SpectrumCard[] = [
 	{ left: 'Nature', right: 'Nurture', category: 'abstract' },
 	{ left: 'Ancient Wisdom', right: 'Modern Logic', category: 'abstract' },
 
-	// pop_culture (~18 cards)
+	// pop_culture
 	{ left: 'One-Hit Wonder', right: 'Legend', category: 'pop_culture' },
 	{ left: 'Mainstream', right: 'Underground', category: 'pop_culture' },
 	{ left: 'Classic', right: 'Modern', category: 'pop_culture' },
@@ -85,7 +97,7 @@ const deck: SpectrumCard[] = [
 	{ left: 'Meme-ified', right: 'Still Respected', category: 'pop_culture' },
 	{ left: 'Niche Appeal', right: 'Universal Appeal', category: 'pop_culture' },
 
-	// food (~18 cards)
+	// food
 	{ left: 'Healthy', right: 'Unhealthy', category: 'food' },
 	{ left: 'Comfort Food', right: 'Fancy Food', category: 'food' },
 	{ left: 'Sweet', right: 'Savory', category: 'food' },
@@ -105,7 +117,7 @@ const deck: SpectrumCard[] = [
 	{ left: 'Fuel', right: 'Experience', category: 'food' },
 	{ left: 'Hot Dish', right: 'Cold Dish', category: 'food' },
 
-	// social (~18 cards)
+	// social
 	{ left: 'Introvert Activity', right: 'Extrovert Activity', category: 'social' },
 	{ left: 'First Date', right: 'Tenth Date', category: 'social' },
 	{ left: 'Awkward', right: 'Smooth', category: 'social' },
@@ -125,7 +137,7 @@ const deck: SpectrumCard[] = [
 	{ left: 'Inside Joke', right: 'Public Humor', category: 'social' },
 	{ left: 'Crowd Drainer', right: 'Energy Giver', category: 'social' },
 
-	// absurd (~18 cards)
+	// absurd
 	{ left: 'Would Fight', right: 'Would Befriend', category: 'absurd' },
 	{ left: 'Apocalypse Useless', right: 'Apocalypse Essential', category: 'absurd' },
 	{ left: 'Die First', right: 'Survive Horror Movie', category: 'absurd' },
@@ -144,15 +156,61 @@ const deck: SpectrumCard[] = [
 	{ left: 'Failed Prophecy', right: 'Fulfilled Prophecy', category: 'absurd' },
 	{ left: 'Cursed Artifact', right: 'Enchanted Relic', category: 'absurd' },
 	{ left: 'Accidental Villain', right: 'Unlikely Hero', category: 'absurd' },
+
+	// nba
+	{ left: 'Role Player', right: 'Superstar', category: 'nba' },
+	{ left: 'Bust', right: 'Steal of the Draft', category: 'nba' },
+	{ left: 'Regular Season Player', right: 'Playoff Performer', category: 'nba' },
+	{ left: 'Better in Highlights', right: 'Better Live', category: 'nba' },
+	{ left: 'Offense Only', right: 'Defense Only', category: 'nba' },
+	{ left: 'Tank-Worthy', right: 'Championship Contender', category: 'nba' },
+	{ left: 'Bench Warmer', right: 'Starter', category: 'nba' },
+	{ left: 'Trade Bait', right: 'Franchise Player', category: 'nba' },
+	{ left: 'Old School', right: 'New School', category: 'nba' },
+	{ left: 'Stat Padder', right: 'Winning Player', category: 'nba' },
+	{ left: 'Overpaid', right: 'Underpaid', category: 'nba' },
+	{ left: 'Flopper', right: 'Tough Guy', category: 'nba' },
+	{ left: 'Locker Room Cancer', right: 'Team Leader', category: 'nba' },
+	{ left: 'Regular Season MVP', right: 'Finals MVP', category: 'nba' },
+	{ left: 'Better Young', right: 'Better With Age', category: 'nba' },
+	{ left: 'Streetball Legend', right: 'NBA Legend', category: 'nba' },
+	{ left: 'G-League Lifer', right: 'All-Star Lock', category: 'nba' },
+	{ left: 'One Team Lifer', right: 'Ring Chaser', category: 'nba' },
+
+	// friend_group
+	{ left: 'Always Late', right: 'Always Early', category: 'friend_group' },
+	{ left: 'Group Chat Silent', right: 'Group Chat Spammer', category: 'friend_group' },
+	{ left: 'Plans the Trip', right: 'Just Shows Up', category: 'friend_group' },
+	{ left: 'Borrows Everything', right: 'Lends Everything', category: 'friend_group' },
+	{ left: 'Drama Starter', right: 'Peacemaker', category: 'friend_group' },
+	{ left: 'Disappears for Months', right: 'Always Around', category: 'friend_group' },
+	{ left: 'Pays Last', right: 'Covers Everyone', category: 'friend_group' },
+	{ left: 'Gives Tough Love', right: 'Gives Comfort', category: 'friend_group' },
+	{ left: 'Has Tea on Everyone', right: 'Knows Nothing', category: 'friend_group' },
+	{ left: 'Hype Friend', right: 'Honest Friend', category: 'friend_group' },
+	{ left: 'Holds Grudges', right: 'Forgives Instantly', category: 'friend_group' },
+	{ left: 'Friend Since Birth', right: 'Met Last Year', category: 'friend_group' },
+	{ left: 'Worst Influence', right: 'Best Influence', category: 'friend_group' },
+	{ left: 'Flakes on Plans', right: 'Never Cancels', category: 'friend_group' },
+	{ left: 'Secret Keeper', right: 'Tells Everyone', category: 'friend_group' },
+	{ left: 'Main Character', right: 'Supporting Cast', category: 'friend_group' },
+	{ left: 'Gives Bad Advice', right: 'Gives Great Advice', category: 'friend_group' },
+	{ left: 'Over-Communicator', right: 'Under-Communicator', category: 'friend_group' },
 ];
 
-export function shuffleDeck(): SpectrumCard[] {
-	const copy = [...deck];
-	for (let i = copy.length - 1; i > 0; i--) {
+export function getCategories(): string[] {
+	return Object.keys(CATEGORY_LABELS);
+}
+
+export function shuffleDeck(categories?: string[]): SpectrumCard[] {
+	let cards = categories && categories.length > 0
+		? deck.filter(c => categories.includes(c.category))
+		: [...deck];
+	for (let i = cards.length - 1; i > 0; i--) {
 		const j = Math.floor(Math.random() * (i + 1));
-		[copy[i], copy[j]] = [copy[j], copy[i]];
+		[cards[i], cards[j]] = [cards[j], cards[i]];
 	}
-	return copy;
+	return cards;
 }
 
 export default deck;

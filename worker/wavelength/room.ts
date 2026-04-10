@@ -550,7 +550,8 @@ export class WavelengthRoom extends DurableObject<Env> {
           break;
         }
         const rounds = typeof msg.rounds === 'number' ? Math.max(1, Math.min(10, Math.floor(msg.rounds))) : undefined;
-        const result = this.startGame(rounds);
+        const categories = Array.isArray(msg.categories) ? msg.categories.filter((c: unknown) => typeof c === 'string') : undefined;
+        const result = this.startGame(rounds, categories);
         if (!result.success) {
           this.sendTo(playerId, { type: 'error', message: result.error! });
           break;
@@ -702,14 +703,14 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   // --- Game logic ---
 
-  private startGame(requestedRounds?: number): { success: boolean; error?: string } {
+  private startGame(requestedRounds?: number, categories?: string[]): { success: boolean; error?: string } {
     const playerCount = this.players.size;
     if (playerCount < 2) {
       return { success: false, error: 'Need at least 2 players to start' };
     }
 
-    // Shuffle and build deck
-    const shuffled = shuffleDeck();
+    // Shuffle and build deck (filtered by selected categories)
+    const shuffled = shuffleDeck(categories?.length ? categories : undefined);
     this.deck = [
       ...shuffled.map((c: SpectrumCard) => ({ left: c.left, right: c.right })),
       ...this.customCards,

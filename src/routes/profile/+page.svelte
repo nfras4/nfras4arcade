@@ -12,19 +12,38 @@
   let saving = $state(false);
   let saveError = $state('');
 
-  const allBadges = [
-    { slug: 'first_game', label: 'First Game', description: 'Play your first game', icon: 'star' },
-    { slug: 'impostor_win', label: 'Impostor Win', description: 'Win as the impostor', icon: 'mask' },
-    { slug: 'perfect_detective', label: 'Perfect Detective', description: 'Vote correctly when everyone else does too', icon: 'search' },
-    { slug: 'veteran', label: 'Veteran', description: 'Play 10 games', icon: 'shield' },
-    { slug: 'champion', label: 'Champion', description: 'Win your first game', icon: 'trophy' },
-    { slug: 'going_bananas', label: 'Going Bananas', description: 'Play 50 games', icon: 'banana' },
+  interface BadgeDef {
+    slug: string;
+    label: string;
+    description: string;
+    emoji: string;
+    secret?: boolean;
+  }
+
+  const allBadges: BadgeDef[] = [
+    { slug: 'first_game',        label: 'First Game',        description: 'Play your first game',                              emoji: '\u{1F3AE}' },
+    { slug: 'champion',          label: 'Champion',          description: 'Win your first game',                               emoji: '\u{1F3C6}' },
+    { slug: 'veteran',           label: 'Veteran',           description: 'Play 10 games',                                     emoji: '\u{2B50}' },
+    { slug: 'impostor_win',      label: 'Impostor Win',      description: 'Win as the impostor',                               emoji: '\u{1F3AD}' },
+    { slug: 'perfect_detective', label: 'Perfect Detective', description: 'Vote correctly when everyone else does too',         emoji: '\u{1F50D}' },
+    { slug: 'going_bananas',     label: 'Going Bananas',     description: 'Shoot the moon in Chase the Queen',                 emoji: '\u{1F34C}' },
+    { slug: 'lone_monkey',       label: 'Lone Monkey',       description: 'Won a game solo against bots',                      emoji: '\u{1F412}' },
+    { slug: 'connect_four_win',  label: 'Four in a Row',     description: 'Win a game of Connect 4',                           emoji: '\u{1F534}' },
+    { slug: 'social_butterfly',  label: 'Social Butterfly',  description: 'Play all 4 game types',                             emoji: '\u{1F98B}' },
+    { slug: 'card_shark',        label: 'Card Shark',        description: 'Win 10 card games',                                 emoji: '\u{1F988}' },
+    // Easter eggs — hidden until earned
+    { slug: 'night_owl',         label: 'Night Owl',         description: 'Play a game between midnight and 5am',              emoji: '\u{1F989}', secret: true },
+    { slug: 'stalemate',         label: 'Stalemate',         description: 'Draw in Connect 4',                                 emoji: '\u{1F91D}', secret: true },
+    { slug: 'speed_demon',       label: 'Speed Demon',       description: 'Win a game in under 2 minutes',                     emoji: '\u{26A1}',  secret: true },
   ];
 
   const gameTypeLabels: Record<string, string> = {
     'impostor': 'Impostor',
     'president': 'President',
+    'chase_the_queen': 'Chase the Queen',
     'chase-the-queen': 'Chase the Queen',
+    'connect_four': 'Connect 4',
+    'connect-four': 'Connect 4',
   };
 
   $effect(() => {
@@ -44,16 +63,26 @@
     return $userBadges.some(b => b.slug === slug);
   }
 
+  function earnedDate(slug: string): string {
+    const badge = $userBadges.find(b => b.slug === slug);
+    if (!badge) return '';
+    return 'Earned ' + new Date(badge.awardedAt * 1000).toLocaleDateString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+    });
+  }
+
+  /** Badges to display: show all non-secret + any earned secret badges */
+  let visibleBadges = $derived(
+    allBadges.filter(b => !b.secret || isEarned(b.slug))
+  );
+
+  let earnedCount = $derived($userBadges.length);
+  let totalCount = $derived(allBadges.length);
+  let hasHiddenBadges = $derived(allBadges.some(b => b.secret && !isEarned(b.slug)));
+
   function winRate(): string {
     if (!$userStats || $userStats.gamesPlayed === 0) return '0%';
     return Math.round(($userStats.gamesWon / $userStats.gamesPlayed) * 100) + '%';
-  }
-
-  function badgeSymbol(icon: string): string {
-    const symbols: Record<string, string> = {
-      star: '*', mask: '?', search: '!', shield: '#', trophy: '+', banana: '~',
-    };
-    return symbols[icon] || '*';
   }
 
   function formatDate(ts: number): string {
@@ -171,15 +200,38 @@
 
       <!-- Badges -->
       <div class="card badges-card">
-        <h3 class="card-heading geo-title">Badges</h3>
+        <div class="badges-header">
+          <h3 class="card-heading geo-title">Badges</h3>
+          <span class="badge-count">{earnedCount} / {totalCount}</span>
+        </div>
         <div class="badge-grid">
-          {#each allBadges as badge}
-            <div class="badge-item" class:earned={isEarned(badge.slug)} title={badge.description}>
-              <div class="badge-icon">{badgeSymbol(badge.icon)}</div>
+          {#each visibleBadges as badge}
+            {@const earned = isEarned(badge.slug)}
+            <div class="badge-item" class:earned class:secret={badge.secret}>
+              <div class="badge-emoji" class:earned>{badge.emoji}</div>
               <span class="badge-label">{badge.label}</span>
+              {#if badge.secret && earned}
+                <span class="secret-tag">SECRET</span>
+              {/if}
+              <!-- Tooltip -->
+              <div class="badge-tooltip">
+                <div class="tooltip-header">
+                  <span class="tooltip-emoji">{badge.emoji}</span>
+                  <span class="tooltip-name">{badge.label}</span>
+                </div>
+                <p class="tooltip-desc">{badge.description}</p>
+                {#if earned}
+                  <p class="tooltip-date">{earnedDate(badge.slug)}</p>
+                {:else}
+                  <p class="tooltip-locked">Not yet earned</p>
+                {/if}
+              </div>
             </div>
           {/each}
         </div>
+        {#if hasHiddenBadges}
+          <p class="hidden-hint">+ hidden badges to discover...</p>
+        {/if}
       </div>
 
       <!-- Recent games -->
@@ -395,6 +447,25 @@
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
   }
 
+  .badges-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .badges-header .card-heading {
+    margin-bottom: 0;
+  }
+
+  .badge-count {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
   .badge-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -409,9 +480,11 @@
     padding: 0.75rem 0.5rem;
     background: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 2px;
+    border-radius: 4px;
     opacity: 0.35;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+    position: relative;
+    cursor: default;
   }
 
   .badge-item.earned {
@@ -420,18 +493,29 @@
     background: var(--accent-faint);
   }
 
-  .badge-icon {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--accent);
-    background: var(--accent-faint);
-    clip-path: var(--clip-diamond);
+  .badge-item.secret.earned {
+    border-color: rgba(155, 89, 182, 0.4);
+    background: rgba(155, 89, 182, 0.08);
+  }
+
+  .badge-item:hover {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+
+  .badge-emoji {
+    font-size: 1.5rem;
+    line-height: 1;
+    filter: grayscale(1);
+    transition: filter 0.15s ease;
+  }
+
+  .badge-emoji.earned {
+    filter: none;
+  }
+
+  .badge-item:hover .badge-emoji {
+    filter: none;
   }
 
   .badge-label {
@@ -444,6 +528,96 @@
 
   .badge-item.earned .badge-label {
     color: var(--text);
+  }
+
+  .secret-tag {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9b59b6;
+    padding: 0.1rem 0.3rem;
+    border: 1px solid rgba(155, 89, 182, 0.3);
+    border-radius: 2px;
+  }
+
+  /* Tooltip */
+  .badge-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    padding: 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--accent-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  .badge-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: var(--accent-border);
+  }
+
+  .badge-item:hover .badge-tooltip {
+    display: block;
+  }
+
+  .tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem;
+  }
+
+  .tooltip-emoji {
+    font-size: 1.125rem;
+  }
+
+  .tooltip-name {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text);
+  }
+
+  .tooltip-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .tooltip-date {
+    font-size: 0.65rem;
+    color: var(--accent);
+    margin-top: 0.375rem;
+    font-weight: 500;
+  }
+
+  .tooltip-locked {
+    font-size: 0.65rem;
+    color: var(--text-subtle);
+    margin-top: 0.375rem;
+    font-style: italic;
+  }
+
+  .hidden-hint {
+    font-size: 0.75rem;
+    color: var(--text-subtle);
+    text-align: center;
+    font-style: italic;
+    margin-top: 0.75rem;
   }
 
   /* Game history */

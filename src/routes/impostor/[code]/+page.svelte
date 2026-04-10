@@ -308,6 +308,7 @@
             {#each $gameState.players as player}
               <div class="player-chip" class:host={player.isHost} class:reconnecting={player.connectionStatus === 'reconnecting'} class:disconnected={player.connectionStatus === 'disconnected'}>
                 {player.name}
+                {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
                 {#if player.isHost}<span class="host-badge">HOST</span>{/if}
                 {#if player.connectionStatus === 'reconnecting'}
                   <span class="status-badge reconnecting-badge">Reconnecting...</span>
@@ -921,6 +922,8 @@
     padding: 0.1rem 0.4rem;
     clip-path: var(--clip-btn);
   }
+
+  .owner-crown { font-size: 0.85rem; margin-left: -0.25rem; }
 
   .player-chip.reconnecting {
     opacity: 0.6;

@@ -177,7 +177,7 @@ export class ConnectFourRoom extends CardRoom {
       this.scores.set(playerId, current + 1);
 
       this.broadcastState();
-      this.recordGameEnd(playerId).catch(() => {});
+      this.recordGameEnd(playerId).then(() => this.awardConnectFourBadges(playerId, false)).catch(() => {});
       return;
     }
 
@@ -187,7 +187,7 @@ export class ConnectFourRoom extends CardRoom {
       this.setTable(table);
       this.phase = 'round_over';
       this.broadcastState();
-      this.recordGameEnd(null).catch(() => {});
+      this.recordGameEnd(null).then(() => this.awardConnectFourBadges(null, true)).catch(() => {});
       return;
     }
 
@@ -219,6 +219,36 @@ export class ConnectFourRoom extends CardRoom {
     if (this.isBotTurn() && this.phase === 'playing') {
       await this.scheduleBotTurn();
     }
+  }
+
+  /** Award Connect 4-specific badges. */
+  private async awardConnectFourBadges(winnerId: string | null, isDraw: boolean): Promise<void> {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const db = this.env.DB;
+      const stmts: D1PreparedStatement[] = [];
+
+      // Connect Four Win badge
+      if (winnerId && !this.bots.has(winnerId) && !winnerId.startsWith('guest_')) {
+        stmts.push(
+          db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+            .bind(winnerId, 'b_connect_four_win', now)
+        );
+      }
+
+      // Stalemate badge (easter egg) — awarded to both players on draw
+      if (isDraw) {
+        for (const [id] of this.players) {
+          if (this.bots.has(id) || id.startsWith('guest_')) continue;
+          stmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_stalemate', now)
+          );
+        }
+      }
+
+      if (stmts.length > 0) await db.batch(stmts);
+    } catch {}
   }
 
   protected getGameStateForPlayer(playerId: string): CardGameState {

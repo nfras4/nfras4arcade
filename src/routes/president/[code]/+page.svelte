@@ -199,6 +199,7 @@
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
               <span class="player-name">{player.name}</span>
+              {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
               {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
               {#if player.isHost}<span class="host-badge">HOST</span>{/if}
               {#if !player.connected && !player.isBot}<span class="dc-badge">DC</span>{/if}
@@ -451,6 +452,7 @@
   }
 
   .host-badge { background: var(--accent-faint); color: var(--accent); }
+  .owner-crown { font-size: 0.85rem; margin-left: -0.25rem; }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
   .bot-badge { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
 

@@ -546,8 +546,8 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
 
       for (const [id] of this.players) {
-        // Skip D1 updates for bots — they have no profile
-        if (this.bots.has(id)) continue;
+        // Skip D1 updates for bots and guests — they have no profile
+        if (this.bots.has(id) || id.startsWith('guest_')) continue;
 
         stmts.push(
           db.prepare('UPDATE player_profiles SET games_played = games_played + 1, updated_at = ? WHERE id = ?')
@@ -574,7 +574,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
 
       // Lone Monkey badge: winner is human and all other players are bots
-      if (winnerId && !this.bots.has(winnerId)) {
+      if (winnerId && !this.bots.has(winnerId) && !winnerId.startsWith('guest_')) {
         const otherPlayers = Array.from(this.players.keys()).filter(id => id !== winnerId);
         const allOthersBots = otherPlayers.length > 0 && otherPlayers.every(id => this.bots.has(id));
         if (allOthersBots) {
@@ -586,7 +586,86 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
 
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Post-batch badge checks (require queries, so run separately)
+      await this.checkPostGameBadges(winnerId, now);
     } catch {}
+  }
+
+  /** Check and award badges that require DB queries (veteran, night owl, speed demon, social butterfly, card shark). */
+  private async checkPostGameBadges(winnerId: string | null, now: number): Promise<void> {
+    const db = this.env.DB;
+    const hour = new Date(now * 1000).getUTCHours();
+
+    for (const [id] of this.players) {
+      if (this.bots.has(id) || id.startsWith('guest_')) continue;
+
+      const stmts: D1PreparedStatement[] = [];
+
+      // Night Owl: playing between midnight and 5am UTC
+      if (hour >= 0 && hour < 5) {
+        stmts.push(
+          db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+            .bind(id, 'b_night_owl', now)
+        );
+      }
+
+      // Veteran: 10+ games played
+      const profile = await db.prepare('SELECT games_played FROM player_profiles WHERE id = ?')
+        .bind(id).first<{ games_played: number }>();
+      if (profile && profile.games_played >= 10) {
+        stmts.push(
+          db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+            .bind(id, 'b_veteran', now)
+        );
+      }
+
+      // Speed Demon: game lasted under 2 minutes
+      if (id === winnerId && this.gameSessionId) {
+        const session = await db.prepare('SELECT started_at, ended_at FROM game_sessions WHERE id = ?')
+          .bind(this.gameSessionId).first<{ started_at: number; ended_at: number }>();
+        if (session && session.ended_at && (session.ended_at - session.started_at) < 120) {
+          stmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_speed_demon', now)
+          );
+        }
+      }
+
+      // Social Butterfly: played all 4 game types
+      const gameTypes = await db.prepare(
+        'SELECT COUNT(DISTINCT game_type) as types FROM game_sessions WHERE winner_id = ? OR id IN (SELECT id FROM game_sessions WHERE ended_at IS NOT NULL)'
+      ).bind(id).first<{ types: number }>();
+      // Better query: check distinct game types where this player participated
+      const typesPlayed = await db.prepare(
+        `SELECT COUNT(DISTINCT game_type) as cnt FROM game_sessions
+         WHERE ended_at IS NOT NULL AND room_code IN (
+           SELECT DISTINCT room_code FROM game_sessions WHERE winner_id = ?
+         )`
+      ).bind(id).first<{ cnt: number }>();
+      if (typesPlayed && typesPlayed.cnt >= 4) {
+        stmts.push(
+          db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+            .bind(id, 'b_social_butterfly', now)
+        );
+      }
+
+      // Card Shark: win 10 card games (president, chase_the_queen, connect_four)
+      if (id === winnerId) {
+        const cardWins = await db.prepare(
+          `SELECT COUNT(*) as cnt FROM game_sessions
+           WHERE winner_id = ? AND game_type IN ('president', 'chase_the_queen', 'connect_four')`
+        ).bind(id).first<{ cnt: number }>();
+        if (cardWins && cardWins.cnt >= 10) {
+          stmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_card_shark', now)
+          );
+        }
+      }
+
+      if (stmts.length > 0) await db.batch(stmts);
+    }
   }
 
   // --- Messaging ---

@@ -268,12 +268,12 @@
         </div>
         <p class="player-count">
           {state.players.length} player{state.players.length !== 1 ? 's' : ''}
-          {#if state.players.length < 3}
-            — Need {3 - state.players.length} more to start
+          {#if state.players.length < 2}
+            — Need {2 - state.players.length} more to start
           {/if}
         </p>
         {#if isHost}
-          <button class="btn-primary" onclick={startGame} disabled={state.players.length < 3}>
+          <button class="btn-primary" onclick={startGame} disabled={state.players.length < 2}>
             Start Game
           </button>
           <div class="bot-controls">

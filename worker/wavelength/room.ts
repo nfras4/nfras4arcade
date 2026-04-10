@@ -255,20 +255,17 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.code = roomCode;
     }
 
-    // POST endpoints
-    if (request.method === 'POST') {
-      const path = url.pathname;
-      if (path.endsWith('/add-bot')) {
+    // Non-WebSocket: handle commands or return room info
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      const action = url.searchParams.get('action');
+
+      if (action === 'add-bot' && request.method === 'POST') {
         return this.handleAddBotHttp(request);
       }
-      if (path.endsWith('/remove-bots')) {
+      if (action === 'remove-bots' && request.method === 'POST') {
         return this.handleRemoveBotsHttp();
       }
-      return new Response('Not found', { status: 404 });
-    }
 
-    // GET room info (non-WebSocket)
-    if (request.headers.get('Upgrade') !== 'websocket') {
       return Response.json({
         code: this.code,
         phase: this.phase,

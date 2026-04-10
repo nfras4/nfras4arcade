@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { register } from '$lib/auth';
   import { getGuestDisplayName } from '$lib/guest';
+  import { fly } from 'svelte/transition';
 
   let email = $state('');
   let password = $state('');
@@ -31,7 +32,7 @@
 </script>
 
 <div class="auth-page">
-  <div class="auth-card card">
+  <div class="auth-card card" in:fly={{ y: 24, duration: 300 }}>
     <h1 class="geo-title">Register</h1>
     <form onsubmit={handleSubmit}>
       <label>
@@ -216,5 +217,12 @@
     margin-top: 0.5rem;
   }
 
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+  .btn-secondary:hover:not(:disabled) { background: var(--accent-border); color: var(--accent); }
+
+  .gap-4 { gap: 1rem; }
+  .gap-6 { gap: 1.5rem; }
 </style>

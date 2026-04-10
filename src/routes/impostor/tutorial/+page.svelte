@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { fade } from 'svelte/transition';
 
   // Tutorial state
   type TutorialPhase = 'intro' | 'role_reveal' | 'hints' | 'voting' | 'reveal' | 'done';
@@ -124,7 +125,7 @@
 
     <!-- INTRO -->
     {#if phase === 'intro'}
-      <div class="phase-panel fade-in">
+      <div class="phase-panel fade-in" transition:fade={{ duration: 200 }}>
         <header class="hero">
           <div class="title-frame">
             <span class="diamond-accent" aria-hidden="true"></span>
@@ -609,4 +610,9 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+  .btn-secondary:hover:not(:disabled) { background: var(--accent-border); color: var(--accent); }
+  .vote-btn:hover:not(:disabled) { background: var(--accent-border); color: var(--accent); }
+  .gap-4 { gap: 1rem; }
+  .gap-6 { gap: 1.5rem; }
 </style>

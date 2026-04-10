@@ -379,4 +379,9 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+  .btn-secondary:hover:not(:disabled) { background: var(--accent-border); color: var(--accent); }
+  .rules-toggle:hover .rules-heading { color: var(--accent); }
+  .gap-4 { gap: 1rem; }
+  .gap-6 { gap: 1.5rem; }
 </style>

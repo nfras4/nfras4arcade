@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { currentUser, isLoggedIn, fetchUser } from '$lib/auth';
   import { getGuestDisplayName } from '$lib/guest';
+  import { fade, fly } from 'svelte/transition';
 
   const games = [
     {
@@ -84,13 +85,13 @@
 
     {#if !$isLoggedIn}
       <!-- Soft login encouragement for guests -->
-      <div class="guest-banner">
+      <div class="guest-banner" transition:fade={{ duration: 200 }}>
         <div class="panel">
           <div class="panel-border" aria-hidden="true"></div>
           <div class="panel-inner">
             <p class="guest-identity">Playing as <strong>{getGuestDisplayName()}</strong></p>
             <p class="guest-hint">Login is optional, but signing in lets us save your stats and helps us improve the game during development.</p>
-            <div class="action-row">
+            <div class="action-row gap-2">
               <button class="btn-secondary btn-full btn-small-text" onclick={() => goto('/login')}>
                 Log In
               </button>
@@ -106,7 +107,7 @@
     <!-- Game grid (visible to all users) -->
     <section class="games-section">
       <h2 class="section-heading geo-title">Games</h2>
-      <div class="game-grid">
+      <div class="game-grid gap-4">
         {#each games as game}
           <div class="game-card card" role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
             <div class="game-card-inner">
@@ -165,6 +166,10 @@
     flex-direction: column;
     gap: 2.5rem;
   }
+
+  .gap-2 { gap: 0.5rem; }
+  .gap-4 { gap: 1rem; }
+  .gap-6 { gap: 1.5rem; }
 
   /* Hero */
   .hub-hero {

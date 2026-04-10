@@ -850,4 +850,7 @@
       flex: 1;
     }
   }
+
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
+  button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
 </style>

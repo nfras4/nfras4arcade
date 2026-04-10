@@ -102,4 +102,6 @@
       padding: 0.4rem 0.5rem;
     }
   }
+
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
 </style>

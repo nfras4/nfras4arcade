@@ -215,4 +215,6 @@
     text-align: center;
     margin-top: 0.5rem;
   }
+
+  button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
 </style>

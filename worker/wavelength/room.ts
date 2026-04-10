@@ -549,7 +549,8 @@ export class WavelengthRoom extends DurableObject<Env> {
           this.sendTo(playerId, { type: 'error', message: 'Only the host can start the game' });
           break;
         }
-        const result = this.startGame();
+        const rounds = typeof msg.rounds === 'number' ? Math.max(1, Math.min(10, Math.floor(msg.rounds))) : undefined;
+        const result = this.startGame(rounds);
         if (!result.success) {
           this.sendTo(playerId, { type: 'error', message: result.error! });
           break;
@@ -701,7 +702,7 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   // --- Game logic ---
 
-  private startGame(): { success: boolean; error?: string } {
+  private startGame(requestedRounds?: number): { success: boolean; error?: string } {
     const playerCount = this.players.size;
     if (playerCount < 2) {
       return { success: false, error: 'Need at least 2 players to start' };
@@ -715,8 +716,8 @@ export class WavelengthRoom extends DurableObject<Env> {
     ];
     shuffleArray(this.deck);
 
-    // Set up rounds: everyone is psychic once
-    this.totalRounds = playerCount;
+    // Set up rounds: default is one rotation (everyone psychic once), host can override
+    this.totalRounds = requestedRounds ?? playerCount;
     this.roundNumber = 1;
 
     // Build psychic order

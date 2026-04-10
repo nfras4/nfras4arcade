@@ -163,7 +163,7 @@
   let hasLockedIn = $derived(state?.lockedIn?.includes(pid) ?? false);
 
   // Actions
-  function startGame() { socket.send({ type: 'start_game' }); }
+  function startGame() { socket.send({ type: 'start_game', ...(selectedRounds > 0 ? { rounds: selectedRounds } : {}) }); }
   function nextRound() { socket.send({ type: 'next_round' }); }
   function playAgain() { socket.send({ type: 'play_again' }); }
   function endGame() { socket.send({ type: 'end_game' }); }
@@ -199,6 +199,7 @@
   }
 
   let addingBot = $state(false);
+  let selectedRounds = $state(0); // 0 = default (one rotation)
 
   async function addBot() {
     addingBot = true;
@@ -273,6 +274,15 @@
           {/if}
         </p>
         {#if isHost}
+          <div class="rounds-config">
+            <label class="field-label" for="rounds-select">Rounds</label>
+            <select id="rounds-select" class="input-field rounds-select" bind:value={selectedRounds}>
+              <option value={0}>Default ({state.players.length} — everyone psychic once)</option>
+              {#each [2, 3, 4, 5, 6, 8, 10] as n}
+                <option value={n}>{n} rounds</option>
+              {/each}
+            </select>
+          </div>
           <button class="btn-primary" onclick={startGame} disabled={state.players.length < 2}>
             Start Game
           </button>
@@ -695,7 +705,7 @@
     max-width: 500px;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
     animation: fadeUp 0.3s ease both;
   }
 
@@ -830,11 +840,24 @@
     line-height: 1.4;
   }
 
+  /* Rounds config */
+  .rounds-config {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .rounds-select {
+    width: 100%;
+    cursor: pointer;
+  }
+
   /* Clue input */
   .clue-input-row {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    margin-top: 0.5rem;
   }
 
   .clue-input {

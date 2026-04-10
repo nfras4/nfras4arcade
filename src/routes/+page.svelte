@@ -45,13 +45,23 @@
       route: '/connect-four',
       soloAction: 'solo' as const,
     },
+    {
+      id: 'wavelength',
+      name: 'Wavelength',
+      description: 'Read the psychic\'s mind',
+      minPlayers: 3,
+      maxPlayers: 16,
+      type: 'party',
+      route: '/wavelength',
+      soloAction: 'tutorial' as const,
+    },
   ];
 
   let creatingSolo = $state<string | null>(null);
 
   async function playSolo(game: typeof games[0]) {
     if (game.soloAction === 'tutorial') {
-      goto('/impostor/tutorial');
+      goto(`${game.route}/tutorial`);
       return;
     }
     creatingSolo = game.id;

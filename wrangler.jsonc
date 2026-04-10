@@ -27,7 +27,8 @@
       { "name": "IMPOSTOR_ROOM", "class_name": "ImpostorRoom" },
       { "name": "PRESIDENT_ROOM", "class_name": "PresidentRoom" },
       { "name": "CHASE_QUEEN_ROOM", "class_name": "ChaseTheQueenRoom" },
-      { "name": "CONNECT_FOUR_ROOM", "class_name": "ConnectFourRoom" }
+      { "name": "CONNECT_FOUR_ROOM", "class_name": "ConnectFourRoom" },
+      { "name": "WAVELENGTH_ROOM", "class_name": "WavelengthRoom" }
     ]
   },
 
@@ -37,7 +38,8 @@
     { "tag": "v1", "new_sqlite_classes": ["ImpostorRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["PresidentRoom"] },
     { "tag": "v3", "new_sqlite_classes": ["ChaseTheQueenRoom"] },
-    { "tag": "v4", "new_sqlite_classes": ["ConnectFourRoom"] }
+    { "tag": "v4", "new_sqlite_classes": ["ConnectFourRoom"] },
+    { "tag": "v5", "new_sqlite_classes": ["WavelengthRoom"] }
   ],
 
   // D1 is Cloudflare's serverless SQL database (SQLite at the edge)

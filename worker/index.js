@@ -1,6 +1,8 @@
 import { ImpostorRoom } from './impostor/room';
 import { PresidentRoom } from './cards/president';
 import { ChaseTheQueenRoom } from './cards/chaseTheQueen';
+import { ConnectFourRoom } from './connectFour/room';
+import { WavelengthRoom } from './wavelength/room';
 // src/worker.js
 import { Server } from "./../.svelte-kit/output/server/index.js";
 import { manifest, prerendered, base_path } from "./../.svelte-kit/cloudflare-tmp/manifest.js";
@@ -130,7 +132,7 @@ worker_default.fetch = async function(req, env, ctx) {
   const url = new URL(req.url);
 
   // WebSocket upgrade -> authenticate then forward to Durable Object
-  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM' };
+  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM' };
   const doBinding = wsRoutes[url.pathname];
   if (doBinding && req.headers.get('Upgrade') === 'websocket') {
     const room = url.searchParams.get('room');
@@ -185,5 +187,7 @@ export {
   worker_default as default,
   ImpostorRoom,
   PresidentRoom,
-  ChaseTheQueenRoom
+  ChaseTheQueenRoom,
+  ConnectFourRoom,
+  WavelengthRoom
 };

@@ -34,6 +34,16 @@
       route: '/chase-the-queen',
       soloAction: 'solo' as const,
     },
+    {
+      id: 'connect-four',
+      name: 'Connect 4',
+      description: 'Get four in a row to win',
+      minPlayers: 2,
+      maxPlayers: 2,
+      type: 'strategy',
+      route: '/connect-four',
+      soloAction: 'solo' as const,
+    },
   ];
 
   let creatingSolo = $state<string | null>(null);

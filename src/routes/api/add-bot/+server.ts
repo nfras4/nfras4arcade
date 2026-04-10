@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 const DO_BINDINGS: Record<string, string> = {
   president: 'PRESIDENT_ROOM',
   'chase-the-queen': 'CHASE_QUEEN_ROOM',
+  'connect-four': 'CONNECT_FOUR_ROOM',
 };
 
 export const POST: RequestHandler = async ({ url, locals, platform }) => {

@@ -12,7 +12,7 @@ const WORKER_PATH = 'worker/index.js';
 let code = readFileSync(WORKER_PATH, 'utf8');
 
 // 1. Add Durable Object imports at the top
-const doImport = `import { ImpostorRoom } from './impostor/room';\nimport { PresidentRoom } from './cards/president';\nimport { ChaseTheQueenRoom } from './cards/chaseTheQueen';\n`;
+const doImport = `import { ImpostorRoom } from './impostor/room';\nimport { PresidentRoom } from './cards/president';\nimport { ChaseTheQueenRoom } from './cards/chaseTheQueen';\nimport { ConnectFourRoom } from './connectFour/room';\n`;
 code = doImport + code;
 
 // 2. Capture the original fetch handler and wrap it with WS upgrade + auth
@@ -23,7 +23,7 @@ worker_default.fetch = async function(req, env, ctx) {
   const url = new URL(req.url);
 
   // WebSocket upgrade -> authenticate then forward to Durable Object
-  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM' };
+  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM' };
   const doBinding = wsRoutes[url.pathname];
   if (doBinding && req.headers.get('Upgrade') === 'websocket') {
     const room = url.searchParams.get('room');
@@ -78,7 +78,7 @@ worker_default.fetch = async function(req, env, ctx) {
 // Insert the patch before the final export statement
 code = code.replace(
   'export {\n  worker_default as default\n};',
-  wsPatch + '\nexport {\n  worker_default as default,\n  ImpostorRoom,\n  PresidentRoom,\n  ChaseTheQueenRoom\n};'
+  wsPatch + '\nexport {\n  worker_default as default,\n  ImpostorRoom,\n  PresidentRoom,\n  ChaseTheQueenRoom,\n  ConnectFourRoom\n};'
 );
 
 writeFileSync(WORKER_PATH, code);

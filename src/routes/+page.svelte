@@ -49,7 +49,7 @@
       id: 'wavelength',
       name: 'Wavelength',
       description: 'Read the psychic\'s mind',
-      minPlayers: 3,
+      minPlayers: 2,
       maxPlayers: 16,
       type: 'party',
       route: '/wavelength',

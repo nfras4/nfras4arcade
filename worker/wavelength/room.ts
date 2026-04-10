@@ -706,8 +706,8 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   private startGame(): { success: boolean; error?: string } {
     const playerCount = this.players.size;
-    if (playerCount < 3) {
-      return { success: false, error: 'Need at least 3 players to start' };
+    if (playerCount < 2) {
+      return { success: false, error: 'Need at least 2 players to start' };
     }
 
     // Shuffle and build deck

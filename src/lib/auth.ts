@@ -10,6 +10,7 @@ export interface AuthUser {
 export interface AuthStats {
   gamesPlayed: number;
   gamesWon: number;
+  chips: number;
 }
 
 export interface AuthBadge {

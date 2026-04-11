@@ -31,9 +31,9 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 
     // Also fetch profile stats
     const profile = await db
-      .prepare('SELECT games_played, games_won FROM player_profiles WHERE id = ?')
+      .prepare('SELECT games_played, games_won, chips FROM player_profiles WHERE id = ?')
       .bind(locals.user.id)
-      .first<{ games_played: number; games_won: number }>();
+      .first<{ games_played: number; games_won: number; chips: number }>();
 
     // Recent game history (last 20)
     const historyRows = await db
@@ -93,7 +93,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 
     return json({
       user: locals.user,
-      stats: profile ? { gamesPlayed: profile.games_played, gamesWon: profile.games_won } : null,
+      stats: profile ? { gamesPlayed: profile.games_played, gamesWon: profile.games_won, chips: profile.chips } : null,
       badges,
       gameHistory,
       perGameStats,

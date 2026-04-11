@@ -55,6 +55,26 @@
       route: '/wavelength',
       soloAction: 'tutorial' as const,
     },
+    {
+      id: 'poker',
+      name: 'Texas Hold\'em',
+      description: 'Bet, bluff, and go all-in',
+      minPlayers: 2,
+      maxPlayers: 8,
+      type: 'card game',
+      route: '/poker',
+      soloAction: 'solo' as const,
+    },
+    {
+      id: 'snap',
+      name: 'Snap',
+      description: 'Race to slap matching cards',
+      minPlayers: 2,
+      maxPlayers: 6,
+      type: 'party',
+      route: '/snap',
+      soloAction: 'tutorial' as const,
+    },
   ];
 
   let creatingSolo = $state<string | null>(null);

@@ -654,7 +654,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       if (id === winnerId) {
         const cardWins = await db.prepare(
           `SELECT COUNT(*) as cnt FROM game_sessions
-           WHERE winner_id = ? AND game_type IN ('president', 'chase_the_queen', 'connect_four')`
+           WHERE winner_id = ? AND game_type IN ('president', 'chase_the_queen', 'connect_four', 'poker')`
         ).bind(id).first<{ cnt: number }>();
         if (cardWins && cardWins.cnt >= 10) {
           stmts.push(

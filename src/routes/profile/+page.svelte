@@ -31,10 +31,15 @@
     { slug: 'connect_four_win',  label: 'Four in a Row',     description: 'Win a game of Connect 4',                           emoji: '\u{1F534}' },
     { slug: 'social_butterfly',  label: 'Social Butterfly',  description: 'Play all 4 game types',                             emoji: '\u{1F98B}' },
     { slug: 'card_shark',        label: 'Card Shark',        description: 'Win 10 card games',                                 emoji: '\u{1F988}' },
+    { slug: 'poker_win',         label: 'High Roller',       description: 'Win a hand of Texas Hold\'em',                     emoji: '\u{1F0CF}' },
+    { slug: 'snap_win',          label: 'Quick Reflexes',    description: 'Win a game of Snap',                                emoji: '\u{1F44F}' },
     // Easter eggs — hidden until earned
     { slug: 'night_owl',         label: 'Night Owl',         description: 'Play a game between midnight and 5am',              emoji: '\u{1F989}', secret: true },
     { slug: 'stalemate',         label: 'Stalemate',         description: 'Draw in Connect 4',                                 emoji: '\u{1F91D}', secret: true },
     { slug: 'speed_demon',       label: 'Speed Demon',       description: 'Win a game in under 2 minutes',                     emoji: '\u{26A1}',  secret: true },
+    { slug: 'royal_flush',      label: 'Royal Flush',       description: 'Get a royal flush in Texas Hold\'em',               emoji: '\u{1F451}', secret: true },
+    { slug: 'all_in_win',       label: 'All In Win',        description: 'Win an all-in showdown',                            emoji: '\u{1F4B0}', secret: true },
+    { slug: 'snap_streak',      label: 'Snap Streak',       description: 'Win 3 snaps in a row',                              emoji: '\u{1F525}', secret: true },
   ];
 
   const gameTypeLabels: Record<string, string> = {
@@ -44,6 +49,9 @@
     'chase-the-queen': 'Chase the Queen',
     'connect_four': 'Connect 4',
     'connect-four': 'Connect 4',
+    'poker': 'Texas Hold\'em',
+    'snap': 'Snap',
+    'wavelength': 'Wavelength',
   };
 
   $effect(() => {
@@ -176,6 +184,10 @@
           <div class="stat">
             <span class="stat-value">{winRate()}</span>
             <span class="stat-label">Win Rate</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">{$userStats?.chips ?? 0}</span>
+            <span class="stat-label">Chips</span>
           </div>
         </div>
       </div>

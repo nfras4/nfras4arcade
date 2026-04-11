@@ -5,6 +5,8 @@ export interface Env {
   CHASE_QUEEN_ROOM: DurableObjectNamespace;
   CONNECT_FOUR_ROOM: DurableObjectNamespace;
   WAVELENGTH_ROOM: DurableObjectNamespace;
+  POKER_ROOM: DurableObjectNamespace;
+  SNAP_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
 }

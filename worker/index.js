@@ -3,6 +3,8 @@ import { PresidentRoom } from './cards/president';
 import { ChaseTheQueenRoom } from './cards/chaseTheQueen';
 import { ConnectFourRoom } from './connectFour/room';
 import { WavelengthRoom } from './wavelength/room';
+import { PokerRoom } from './poker/room';
+import { SnapRoom } from './snap/room';
 // src/worker.js
 import { Server } from "./../.svelte-kit/output/server/index.js";
 import { manifest, prerendered, base_path } from "./../.svelte-kit/cloudflare-tmp/manifest.js";
@@ -132,7 +134,7 @@ worker_default.fetch = async function(req, env, ctx) {
   const url = new URL(req.url);
 
   // WebSocket upgrade -> authenticate then forward to Durable Object
-  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM' };
+  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM', '/ws/poker': 'POKER_ROOM', '/ws/snap': 'SNAP_ROOM' };
   const doBinding = wsRoutes[url.pathname];
   if (doBinding && req.headers.get('Upgrade') === 'websocket') {
     const room = url.searchParams.get('room');
@@ -176,6 +178,15 @@ worker_default.fetch = async function(req, env, ctx) {
     headers.set('X-User-Id', userId);
     headers.set('X-Display-Name', displayName);
     headers.set('X-Is-Guest', userId.startsWith('guest_') ? 'true' : 'false');
+
+    // For poker: load chip balance from D1
+    if (doBinding === 'POKER_ROOM' && userId && !userId.startsWith('guest_')) {
+      try {
+        const chipRow = await env.DB.prepare('SELECT chips FROM player_profiles WHERE id = ?').bind(userId).first();
+        if (chipRow) headers.set('X-Player-Chips', String(chipRow.chips));
+      } catch {}
+    }
+
     return stub.fetch(new Request(req.url, { method: req.method, headers }));
   }
 
@@ -189,5 +200,7 @@ export {
   PresidentRoom,
   ChaseTheQueenRoom,
   ConnectFourRoom,
-  WavelengthRoom
+  WavelengthRoom,
+  PokerRoom,
+  SnapRoom
 };

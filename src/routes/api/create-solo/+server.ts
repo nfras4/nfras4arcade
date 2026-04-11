@@ -5,6 +5,7 @@ const GAME_CONFIG: Record<string, { binding: string; minPlayers: number }> = {
   president: { binding: 'PRESIDENT_ROOM', minPlayers: 3 },
   'chase-the-queen': { binding: 'CHASE_QUEEN_ROOM', minPlayers: 3 },
   'connect-four': { binding: 'CONNECT_FOUR_ROOM', minPlayers: 2 },
+  poker: { binding: 'POKER_ROOM', minPlayers: 2 },
 };
 
 function generateCode(): string {

@@ -11,6 +11,12 @@
     finished = false,
     finishPosition = undefined,
     passed = false,
+    chipCount = undefined,
+    currentBet = undefined,
+    dealerBadge = false,
+    blindLabel = undefined,
+    folded = false,
+    allIn = false,
   }: {
     name?: string;
     cardCount?: number;
@@ -23,12 +29,30 @@
     finished?: boolean;
     finishPosition?: number | undefined;
     passed?: boolean;
+    chipCount?: number | undefined;
+    currentBet?: number | undefined;
+    dealerBadge?: boolean;
+    blindLabel?: string | undefined;
+    folded?: boolean;
+    allIn?: boolean;
   } = $props();
 </script>
 
-<div class="seat" class:active class:finished class:passed class:disconnected={!connected}>
-  <span class="seat-name">{name}</span>
+<div class="seat" class:active class:finished class:passed class:disconnected={!connected} class:folded class:all-in={allIn}>
+  {#if dealerBadge}
+    <span class="dealer-badge">D</span>
+  {/if}
+  {#if blindLabel}
+    <span class="blind-label">{blindLabel}</span>
+  {/if}
+  <span class="seat-name" class:folded-name={folded}>{name}</span>
   <span class="seat-cards">{cardCount} cards</span>
+  {#if chipCount !== undefined}
+    <span class="seat-score">{chipCount} chips</span>
+  {/if}
+  {#if currentBet !== undefined && currentBet > 0}
+    <span class="seat-bet">Bet: {currentBet}</span>
+  {/if}
   {#if score !== undefined}
     <span class="seat-score">Score: {score}</span>
   {/if}
@@ -43,6 +67,12 @@
   {/if}
   {#if passed}
     <span class="seat-passed">Passed</span>
+  {/if}
+  {#if folded}
+    <span class="seat-passed">Folded</span>
+  {/if}
+  {#if allIn}
+    <span class="seat-allin">ALL IN</span>
   {/if}
   {#if !connected}
     <span class="seat-dc">DC</span>
@@ -61,6 +91,7 @@
     border-radius: 4px;
     min-width: 85px;
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+    position: relative;
   }
 
   .seat.active {
@@ -71,11 +102,27 @@
   .seat.finished { opacity: 0.5; }
   .seat.passed { opacity: 0.6; }
   .seat.disconnected { opacity: 0.4; }
+  .seat.folded { opacity: 0.4; }
+  .seat.all-in {
+    border-color: var(--accent);
+    animation: allInPulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes allInPulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(108, 180, 130, 0.2); }
+    50% { box-shadow: 0 0 16px rgba(108, 180, 130, 0.5); }
+  }
 
   .seat-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+  .folded-name { text-decoration: line-through; }
   .seat-cards { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
   .seat-score { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
   .seat-penalty { font-size: 0.75rem; color: #e74c3c; font-weight: 600; }
+  .seat-bet {
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
   .seat-title {
     font-size: 0.7rem;
     font-weight: 700;
@@ -85,6 +132,17 @@
   }
   .seat-out { font-size: 0.7rem; color: var(--text-muted); }
   .seat-passed { font-size: 0.7rem; color: var(--text-muted); font-style: italic; }
+  .seat-allin {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.1rem 0.3rem;
+    background: var(--accent-faint);
+    color: var(--accent);
+    border-radius: 2px;
+  }
   .seat-dc {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.65rem;
@@ -94,6 +152,36 @@
     background: var(--bg-input);
     color: var(--text-subtle);
     border-radius: 2px;
+  }
+
+  .dealer-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    background: var(--yellow);
+    color: #0c0e10;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    line-height: 1;
+  }
+
+  .blind-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    background: var(--accent-faint);
+    color: var(--accent);
+    border-radius: 8px;
   }
 
   @media (max-width: 420px) {

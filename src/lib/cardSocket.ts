@@ -37,6 +37,12 @@ export class CardGameSocket {
 
   connect(roomCode: string, _isGuest?: boolean): Promise<void> {
     this.currentRoom = roomCode;
+    // Close any existing WebSocket before creating a new one
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
     return new Promise((resolve, reject) => {
       const url = getWsUrl(roomCode, this.wsPath);
       this.ws = new WebSocket(url);
@@ -124,6 +130,7 @@ export class CardGameSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
+        this.pendingJoin = true;
         this.connect(this.currentRoom).catch(() => {});
       }
     }, 2000);

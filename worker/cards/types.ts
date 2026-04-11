@@ -48,4 +48,5 @@ export interface CardRoomStoredState {
   tableState: unknown;
   hostId: string;
   lastActivity: number;
+  disconnectTimestamps?: [string, number][];
 }

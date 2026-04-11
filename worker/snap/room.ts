@@ -246,7 +246,7 @@ export class SnapRoom extends DurableObject<Env> {
     }
 
     if (msg.type === 'join') {
-      await this.handleJoin(ws, playerId);
+      await this.handleJoin(ws, playerId, msg.role as DeviceRole | undefined);
       return;
     }
 
@@ -336,8 +336,30 @@ export class SnapRoom extends DurableObject<Env> {
         }
       }
       if (changed) {
-        // Check if eliminations happen due to disconnect timeout
         if (this.phase === 'playing') {
+          // Remove timed-out disconnected players from turn order
+          for (const [pid] of [...this.players]) {
+            const p = this.players.get(pid);
+            if (p && !p.connected && !this.disconnectTimestamps.has(pid)) {
+              // Player timed out (was removed from disconnectTimestamps above)
+              if (this.turnOrder.includes(pid)) {
+                this.removeFromTurnOrder(pid);
+                this.broadcast({
+                  type: 'player_eliminated',
+                  playerId: pid,
+                  playerName: p.name,
+                } as ServerMessage);
+              }
+            }
+          }
+          // If the current turn player is disconnected, advance past them
+          if (this.turnOrder.length > 0) {
+            const currentId = this.turnOrder[this.currentDrawIndex];
+            const currentPlayer = currentId ? this.players.get(currentId) : null;
+            if (currentPlayer && !currentPlayer.connected) {
+              this.advanceDrawIndex();
+            }
+          }
           this.checkWinCondition();
         }
         this.broadcastState();
@@ -366,9 +388,11 @@ export class SnapRoom extends DurableObject<Env> {
 
   // --- Join / Disconnect ---
 
-  private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+  private async handleJoin(ws: WebSocket, playerId: string, messageRole?: DeviceRole): Promise<void> {
+    // Prefer role from the join message payload (client sends role: deviceRole),
+    // fall back to storage (set during WebSocket upgrade from URL param)
     const storedRole = await this.ctx.storage.get<DeviceRole>(`role:${playerId}`);
-    const role = storedRole || 'player';
+    const role = messageRole || storedRole || 'player';
 
     // Handle center pad connection
     if (role === 'center') {
@@ -621,11 +645,13 @@ export class SnapRoom extends DurableObject<Env> {
       pileSize: this.pile.length,
     });
 
-    // Advance to next non-eliminated player
-    this.advanceDrawIndex();
-
-    // Check if current draw player has cards
+    // Check win condition before advancing (drawing may have emptied player's deck)
     this.checkWinCondition();
+
+    // Advance to next non-eliminated player (only if game is still playing)
+    if (this.phase === 'playing') {
+      this.advanceDrawIndex();
+    }
 
     this.broadcastState();
     await this.saveState();
@@ -692,6 +718,12 @@ export class SnapRoom extends DurableObject<Env> {
 
       // Check if this player is now eliminated
       if (player.deck.length === 0) {
+        // If eliminated player is the current turn holder, advance first
+        const isCurrentTurn = this.turnOrder.length > 0 &&
+          this.turnOrder[this.currentDrawIndex] === playerId;
+        if (isCurrentTurn) {
+          this.advanceDrawIndex();
+        }
         this.broadcast({
           type: 'player_eliminated',
           playerId,
@@ -708,13 +740,13 @@ export class SnapRoom extends DurableObject<Env> {
   private advanceDrawIndex(): void {
     if (this.turnOrder.length === 0) return;
 
-    // Move to next player, skipping eliminated players
+    // Move to next player, skipping eliminated and disconnected-timed-out players
     let attempts = 0;
     do {
       this.currentDrawIndex = (this.currentDrawIndex + 1) % this.turnOrder.length;
       attempts++;
       const nextPlayer = this.players.get(this.turnOrder[this.currentDrawIndex]);
-      if (nextPlayer && nextPlayer.deck.length > 0) break;
+      if (nextPlayer && nextPlayer.deck.length > 0 && nextPlayer.connected) break;
     } while (attempts < this.turnOrder.length);
   }
 
@@ -744,10 +776,16 @@ export class SnapRoom extends DurableObject<Env> {
   private checkWinCondition(): void {
     if (this.phase !== 'playing') return;
 
-    // Find players who still have cards or are in turn order
+    // Find players who still have cards AND are connected (or still within reconnect window)
     const activePlayers = this.turnOrder.filter(id => {
       const p = this.players.get(id);
-      return p && p.deck.length > 0;
+      if (!p || p.deck.length === 0) return false;
+      // Connected players are active
+      if (p.connected) return true;
+      // Disconnected but still within reconnect timeout window are active
+      if (this.disconnectTimestamps.has(id)) return true;
+      // Disconnected and timed out = not active
+      return false;
     });
 
     if (activePlayers.length <= 1) {

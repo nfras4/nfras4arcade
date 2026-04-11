@@ -28,4 +28,5 @@ export interface RoomState {
   roundResult: RoundResult | null;
   lastActivity: number;
   gameSessionId: string | null;
+  disconnectTimestamps: [string, number][];
 }

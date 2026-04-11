@@ -149,6 +149,8 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   // Config
   private allowCustomCards = true;
+  // TODO: Implement server-side timer enforcement - these values are stored but never
+  // sent as timerEndsAt to clients and no enforcement alarms are scheduled.
   private clueTimerSeconds = 60;
   private guessTimerSeconds = 45;
 
@@ -381,17 +383,48 @@ export class WavelengthRoom extends DurableObject<Env> {
     // Check reconnect timeouts
     if (this.disconnectTimestamps.size > 0) {
       let changed = false;
+      const timedOutIds: string[] = [];
       for (const [pid, timestamp] of this.disconnectTimestamps) {
         if (now - timestamp >= RECONNECT_TIMEOUT_MS) {
           const player = this.players.get(pid);
           if (player && !player.connected) {
-            this.disconnectTimestamps.delete(pid);
-            changed = true;
-            // Host promotion if host disconnected
-            if (pid === this.hostId) {
-              this.promoteNewHost(pid);
-            }
+            timedOutIds.push(pid);
           }
+        }
+      }
+      for (const pid of timedOutIds) {
+        this.disconnectTimestamps.delete(pid);
+        changed = true;
+
+        // Host promotion if host disconnected
+        if (pid === this.hostId) {
+          this.promoteNewHost(pid);
+        }
+
+        // C4: Handle psychic disconnect - advance game so it doesn't stall
+        if (pid === this.psychicId) {
+          if (this.phase === 'clue_giving') {
+            // Auto-advance to guessing with whatever clues exist
+            this.phase = 'guessing';
+          }
+          // In guessing phase, allGuessersLocked() already skips disconnected players,
+          // so schedule bot turns to keep things moving
+          if (this.phase === 'guessing') {
+            await this.scheduleBotTurnIfNeeded();
+          }
+        }
+
+        // H3: Remove ghost player entirely so they can't be assigned as psychic
+        this.players.delete(pid);
+        this.scores.delete(pid);
+        const orderIdx = this.psychicOrder.indexOf(pid);
+        if (orderIdx !== -1) {
+          this.psychicOrder.splice(orderIdx, 1);
+        }
+
+        // If the removed player had a pending guess/lock, check if round resolves
+        if (this.phase === 'guessing' && this.allGuessersLocked()) {
+          this.resolveRound();
         }
       }
       if (changed) {
@@ -737,8 +770,20 @@ export class WavelengthRoom extends DurableObject<Env> {
   }
 
   private startRound(): void {
-    // Pick psychic from order
-    this.psychicId = this.psychicOrder[(this.roundNumber - 1) % this.psychicOrder.length];
+    // Pick psychic from order, skipping disconnected players (ghost prevention)
+    const orderLen = this.psychicOrder.length;
+    let psychicIdx = (this.roundNumber - 1) % orderLen;
+    let attempts = 0;
+    while (attempts < orderLen) {
+      const candidateId = this.psychicOrder[psychicIdx];
+      const candidate = this.players.get(candidateId);
+      if (candidate && (candidate.connected || candidate.isBot)) {
+        break;
+      }
+      psychicIdx = (psychicIdx + 1) % orderLen;
+      attempts++;
+    }
+    this.psychicId = this.psychicOrder[psychicIdx];
 
     // Draw a card from the deck
     if (this.deck.length === 0) {

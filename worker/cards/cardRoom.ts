@@ -6,6 +6,7 @@ import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer
 
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
+const DISCONNECT_TIMEOUT_MS = 30 * 1000; // 30 seconds before auto-forfeit
 const RATE_WINDOW_MS = 5000;
 const RATE_MAX_MESSAGES = 20;
 
@@ -28,12 +29,17 @@ export abstract class CardRoom extends DurableObject<Env> {
   protected lastActivity: number = Date.now();
   protected gameSessionId: string | null = null;
 
+  /** Timestamps when players disconnected mid-game (for auto-forfeit). */
+  protected disconnectTimestamps: Map<string, number> = new Map();
+
   /** Bot players in this room. */
   protected bots: Map<string, BotPlayer> = new Map();
   /** Whether a bot turn alarm is pending. */
   protected botTurnPending: boolean = false;
   /** Timestamp when bot turn was scheduled (for watchdog). */
   private botTurnScheduledAt: number = 0;
+  /** Retry count for stuck bot turns (in-memory, resets on success). */
+  private botRetryCount: number = 0;
 
   private initialized = false;
   private rateLimits: Map<string, number[]> = new Map();
@@ -79,6 +85,9 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.tableState = stored.tableState;
       this.lastActivity = stored.lastActivity;
 
+      // Restore disconnect timestamps
+      this.disconnectTimestamps = new Map(stored.disconnectTimestamps ?? []);
+
       // Restore bot map from players
       this.bots = new Map();
       for (const [id, p] of this.players) {
@@ -112,6 +121,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       tableState: this.tableState,
       lastActivity: this.lastActivity,
       botTurnPending: this.botTurnPending,
+      disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -257,7 +267,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
     if (!playerId) return;
-    this.handleDisconnect(playerId);
+    await this.handleDisconnect(playerId);
     await this.saveState();
   }
 
@@ -266,7 +276,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
     if (!playerId) return;
-    this.handleDisconnect(playerId);
+    await this.handleDisconnect(playerId);
     await this.saveState();
   }
 
@@ -278,15 +288,21 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.botTurnPending = false;
       try {
         await this.processBotTurn();
+        this.botRetryCount = 0;
       } catch (err) {
-        // Bot turn failed — force a pass to prevent game freeze
         console.error(`Bot turn error for ${this.currentTurn}:`, err);
         if (this.currentTurn && this.bots.has(this.currentTurn)) {
-          this.advanceTurn();
-          this.broadcastState();
-          // If next turn is also a bot, schedule it
-          if (this.isBotTurn() && this.phase === 'playing') {
+          if (this.botRetryCount < 3) {
+            this.botRetryCount++;
             await this.scheduleBotTurn();
+          } else {
+            console.error(`Bot retries exhausted for ${this.currentTurn}, force-advancing`);
+            this.botRetryCount = 0;
+            this.advanceTurn();
+            this.broadcastState();
+            if (this.isBotTurn() && this.phase === 'playing') {
+              await this.scheduleBotTurn();
+            }
           }
         }
       }
@@ -294,16 +310,40 @@ export abstract class CardRoom extends DurableObject<Env> {
       return;
     }
 
-    // Watchdog: if it's a bot's turn but no alarm is pending, force-advance
+    // Watchdog: if it's a bot's turn but no alarm is pending, retry the bot turn
     if (this.phase === 'playing' && this.isBotTurn() && !this.botTurnPending) {
-      console.error(`Bot watchdog: force-advancing stuck bot ${this.currentTurn}`);
-      this.advanceTurn();
-      this.broadcastState();
-      if (this.isBotTurn()) {
+      if (this.botRetryCount < 3) {
+        this.botRetryCount++;
+        console.error(`Bot watchdog: retrying stuck bot ${this.currentTurn} (attempt ${this.botRetryCount})`);
         await this.scheduleBotTurn();
+      } else {
+        console.error(`Bot watchdog: retries exhausted for ${this.currentTurn}, force-advancing`);
+        this.botRetryCount = 0;
+        this.advanceTurn();
+        this.broadcastState();
+        if (this.isBotTurn()) {
+          await this.scheduleBotTurn();
+        }
       }
       await this.saveState();
       return;
+    }
+
+    // Disconnect timeout: auto-forfeit players who haven't reconnected
+    if (this.disconnectTimestamps.size > 0 && (this.phase === 'playing' || this.phase === 'round_over')) {
+      const now = Date.now();
+      for (const [pid, ts] of this.disconnectTimestamps) {
+        if (now - ts >= DISCONNECT_TIMEOUT_MS) {
+          this.disconnectTimestamps.delete(pid);
+          await this.handlePlayerTimeout(pid);
+        }
+      }
+      // If there are still pending disconnects, schedule the next check
+      if (this.disconnectTimestamps.size > 0) {
+        await this.scheduleDisconnectCheck();
+      }
+      await this.saveState();
+      // Don't return -- fall through to check room expiry too
     }
 
     // Room expiry
@@ -327,6 +367,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     if (existing) {
       // Reconnection
       existing.connected = true;
+      this.disconnectTimestamps.delete(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -372,7 +413,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     await this.saveState();
   }
 
-  private handleDisconnect(playerId: string): void {
+  private async handleDisconnect(playerId: string): Promise<void> {
     const player = this.players.get(playerId);
     if (!player || player.isBot) return; // Bots never disconnect
 
@@ -387,6 +428,9 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
     } else {
       player.connected = false;
+      // Schedule a disconnect timeout check for auto-forfeit
+      this.disconnectTimestamps.set(playerId, Date.now());
+      await this.scheduleDisconnectCheck();
     }
 
     if (this.players.size > 0) {
@@ -490,6 +534,41 @@ export abstract class CardRoom extends DurableObject<Env> {
    */
   protected async processBotTurn(): Promise<void> {
     // Default no-op — subclasses must implement
+  }
+
+  // --- Disconnect timeout ---
+
+  /** Schedule a disconnect check alarm. Respects the single-alarm constraint by only setting if sooner. */
+  private async scheduleDisconnectCheck(): Promise<void> {
+    // Find the soonest disconnect that will expire
+    let soonest = Infinity;
+    for (const ts of this.disconnectTimestamps.values()) {
+      const expiresAt = ts + DISCONNECT_TIMEOUT_MS;
+      if (expiresAt < soonest) soonest = expiresAt;
+    }
+    if (soonest === Infinity) return;
+
+    const existing = await this.ctx.storage.getAlarm();
+    if (!existing || soonest < existing) {
+      await this.ctx.storage.setAlarm(soonest);
+    }
+  }
+
+  /**
+   * Called when a disconnected player's timeout expires.
+   * Default: advances the turn if it's the player's turn and broadcasts state.
+   * Subclasses can override for game-specific forfeit behavior.
+   */
+  protected async handlePlayerTimeout(playerId: string): Promise<void> {
+    if (this.currentTurn === playerId) {
+      this.advanceTurn();
+    }
+    this.broadcastState();
+
+    // If the new current turn is a bot, schedule it
+    if (this.isBotTurn() && this.phase === 'playing') {
+      await this.scheduleBotTurn();
+    }
   }
 
   /** Handle the add-bot HTTP request from SvelteKit API route. */
@@ -632,18 +711,12 @@ export abstract class CardRoom extends DurableObject<Env> {
         }
       }
 
-      // Social Butterfly: played all 4 game types
-      const gameTypes = await db.prepare(
-        'SELECT COUNT(DISTINCT game_type) as types FROM game_sessions WHERE winner_id = ? OR id IN (SELECT id FROM game_sessions WHERE ended_at IS NOT NULL)'
-      ).bind(id).first<{ types: number }>();
-      // Better query: check distinct game types where this player participated
+      // Social Butterfly: won games of 3+ different game types
       const typesPlayed = await db.prepare(
         `SELECT COUNT(DISTINCT game_type) as cnt FROM game_sessions
-         WHERE ended_at IS NOT NULL AND room_code IN (
-           SELECT DISTINCT room_code FROM game_sessions WHERE winner_id = ?
-         )`
+         WHERE winner_id = ? AND ended_at IS NOT NULL`
       ).bind(id).first<{ cnt: number }>();
-      if (typesPlayed && typesPlayed.cnt >= 4) {
+      if (typesPlayed && typesPlayed.cnt >= 3) {
         stmts.push(
           db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
             .bind(id, 'b_social_butterfly', now)

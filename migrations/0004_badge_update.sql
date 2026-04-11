@@ -2,7 +2,7 @@
 -- Regular badges
 INSERT INTO badges (id, slug, label, description, icon) VALUES
   ('b_connect_four_win', 'connect_four_win', 'Four in a Row',     'Win a game of Connect 4',              '1F534'),
-  ('b_social_butterfly', 'social_butterfly', 'Social Butterfly',  'Play all 4 game types',                '1F98B'),
+  ('b_social_butterfly', 'social_butterfly', 'Social Butterfly',  'Win games of 3 or more game types',    '1F98B'),
   ('b_card_shark',       'card_shark',       'Card Shark',        'Win 10 card games',                    '1F988');
 
 -- Easter egg badges (hidden until earned)

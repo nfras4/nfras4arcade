@@ -26,6 +26,8 @@ interface PokerTableState {
   isGuestPlayer: Record<string, boolean>;
   actionOnPlayerId: string | null;
   lastRaisePlayerId: string | null;
+  bbHasActed: boolean;
+  bbPlayerId: string | null;
 }
 
 type PokerAction = CardAction & (
@@ -77,6 +79,8 @@ export class PokerRoom extends CardRoom {
       isGuestPlayer: {},
       actionOnPlayerId: null,
       lastRaisePlayerId: null,
+      bbHasActed: false,
+      bbPlayerId: null,
     };
   }
 
@@ -194,7 +198,9 @@ export class PokerRoom extends CardRoom {
       utgIndex = (bbIndex + 1) % playerIds.length;
     }
     ts.actionOnPlayerId = playerIds[utgIndex];
-    ts.lastRaisePlayerId = bbPlayer; // BB is the "last raiser" initially
+    ts.lastRaisePlayerId = null;
+    ts.bbHasActed = false;
+    ts.bbPlayerId = bbPlayer;
 
     this.currentTurn = ts.actionOnPlayerId;
     this.setTable(ts);
@@ -270,6 +276,11 @@ export class PokerRoom extends CardRoom {
     const chips = ts.playerChips[playerId] ?? 0;
     const myBet = ts.playerBets[playerId] ?? 0;
     const toCall = ts.currentBet - myBet;
+
+    // Track when the big blind takes their preflop action
+    if (ts.bettingRound === 'preflop' && playerId === ts.bbPlayerId) {
+      ts.bbHasActed = true;
+    }
 
     switch (action.type) {
       case 'fold': {
@@ -422,6 +433,12 @@ export class PokerRoom extends CardRoom {
     // Everyone who can act has matched the current bet
     const allMatched = acting.every(id => ts.playerBets[id] === ts.currentBet);
     if (!allMatched) return false;
+
+    // Preflop: BB must get a chance to act even if everyone just called
+    if (ts.bettingRound === 'preflop' && !ts.bbHasActed && ts.bbPlayerId) {
+      // BB hasn't acted yet -- don't end the round
+      if (acting.includes(ts.bbPlayerId)) return false;
+    }
 
     // Action has come back to the last raiser
     if (ts.lastRaisePlayerId && ts.actionOnPlayerId === ts.lastRaisePlayerId) {
@@ -604,12 +621,6 @@ export class PokerRoom extends CardRoom {
 
     this.setTable(ts);
 
-    // Record game end for hand winner (player who won the most)
-    const topWinner = ts.winnersInfo!.sort((a, b) => b.amount - a.amount)[0];
-    if (topWinner) {
-      this.recordGameEnd(topWinner.playerId).catch(() => {});
-    }
-
     // Persist chip balances for registered players
     await this.persistChips(ts);
   }
@@ -651,7 +662,6 @@ export class PokerRoom extends CardRoom {
     ts.winnersInfo = [{ playerId: winnerId, amount: totalWon }];
     ts.actionOnPlayerId = null;
 
-    this.recordGameEnd(winnerId).catch(() => {});
     await this.persistChips(ts);
   }
 

@@ -29,7 +29,7 @@
     { slug: 'going_bananas',     label: 'Going Bananas',     description: 'Shoot the moon in Chase the Queen',                 emoji: '\u{1F34C}' },
     { slug: 'lone_monkey',       label: 'Lone Monkey',       description: 'Won a game solo against bots',                      emoji: '\u{1F412}' },
     { slug: 'connect_four_win',  label: 'Four in a Row',     description: 'Win a game of Connect 4',                           emoji: '\u{1F534}' },
-    { slug: 'social_butterfly',  label: 'Social Butterfly',  description: 'Play all 4 game types',                             emoji: '\u{1F98B}' },
+    { slug: 'social_butterfly',  label: 'Social Butterfly',  description: 'Win games of 3 or more game types',                 emoji: '\u{1F98B}' },
     { slug: 'card_shark',        label: 'Card Shark',        description: 'Win 10 card games',                                 emoji: '\u{1F988}' },
     { slug: 'poker_win',         label: 'High Roller',       description: 'Win a hand of Texas Hold\'em',                     emoji: '\u{1F0CF}' },
     { slug: 'snap_win',          label: 'Quick Reflexes',    description: 'Win a game of Snap',                                emoji: '\u{1F44F}' },

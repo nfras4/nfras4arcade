@@ -79,6 +79,9 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.roundResult = stored.roundResult;
       this.lastActivity = stored.lastActivity;
       this.gameSessionId = stored.gameSessionId ?? null;
+      if (stored.disconnectTimestamps) {
+        this.disconnectTimestamps = new Map(stored.disconnectTimestamps);
+      }
 
       // Reconcile connected status with actual live WebSocket connections.
       // The Hibernation API keeps WebSockets alive across hibernation, so
@@ -120,6 +123,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       roundResult: this.roundResult,
       lastActivity: this.lastActivity,
       gameSessionId: this.gameSessionId,
+      disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -568,7 +572,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       }
 
       case 'leave_game': {
-        this.handlePlayerLeave(playerId);
+        await this.handlePlayerLeave(playerId);
         break;
       }
     }
@@ -576,7 +580,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     await this.saveState();
   }
 
-  private handlePlayerLeave(playerId: string): void {
+  private async handlePlayerLeave(playerId: string): Promise<void> {
     const wasHost = playerId === this.hostId;
     this.players.delete(playerId);
     this.disconnectTimestamps.delete(playerId);
@@ -611,6 +615,73 @@ export class ImpostorRoom extends DurableObject<Env> {
         }
         return;
       }
+    }
+
+    // --- Mid-game departure handling ---
+    const inGame = this.phase === 'hints' || this.phase === 'discussion' || this.phase === 'voting';
+
+    if (inGame) {
+      // If the impostor left, end the game immediately
+      if (playerId === this.impostorId) {
+        const impostorCp = { name: 'The Impostor' }; // player already deleted
+        this.roundResult = {
+          impostorId: playerId,
+          impostorName: impostorCp.name,
+          word: this.currentWord!,
+          category: this.category!,
+          impostorHint: '',
+          votes: [],
+          impostorCaught: false,
+        };
+        this.phase = 'reveal';
+        this.broadcast({ type: 'round_result', result: this.roundResult });
+        this.broadcastState();
+        return;
+      }
+
+      // If fewer than 3 players remain, return to lobby
+      if (this.players.size < 3) {
+        this.resetToLobby();
+        this.broadcastState();
+        return;
+      }
+
+      // Phase-specific cleanup
+      if (this.phase === 'hints') {
+        const departedIndex = this.turnOrder.indexOf(playerId);
+        if (departedIndex !== -1) {
+          this.turnOrder.splice(departedIndex, 1);
+          // Adjust currentTurnIndex based on where the departed player was
+          if (departedIndex < this.currentTurnIndex) {
+            // Departed player was before current turn — shift index back
+            this.currentTurnIndex--;
+          }
+          // If departedIndex === currentTurnIndex, keep index (it now points to next player)
+          // Wrap if past end
+          if (this.turnOrder.length > 0 && this.currentTurnIndex >= this.turnOrder.length) {
+            // All turns done — advance to discussion
+            this.phase = 'discussion';
+          }
+        }
+      } else if (this.phase === 'voting') {
+        // Remove the departing player's vote data
+        // Also remove any votes cast FOR the departing player
+        for (const [, cp] of this.players) {
+          if (cp.votedFor === playerId) {
+            cp.hasVoted = false;
+            cp.votedFor = undefined;
+          }
+        }
+        // Check if all remaining connected players have voted
+        const allVoted = Array.from(this.players.values())
+          .filter((cp) => cp.player.connected)
+          .every((cp) => cp.hasVoted);
+        if (allVoted) {
+          const roundResult = await this.resolveVotes();
+          this.broadcast({ type: 'round_result', result: roundResult });
+        }
+      }
+      // During 'discussion' phase — no special handling needed
     }
 
     this.broadcastState();
@@ -814,8 +885,25 @@ export class ImpostorRoom extends DurableObject<Env> {
     const tied = [...voteCounts.entries()].filter(([, c]) => c === maxVotes).map(([id]) => id);
     const accusedId = tied[Math.floor(Math.random() * tied.length)];
 
+    const impostorCp = this.players.get(this.impostorId!);
+
+    // If the impostor left mid-vote, they escaped (players lose)
+    if (!impostorCp) {
+      const result: RoundResult = {
+        impostorId: this.impostorId!,
+        impostorName: 'Unknown',
+        word: this.currentWord!,
+        category: this.category!,
+        impostorHint: '',
+        votes,
+        impostorCaught: false,
+      };
+      this.roundResult = result;
+      this.phase = 'reveal';
+      return result;
+    }
+
     const impostorCaught = accusedId === this.impostorId;
-    const impostorCp = this.players.get(this.impostorId!)!;
 
     const result: RoundResult = {
       impostorId: this.impostorId!,
@@ -934,6 +1022,14 @@ export class ImpostorRoom extends DurableObject<Env> {
     this.hints = [];
     this.allHintsHistory = [];
     this.roundResult = null;
+    this.disconnectTimestamps.clear();
+
+    // Prune disconnected players before returning to lobby
+    for (const [id, cp] of this.players) {
+      if (!cp.player.connected) {
+        this.players.delete(id);
+      }
+    }
 
     for (const cp of this.players.values()) {
       cp.role = undefined;

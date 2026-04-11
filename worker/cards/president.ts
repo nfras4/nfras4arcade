@@ -343,9 +343,25 @@ export class PresidentRoom extends CardRoom {
       this.setTable(table);
       this.phase = 'round_over';
 
-      // Record D1 stats - President (first out) is the winner
-      const winnerId = table.finishOrder[0] || null;
-      this.recordGameEnd(winnerId).catch(() => {});
+      // Award points based on finish position
+      const pointsByPosition: Record<number, number> = {
+        0: 200, // President
+        1: 150, // Vice President
+      };
+      const totalPlayers = table.finishOrder.length;
+      for (let i = 0; i < totalPlayers; i++) {
+        const pid = table.finishOrder[i];
+        const points = pointsByPosition[i] ?? Math.max(0, 100 - i * 25);
+        const current = this.scores.get(pid) ?? 0;
+        this.scores.set(pid, current + points);
+      }
+
+      // Check if any player has reached 500+ points -- that ends the game
+      const gameWinner = table.finishOrder.find(pid => (this.scores.get(pid) ?? 0) >= 500) ?? null;
+      if (gameWinner) {
+        this.phase = 'game_over';
+        this.recordGameEnd(gameWinner).catch(() => {});
+      }
     }
   }
 

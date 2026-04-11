@@ -32,6 +32,12 @@ export class GameSocket {
 
   connect(roomCode: string, _isGuest?: boolean): Promise<void> {
     this.currentRoom = roomCode;
+    // Close any existing WebSocket before creating a new one
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
     return new Promise((resolve, reject) => {
       const url = getWsUrl(roomCode);
       this.ws = new WebSocket(url);
@@ -122,6 +128,8 @@ export class GameSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
+        // Re-send join on reconnect so the server knows we're back
+        this.pendingJoin = { type: 'join', code: this.currentRoom, name: '' };
         this.connect(this.currentRoom).catch(() => {});
       }
     }, 2000);

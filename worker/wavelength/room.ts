@@ -64,7 +64,8 @@ type ServerMessage =
   | { type: 'joined'; playerId: string; state: Record<string, unknown> }
   | { type: 'state_update'; state: Record<string, unknown> }
   | { type: 'error'; message: string }
-  | { type: 'pong' };
+  | { type: 'pong' }
+  | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number };
 
 // Client -> Server message types
 interface ClientMessage {
@@ -727,6 +728,19 @@ export class WavelengthRoom extends DurableObject<Env> {
         this.phase = 'game_over';
         this.calculateAwards();
         this.broadcastState();
+        break;
+      }
+
+      case 'chat': {
+        const player = this.players.get(playerId);
+        if (!player) break;
+        this.broadcast({
+          type: 'chat_message',
+          playerId,
+          name: player.name,
+          text: sanitizeText(String(msg.text ?? ''), MAX_TEXT_LENGTH),
+          timestamp: Date.now(),
+        });
         break;
       }
     }

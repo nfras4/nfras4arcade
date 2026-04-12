@@ -511,7 +511,7 @@
     width: 100%;
     max-width: 500px;
     margin: 0 auto;
-    padding-bottom: 1.5rem;
+    padding-bottom: 3.5rem;
     user-select: none;
     -webkit-user-select: none;
     touch-action: none;

@@ -36,6 +36,13 @@
   let guessThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSentAngle = $state<number | null>(null);
 
+  // Chat state
+  let chatMessages = $state<Array<{ name: string; text: string; timestamp: number }>>([]);
+  let chatInput = $state('');
+  let showChat = $state(false);
+  let unreadChat = $state(0);
+  let chatContainer: HTMLElement;
+
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
       if (msg.type === 'joined') {
@@ -48,6 +55,8 @@
         error.set(msg.message);
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => error.set(null), 4000);
+      } else if (msg.type === 'chat_message') {
+        chatMessages = [...chatMessages, { name: msg.name, text: msg.text, timestamp: msg.timestamp }];
       }
     });
 
@@ -150,6 +159,26 @@
     return () => { if (timerInterval) clearInterval(timerInterval); };
   });
 
+  // Track unread chat
+  let prevChatLen = 0;
+  $effect(() => {
+    const len = chatMessages.length;
+    if (len > prevChatLen && !showChat) {
+      unreadChat += len - prevChatLen;
+    }
+    prevChatLen = len;
+  });
+
+  $effect(() => {
+    if (showChat) unreadChat = 0;
+  });
+
+  $effect(() => {
+    if (chatMessages.length && chatContainer) {
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+  });
+
   // Sorted scoreboard
   let sortedPlayers = $derived.by(() => {
     if (!state?.players) return [];
@@ -234,6 +263,19 @@
       sendClue();
     }
   }
+
+  function sendChatMsg() {
+    if (!chatInput.trim()) return;
+    socket.send({ type: 'chat', text: chatInput.trim() });
+    chatInput = '';
+  }
+
+  function handleChatKey(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMsg();
+    }
+  }
 </script>
 
 {#if $error}
@@ -254,6 +296,17 @@
         <span class="timer-label">s</span>
       </div>
     {/if}
+
+    <!-- Chat toggle -->
+    <button
+      class="chat-toggle"
+      onclick={() => showChat = !showChat}
+    >
+      {showChat ? 'Hide Chat' : 'Chat'}
+      {#if unreadChat > 0 && !showChat}
+        <span class="chat-unread">{unreadChat > 9 ? '9+' : unreadChat}</span>
+      {/if}
+    </button>
 
     <!-- LOBBY -->
     {#if state.phase === 'lobby'}
@@ -615,6 +668,34 @@
           <button class="btn-primary" onclick={playAgain}>Play Again</button>
         {/if}
         <button class="btn-secondary" onclick={leaveGame}>Back to Lobby</button>
+      </div>
+    {/if}
+
+    <!-- Chat panel -->
+    {#if showChat}
+      <div class="chat-panel">
+        <div class="chat-messages" bind:this={chatContainer}>
+          {#each chatMessages as msg}
+            <div class="chat-msg">
+              <strong>{msg.name}</strong>
+              <span>{msg.text}</span>
+            </div>
+          {/each}
+          {#if chatMessages.length === 0}
+            <p class="chat-empty">No messages yet</p>
+          {/if}
+        </div>
+        <div class="chat-input-row">
+          <input
+            class="input-field"
+            bind:value={chatInput}
+            placeholder="Type a message..."
+            onkeydown={handleChatKey}
+          />
+          <button class="btn-primary btn-sm" onclick={sendChatMsg} disabled={!chatInput.trim()}>
+            Send
+          </button>
+        </div>
       </div>
     {/if}
 
@@ -1144,6 +1225,100 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  /* Chat */
+  .chat-toggle {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 50;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 0.5rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+
+  .chat-toggle:hover {
+    border-color: var(--accent-border);
+  }
+
+  .chat-unread {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 9px;
+    padding: 0 4px;
+  }
+
+  .chat-panel {
+    position: fixed;
+    bottom: 3.5rem;
+    right: 1rem;
+    z-index: 49;
+    width: min(320px, calc(100vw - 2rem));
+    max-height: 350px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    animation: fadeUp 0.2s ease both;
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    max-height: 260px;
+  }
+
+  .chat-msg {
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+
+  .chat-msg strong {
+    color: var(--accent);
+    margin-right: 0.375rem;
+  }
+
+  .chat-empty {
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 0.85rem;
+    padding: 2rem 0;
+  }
+
+  .chat-input-row {
+    display: flex;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .chat-input-row .input-field {
+    flex: 1;
+    font-size: 0.85rem;
   }
 
   /* Mobile responsiveness */

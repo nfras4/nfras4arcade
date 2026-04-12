@@ -32,6 +32,9 @@ export abstract class CardRoom extends DurableObject<Env> {
   /** Timestamps when players disconnected mid-game (for auto-forfeit). */
   protected disconnectTimestamps: Map<string, number> = new Map();
 
+  /** Spectators watching mid-game (id -> display name). */
+  protected spectators: Map<string, string> = new Map();
+
   /** Bot players in this room. */
   protected bots: Map<string, BotPlayer> = new Map();
   /** Whether a bot turn alarm is pending. */
@@ -88,6 +91,9 @@ export abstract class CardRoom extends DurableObject<Env> {
       // Restore disconnect timestamps
       this.disconnectTimestamps = new Map(stored.disconnectTimestamps ?? []);
 
+      // Restore spectators
+      this.spectators = new Map(stored.spectators ?? []);
+
       // Restore bot map from players
       this.bots = new Map();
       for (const [id, p] of this.players) {
@@ -122,6 +128,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       lastActivity: this.lastActivity,
       botTurnPending: this.botTurnPending,
       disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
+      spectators: Array.from(this.spectators.entries()),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -225,6 +232,10 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
 
     if (!this.players.has(playerId)) {
+      if (this.spectators.has(playerId)) {
+        // Spectators can only ping, not take actions
+        return;
+      }
       this.sendToWs(ws, { type: 'error', message: 'Not in a room' });
       return;
     }
@@ -245,6 +256,14 @@ export abstract class CardRoom extends DurableObject<Env> {
       for (const p of this.players.values()) {
         p.hand = [];
       }
+      // Promote spectators to players
+      for (const [specId, specName] of this.spectators) {
+        if (this.players.size < this.maxPlayers) {
+          const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false };
+          this.players.set(specId, p);
+        }
+      }
+      this.spectators.clear();
       this.broadcastState();
     } else if (msg.type === 'end_game' && playerId === this.hostId) {
       this.phase = 'game_over';
@@ -379,7 +398,17 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
 
     if (this.phase !== 'lobby') {
-      this.sendToWs(ws, { type: 'error', message: 'Game already in progress' });
+      // Allow joining mid-game as spectator
+      const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
+      this.spectators.set(playerId, storedName || 'Spectator');
+      this.sendToWs(ws, {
+        type: 'joined',
+        playerId,
+        isSpectator: true,
+        state: this.getGameStateForPlayer(playerId),
+      });
+      this.broadcastState();
+      await this.saveState();
       return;
     }
     if (this.players.size >= this.maxPlayers) {
@@ -414,6 +443,13 @@ export abstract class CardRoom extends DurableObject<Env> {
   }
 
   private async handleDisconnect(playerId: string): Promise<void> {
+    // Handle spectator disconnect
+    if (this.spectators.has(playerId)) {
+      this.spectators.delete(playerId);
+      this.broadcastState();
+      return;
+    }
+
     const player = this.players.get(playerId);
     if (!player || player.isBot) return; // Bots never disconnect
 
@@ -695,8 +731,9 @@ export abstract class CardRoom extends DurableObject<Env> {
 
       const stmts: D1PreparedStatement[] = [];
 
-      // Night Owl: playing between midnight and 5am UTC
-      if (hour >= 0 && hour < 5) {
+      // Night Owl: playing between midnight and 5am AEST (UTC+10)
+      const aestHour = (hour + 10) % 24;
+      if (aestHour >= 0 && aestHour < 5) {
         stmts.push(
           db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
             .bind(id, 'b_night_owl', now)
@@ -776,13 +813,19 @@ export abstract class CardRoom extends DurableObject<Env> {
   }
 
   protected broadcastState(): void {
+    const spectatorList = this.spectators.size > 0
+      ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
+      : undefined;
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const pid = tags[0];
       if (!pid) continue;
+      const state = this.getGameStateForPlayer(pid);
+      if (spectatorList) state.spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
-        state: this.getGameStateForPlayer(pid),
+        state,
+        isSpectator: this.spectators.has(pid),
       });
     }
   }

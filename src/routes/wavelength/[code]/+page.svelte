@@ -50,14 +50,18 @@
   let unreadPlayerChat = $state(0);
   let playerChatContainer: HTMLElement;
 
+  let isSpectator = $state(false);
+
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
       if (msg.type === 'joined') {
         myPlayerId.set(msg.playerId);
         gameState.set(msg.state);
         reconnecting = false;
+        isSpectator = msg.isSpectator ?? false;
       } else if (msg.type === 'state_update') {
         gameState.set(msg.state);
+        if (msg.isSpectator !== undefined) isSpectator = msg.isSpectator;
       } else if (msg.type === 'error') {
         error.set(msg.message);
         clearTimeout(errorTimeout);
@@ -459,6 +463,7 @@
     <!-- CLUE GIVING -->
     {:else if state.phase === 'clue_giving'}
       <div class="phase-panel">
+        {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
         <div class="round-indicator">
           <span class="round-badge">Round {state.roundNumber} / {state.totalRounds}</span>
         </div>
@@ -539,6 +544,7 @@
     <!-- GUESSING -->
     {:else if state.phase === 'guessing'}
       <div class="phase-panel">
+        {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
         <div class="round-indicator">
           <span class="round-badge">Round {state.roundNumber} / {state.totalRounds}</span>
         </div>
@@ -1423,6 +1429,19 @@
   .chat-input-row .input-field {
     flex: 1;
     font-size: 0.85rem;
+  }
+
+  .spectator-banner {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0.35rem;
+    background: var(--accent-faint, rgba(74, 144, 217, 0.1));
+    color: var(--accent, #4a90d9);
+    border-bottom: 1px solid var(--border);
   }
 
   /* Mobile responsiveness */

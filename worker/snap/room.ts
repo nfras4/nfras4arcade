@@ -44,12 +44,13 @@ interface SnapRoomState {
   lastActivity: number;
   snapCooldown: boolean;
   consecutiveSnaps: [string, number][];
+  spectators?: [string, string][];
 }
 
 // Server -> Client message types
 type ServerMessage =
-  | { type: 'joined'; playerId: string; state: Record<string, unknown> }
-  | { type: 'state_update'; state: Record<string, unknown> }
+  | { type: 'joined'; playerId: string; state: Record<string, unknown>; isSpectator?: boolean }
+  | { type: 'state_update'; state: Record<string, unknown>; isSpectator?: boolean }
   | { type: 'card_played'; playerId: string; card: Card; pileSize: number }
   | { type: 'snap_result'; winnerId: string; winnerName: string; pileSize: number; wasValid: boolean }
   | { type: 'player_eliminated'; playerId: string; playerName: string }
@@ -95,6 +96,9 @@ export class SnapRoom extends DurableObject<Env> {
   // Rate limiting (in-memory only, resets on hibernation)
   private rateLimits = new Map<string, number[]>();
 
+  // Spectators (joined mid-game)
+  private spectators = new Map<string, string>();
+
   // Disconnect tracking
   private disconnectTimestamps = new Map<string, number>();
 
@@ -119,6 +123,7 @@ export class SnapRoom extends DurableObject<Env> {
       this.lastActivity = stored.lastActivity;
       this.snapCooldown = stored.snapCooldown;
       this.consecutiveSnaps = new Map(stored.consecutiveSnaps);
+      this.spectators = new Map(stored.spectators ?? []);
 
       // Reconcile connected status with actual live WebSocket connections
       const livePlayerIds = new Set<string>();
@@ -148,6 +153,7 @@ export class SnapRoom extends DurableObject<Env> {
       lastActivity: this.lastActivity,
       snapCooldown: this.snapCooldown,
       consecutiveSnaps: Array.from(this.consecutiveSnaps.entries()),
+      spectators: Array.from(this.spectators.entries()),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -271,6 +277,10 @@ export class SnapRoom extends DurableObject<Env> {
 
     // All other messages require being a player in the room
     if (!this.players.has(playerId)) {
+      if (this.spectators.has(playerId)) {
+        // Spectators can only ping, not take actions
+        return;
+      }
       this.sendToWs(ws, { type: 'error', message: 'Not in a room' });
       return;
     }
@@ -432,7 +442,17 @@ export class SnapRoom extends DurableObject<Env> {
 
     // New player join
     if (this.phase !== 'lobby') {
-      this.sendToWs(ws, { type: 'error', message: 'Game already in progress' });
+      // Allow joining mid-game as spectator
+      const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
+      this.spectators.set(playerId, storedName || 'Spectator');
+      this.sendToWs(ws, {
+        type: 'joined',
+        playerId,
+        state: this.getClientState(),
+        isSpectator: true,
+      });
+      this.broadcastState();
+      await this.saveState();
       return;
     }
     if (this.players.size >= 8) {
@@ -470,6 +490,13 @@ export class SnapRoom extends DurableObject<Env> {
   }
 
   private handleDisconnect(playerId: string): void {
+    // Handle spectator disconnect
+    if (this.spectators.has(playerId)) {
+      this.spectators.delete(playerId);
+      this.broadcastState();
+      return;
+    }
+
     // Center pad disconnects are handled in webSocketClose/Error
     const player = this.players.get(playerId);
     if (!player) return;
@@ -868,6 +895,21 @@ export class SnapRoom extends DurableObject<Env> {
       if (stmts.length > 0) {
         await db.batch(stmts);
       }
+
+      // Night Owl badge: playing between midnight and 5am AEST (UTC+10)
+      const hour = new Date(now * 1000).getUTCHours();
+      const aestHour = (hour + 10) % 24;
+      if (aestHour >= 0 && aestHour < 5) {
+        const nightOwlStmts: D1PreparedStatement[] = [];
+        for (const [id, player] of this.players) {
+          if (player.isGuest || id.startsWith('guest_')) continue;
+          nightOwlStmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_night_owl', now)
+          );
+        }
+        if (nightOwlStmts.length > 0) await db.batch(nightOwlStmts);
+      }
     } catch {
       // Don't block game state on D1 failure
     }
@@ -888,6 +930,15 @@ export class SnapRoom extends DurableObject<Env> {
       player.deck = [];
       player.wonCards = 0;
     }
+
+    // Promote spectators to players
+    for (const [specId, specName] of this.spectators) {
+      if (this.players.size < 8) {
+        const p: SnapPlayerData = { id: specId, name: specName, connected: true, isHost: false, isGuest: specId.startsWith('guest_'), deck: [], wonCards: 0 };
+        this.players.set(specId, p);
+      }
+    }
+    this.spectators.clear();
   }
 
   // --- State for clients ---
@@ -970,11 +1021,19 @@ export class SnapRoom extends DurableObject<Env> {
   }
 
   private broadcastState(): void {
-    const state = this.getClientState();
+    const spectatorList = this.spectators.size > 0
+      ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
+      : undefined;
     for (const ws of this.ctx.getWebSockets()) {
+      const tags = this.ctx.getTags(ws);
+      const pid = tags[0];
+      if (!pid) continue;
+      const state = this.getClientState();
+      if (spectatorList) (state as any).spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
         state,
+        isSpectator: this.spectators.has(pid),
       } as ServerMessage);
     }
   }

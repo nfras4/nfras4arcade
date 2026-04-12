@@ -18,6 +18,7 @@
   let reconnecting = $state(true);
   let lastSnapResult = $state<any>(null);
   let snapFlash = $state(false);
+  let isSpectator = $state(false);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   $effect(() => {
@@ -26,8 +27,10 @@
         myPlayerId = msg.playerId;
         gameState = msg.state;
         reconnecting = false;
+        isSpectator = msg.isSpectator ?? false;
       } else if (msg.type === 'state_update') {
         gameState = msg.state;
+        if (msg.isSpectator !== undefined) isSpectator = msg.isSpectator;
       } else if (msg.type === 'card_played') {
         if (navigator.vibrate) navigator.vibrate(50);
       } else if (msg.type === 'snap_result') {
@@ -204,6 +207,7 @@
 
   {:else if isPlaying}
     <div class="snap-container player-playing" class:snap-flash={snapFlash}>
+      {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
       <!-- Top bar -->
       <div class="top-bar">
         <span class="top-pile">Pile: {state.pileSize}</span>
@@ -228,7 +232,12 @@
 
       <!-- Bottom action area -->
       <div class="bottom-area">
-        {#if isEliminated}
+        {#if isSpectator}
+          <div class="eliminated-msg">
+            <p class="eliminated-text geo-title">Spectating</p>
+            <p class="eliminated-sub">You'll join next round</p>
+          </div>
+        {:else if isEliminated}
           <div class="eliminated-msg">
             <p class="eliminated-text geo-title">You're out!</p>
             <p class="eliminated-sub">Watch the rest of the game</p>
@@ -241,7 +250,7 @@
           <button class="draw-btn draw-btn-disabled" disabled>Waiting for {currentDrawPlayerName}...</button>
         {/if}
 
-        {#if !isEliminated && !snapIsActive}
+        {#if !isSpectator && !isEliminated && !snapIsActive}
           <button class="snap-btn snap-btn-idle" onclick={callSnap}>SNAP!</button>
         {/if}
       </div>
@@ -822,5 +831,18 @@
 
   @media (min-width: 480px) {
     .panel-inner { padding: 1.875rem; }
+  }
+
+  .spectator-banner {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0.35rem;
+    background: var(--accent-faint, rgba(74, 144, 217, 0.1));
+    color: var(--accent, #4a90d9);
+    border-bottom: 1px solid var(--border);
   }
 </style>

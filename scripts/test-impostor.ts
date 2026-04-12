@@ -341,6 +341,103 @@ async function main() {
     log('IMP-006', 'FAIL', `Error in game flow: ${e.message}`);
   }
 
+  // --- IMP-016: Hint round 2 (all players can type) ---
+  console.log('\n=== IMP-016: Hint round 2 all players can give hints ===');
+  try {
+    const room = 'TESTR2';
+    const conns: WSResult[] = [];
+    for (let i = 0; i < 3; i++) {
+      const c = await connectWS(room, PLAYERS[i].cookie);
+      send(c.ws, { type: 'join' });
+      await waitMs(200);
+      conns.push(c);
+    }
+
+    // Host starts game
+    send(conns[0].ws, { type: 'start_game' });
+    await waitMs(500);
+
+    let state = lastState(conns[0]);
+    if (!state || state.phase !== 'hints') {
+      log('IMP-016', 'FAIL', `Expected hints phase, got ${state?.phase}`);
+    } else {
+      // Round 1: all players give hints
+      for (let turnIdx = 0; turnIdx < state.turnOrder.length; turnIdx++) {
+        state = lastState(conns[0]) || state;
+        const pid = state.turnOrder[state.currentTurnIndex];
+        const conn = conns.find((_, i) => PLAYERS[i].id === pid);
+        if (conn) {
+          send(conn.ws, { type: 'give_hint', text: `Round 1 hint` });
+          await waitMs(300);
+        }
+      }
+
+      await waitMs(300);
+      state = lastState(conns[0]);
+      if (state?.phase !== 'discussion') {
+        log('IMP-016', 'FAIL', `Expected discussion after round 1, got ${state?.phase}`);
+      } else {
+        log('IMP-016-r1', 'PASS', 'Round 1 complete, in discussion phase');
+
+        // Host starts hint round 2
+        send(conns[0].ws, { type: 'next_hint_round' });
+        await waitMs(500);
+
+        state = lastState(conns[0]);
+        if (state?.phase !== 'hints') {
+          log('IMP-016', 'FAIL', `Expected hints phase for round 2, got ${state?.phase}`);
+        } else if (!state.turnOrder || state.turnOrder.length === 0) {
+          log('IMP-016', 'FAIL', `Turn order is empty in round 2! turnOrder=${JSON.stringify(state.turnOrder)}`);
+        } else {
+          log('IMP-016-r2start', 'PASS', `Round 2 started, hintRound=${state.hintRound}, turnOrder has ${state.turnOrder.length} players`);
+
+          // Verify first player's turn matches someone
+          const firstTurnId = state.turnOrder[state.currentTurnIndex];
+          const firstConn = conns.find((_, i) => PLAYERS[i].id === firstTurnId);
+          if (!firstConn) {
+            log('IMP-016', 'FAIL', `First turn player ${firstTurnId} not found in connections`);
+          } else {
+            // All players give round 2 hints
+            let allHintsGiven = true;
+            for (let turnIdx = 0; turnIdx < state.turnOrder.length; turnIdx++) {
+              state = lastState(conns[0]) || state;
+              if (state.phase !== 'hints') break;
+              const pid = state.turnOrder[state.currentTurnIndex];
+              const conn = conns.find((_, i) => PLAYERS[i].id === pid);
+              if (conn) {
+                clearMessages(conn);
+                send(conn.ws, { type: 'give_hint', text: `Round 2 hint` });
+                await waitMs(300);
+                const err = conn.messages.find(m => m.type === 'error');
+                if (err) {
+                  log('IMP-016', 'FAIL', `Player ${pid} got error giving round 2 hint: ${err.message}`);
+                  allHintsGiven = false;
+                  break;
+                }
+              } else {
+                log('IMP-016', 'FAIL', `Turn player ${pid} not found in connections`);
+                allHintsGiven = false;
+                break;
+              }
+            }
+
+            await waitMs(300);
+            state = lastState(conns[0]);
+            if (allHintsGiven && state?.phase === 'discussion') {
+              log('IMP-016', 'PASS', 'All players gave hints in round 2, discussion phase reached');
+            } else if (allHintsGiven) {
+              log('IMP-016', 'FAIL', `After all round 2 hints, phase=${state?.phase} (expected discussion)`);
+            }
+          }
+        }
+      }
+    }
+
+    for (const c of conns) c.ws.close();
+  } catch (e: any) {
+    log('IMP-016', 'FAIL', `Error: ${e.message}`);
+  }
+
   // --- IMP-003/004/005: Mid-game disconnects ---
   console.log('\n=== IMP-003/004/005: Mid-game disconnects ===');
   try {

@@ -57,12 +57,13 @@ interface WavelengthRoomState {
   roundResults: RoundResultEntry[];
   lastActivity: number;
   botTurnPending: boolean;
+  spectators?: [string, string][];
 }
 
 // Server -> Client message types
 type ServerMessage =
-  | { type: 'joined'; playerId: string; state: Record<string, unknown> }
-  | { type: 'state_update'; state: Record<string, unknown> }
+  | { type: 'joined'; playerId: string; state: Record<string, unknown>; isSpectator?: boolean }
+  | { type: 'state_update'; state: Record<string, unknown>; isSpectator?: boolean }
   | { type: 'error'; message: string }
   | { type: 'pong' }
   | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number }
@@ -173,6 +174,8 @@ export class WavelengthRoom extends DurableObject<Env> {
   // Disconnect tracking
   private disconnectTimestamps = new Map<string, number>();
 
+  private spectators = new Map<string, string>();
+
   // --- State persistence ---
 
   private async loadState(): Promise<void> {
@@ -203,6 +206,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.roundResults = stored.roundResults;
       this.lastActivity = stored.lastActivity;
       this.botTurnPending = stored.botTurnPending;
+      this.spectators = new Map(stored.spectators ?? []);
 
       // Reconcile connected status with actual live WebSocket connections
       const livePlayerIds = new Set<string>();
@@ -241,6 +245,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       roundResults: this.roundResults,
       lastActivity: this.lastActivity,
       botTurnPending: this.botTurnPending,
+      spectators: Array.from(this.spectators.entries()),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -344,6 +349,10 @@ export class WavelengthRoom extends DurableObject<Env> {
 
     // All other messages require being in the room
     if (!this.players.has(playerId)) {
+      if (this.spectators.has(playerId)) {
+        // Spectators can only ping, not take actions
+        return;
+      }
       this.sendToWs(ws, { type: 'error', message: 'Not in a room' });
       return;
     }
@@ -478,7 +487,17 @@ export class WavelengthRoom extends DurableObject<Env> {
 
     // New player join
     if (this.phase !== 'lobby') {
-      this.sendToWs(ws, { type: 'error', message: 'Game already in progress' });
+      // Allow joining mid-game as spectator
+      const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
+      this.spectators.set(playerId, storedName || 'Spectator');
+      this.sendToWs(ws, {
+        type: 'joined',
+        playerId,
+        state: this.getStateForPlayer(playerId),
+        isSpectator: true,
+      });
+      this.broadcastState();
+      await this.saveState();
       return;
     }
     if (this.players.size >= 16) {
@@ -515,6 +534,13 @@ export class WavelengthRoom extends DurableObject<Env> {
   }
 
   private handleDisconnect(playerId: string): void {
+    // Handle spectator disconnect
+    if (this.spectators.has(playerId)) {
+      this.spectators.delete(playerId);
+      this.broadcastState();
+      return;
+    }
+
     const player = this.players.get(playerId);
     if (!player) return;
 
@@ -1006,6 +1032,21 @@ export class WavelengthRoom extends DurableObject<Env> {
       }
 
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Night Owl badge: playing between midnight and 5am AEST (UTC+10)
+      const hour = new Date(now * 1000).getUTCHours();
+      const aestHour = (hour + 10) % 24;
+      if (aestHour >= 0 && aestHour < 5) {
+        const nightOwlStmts: D1PreparedStatement[] = [];
+        for (const [id, player] of this.players) {
+          if (id.startsWith('guest_') || player.isBot) continue;
+          nightOwlStmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_night_owl', now)
+          );
+        }
+        if (nightOwlStmts.length > 0) await db.batch(nightOwlStmts);
+      }
     } catch {}
   }
 
@@ -1027,6 +1068,16 @@ export class WavelengthRoom extends DurableObject<Env> {
     for (const id of this.players.keys()) {
       this.scores.set(id, 0);
     }
+
+    // Promote spectators to players
+    for (const [specId, specName] of this.spectators) {
+      if (this.players.size < 16) {
+        const p: WavelengthPlayer = { id: specId, name: specName, connected: true, isHost: false, isBot: false };
+        this.players.set(specId, p);
+        this.scores.set(specId, 0);
+      }
+    }
+    this.spectators.clear();
   }
 
   // --- Bot management ---
@@ -1205,13 +1256,19 @@ export class WavelengthRoom extends DurableObject<Env> {
   }
 
   private broadcastState(): void {
+    const spectatorList = this.spectators.size > 0
+      ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
+      : undefined;
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const playerId = tags[0];
       if (!playerId) continue;
+      const state = this.getStateForPlayer(playerId);
+      if (spectatorList) (state as any).spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
-        state: this.getStateForPlayer(playerId),
+        state,
+        isSpectator: this.spectators.has(playerId),
       } as ServerMessage);
     }
   }

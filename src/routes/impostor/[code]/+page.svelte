@@ -5,7 +5,7 @@
   import { socket } from '$lib/ws';
   import {
     gameState, playerId, chatMessages, error, connected, votesIn,
-    isHost, myTurn, currentTurnPlayer,
+    isHost, myTurn, currentTurnPlayer, isSpectator,
     initSocketListeners, resetStores
   } from '$lib/stores';
   import { isLoggedIn } from '$lib/auth';
@@ -266,6 +266,10 @@
       {/if}
     </button>
   </header>
+
+  {#if $isSpectator && $gameState && $gameState.phase !== 'lobby'}
+    <div class="spectator-banner">Spectating</div>
+  {/if}
 
   <div class="game-body">
     <!-- Main content area -->
@@ -1889,5 +1893,20 @@
       padding-left: 0.375rem;
       padding-right: 0.375rem;
     }
+  }
+
+  /* ─── Spectator banner ───────────────────────────────── */
+
+  .spectator-banner {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0.35rem;
+    background: var(--accent-faint, rgba(74, 144, 217, 0.1));
+    color: var(--accent, #4a90d9);
+    border-bottom: 1px solid var(--border);
   }
 </style>

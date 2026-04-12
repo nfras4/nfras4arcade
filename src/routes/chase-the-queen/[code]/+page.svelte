@@ -15,6 +15,7 @@
   const myPlayerId = writable<string | null>(null);
   const error = writable<string | null>(null);
 
+  let isSpectator = $state(false);
   let selectedCards = $state<any[]>([]);
   let reconnecting = $state(true);
   let errorTimeout: ReturnType<typeof setTimeout>;
@@ -24,9 +25,11 @@
       if (msg.type === 'joined') {
         myPlayerId.set(msg.playerId);
         gameState.set(msg.state);
+        isSpectator = msg.isSpectator ?? false;
         reconnecting = false;
       } else if (msg.type === 'state_update') {
         gameState.set(msg.state);
+        if (msg.isSpectator !== undefined) isSpectator = msg.isSpectator;
       } else if (msg.type === 'error') {
         error.set(msg.message);
         clearTimeout(errorTimeout);
@@ -244,6 +247,7 @@
     <!-- PLAYING -->
     {:else if displayPhase === 'playing'}
       <div class="phase-panel">
+        {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
 
         <!-- Shoot the Moon Decision -->
         {#if awaitingMoonChoice}
@@ -815,6 +819,20 @@
     .phase-panel {
       max-width: 500px;
     }
+  }
+
+  .spectator-banner {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--yellow, #eab308);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 2px;
+    padding: 0.3rem 0.75rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }

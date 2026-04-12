@@ -81,7 +81,17 @@
     {#if $isLoggedIn}
       {#if $userStats}
         <span class="nav-level">Lv.{userLevel}</span>
-        <span class="nav-chips">{$userStats.chips}</span>
+        <span class="nav-chips" title="Chips to play poker with">
+          <svg class="chip-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="6" />
+            <line x1="12" y1="2" x2="12" y2="5" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="5" y2="12" />
+            <line x1="19" y1="12" x2="22" y2="12" />
+          </svg>
+          {$userStats.chips}
+        </span>
       {/if}
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
@@ -254,11 +264,20 @@
   }
 
   .nav-chips {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     color: var(--accent);
+    cursor: default;
+  }
+
+  .chip-icon {
+    flex-shrink: 0;
+    opacity: 0.85;
   }
 
   @media (max-width: 480px) {

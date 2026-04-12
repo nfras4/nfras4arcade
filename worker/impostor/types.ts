@@ -29,4 +29,5 @@ export interface RoomState {
   lastActivity: number;
   gameSessionId: string | null;
   disconnectTimestamps: [string, number][];
+  spectators?: [string, string][];
 }

@@ -8,6 +8,7 @@ export const chatMessages = writable<Array<{ name: string; text: string; timesta
 export const error = writable<string | null>(null);
 export const connected = writable(false);
 export const votesIn = writable(0);
+export const isSpectator = writable(false);
 
 export const isHost = derived(
   [gameState, playerId],
@@ -40,6 +41,7 @@ export function initSocketListeners(): () => void {
         playerId.set(msg.playerId);
         gameState.set(msg.state);
         connected.set(true);
+        isSpectator.set((msg as any).isSpectator === true);
         break;
 
       case 'state_update':
@@ -49,6 +51,9 @@ export function initSocketListeners(): () => void {
           }
           return msg.state;
         });
+        if ('isSpectator' in (msg as any)) {
+          isSpectator.set((msg as any).isSpectator === true);
+        }
         break;
 
       case 'chat_message':
@@ -90,4 +95,5 @@ export function resetStores(): void {
   error.set(null);
   connected.set(false);
   votesIn.set(0);
+  isSpectator.set(false);
 }

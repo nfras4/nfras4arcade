@@ -54,6 +54,9 @@ export class ImpostorRoom extends DurableObject<Env> {
   // Track disconnect timestamps for reconnection timeouts
   private disconnectTimestamps: Map<string, number> = new Map();
 
+  // Track spectators (joined mid-game)
+  private spectators = new Map<string, string>();
+
   // Track if state has been loaded from storage
   private initialized = false;
 
@@ -82,6 +85,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       if (stored.disconnectTimestamps) {
         this.disconnectTimestamps = new Map(stored.disconnectTimestamps);
       }
+      this.spectators = new Map(stored.spectators ?? []);
 
       // Reconcile connected status with actual live WebSocket connections.
       // The Hibernation API keeps WebSockets alive across hibernation, so
@@ -124,6 +128,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       lastActivity: this.lastActivity,
       gameSessionId: this.gameSessionId,
       disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
+      spectators: Array.from(this.spectators.entries()),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -223,6 +228,10 @@ export class ImpostorRoom extends DurableObject<Env> {
 
     // All other messages require being in the room
     if (!this.players.has(playerId)) {
+      if (this.spectators.has(playerId)) {
+        // Spectators can only ping, not take actions
+        return;
+      }
       this.sendToWs(ws, { type: 'error', message: 'Not in a room' });
       return;
     }
@@ -311,7 +320,17 @@ export class ImpostorRoom extends DurableObject<Env> {
 
     // New player join
     if (this.phase !== 'lobby') {
-      this.sendToWs(ws, { type: 'error', message: 'Game already in progress' });
+      // Allow joining mid-game as spectator
+      const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
+      this.spectators.set(playerId, storedName || 'Spectator');
+      this.sendToWs(ws, {
+        type: 'joined',
+        playerId,
+        state: this.getStateForPlayer(playerId),
+        isSpectator: true,
+      } as any);
+      this.broadcastState();
+      await this.saveState();
       return;
     }
     if (this.players.size >= 8) {
@@ -351,6 +370,13 @@ export class ImpostorRoom extends DurableObject<Env> {
   }
 
   private handleDisconnect(playerId: string): void {
+    // Handle spectator disconnect
+    if (this.spectators.has(playerId)) {
+      this.spectators.delete(playerId);
+      this.broadcastState();
+      return;
+    }
+
     const cp = this.players.get(playerId);
     if (!cp) return;
 
@@ -581,6 +607,17 @@ export class ImpostorRoom extends DurableObject<Env> {
   }
 
   private async handlePlayerLeave(playerId: string): Promise<void> {
+    // Handle spectator leave
+    if (this.spectators.has(playerId)) {
+      this.spectators.delete(playerId);
+      const sockets = this.ctx.getWebSockets(playerId);
+      for (const ws of sockets) {
+        try { ws.close(1000, 'Left game'); } catch {}
+      }
+      this.broadcastState();
+      return;
+    }
+
     const wasHost = playerId === this.hostId;
     this.players.delete(playerId);
     this.disconnectTimestamps.delete(playerId);
@@ -996,9 +1033,20 @@ export class ImpostorRoom extends DurableObject<Env> {
         }
       }
 
-      // Check veteran badge (10 games) for registered players
+      // Check veteran badge (10 games) and night owl for registered players
+      const hour = new Date(now * 1000).getUTCHours();
+      const aestHour = (hour + 10) % 24;
       for (const [id] of this.players) {
         if (id.startsWith('guest_')) continue;
+
+        // Night Owl: playing between midnight and 5am AEST (UTC+10)
+        if (aestHour >= 0 && aestHour < 5) {
+          stmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_night_owl', now)
+          );
+        }
+
         const profile = await db.prepare('SELECT games_played FROM player_profiles WHERE id = ?').bind(id).first<{ games_played: number }>();
         if (profile && profile.games_played >= 10) {
           stmts.push(
@@ -1046,6 +1094,15 @@ export class ImpostorRoom extends DurableObject<Env> {
       cp.votedFor = undefined;
       cp.hintGiven = false;
     }
+
+    // Promote spectators to players
+    for (const [specId, specName] of this.spectators) {
+      if (this.players.size < 8) {
+        const player: Player = { id: specId, name: specName, isHost: false, connected: true, connectionStatus: 'connected' };
+        this.players.set(specId, { player });
+      }
+    }
+    this.spectators.clear();
   }
 
   private getStateForPlayer(playerId: string): GameState {
@@ -1101,14 +1158,20 @@ export class ImpostorRoom extends DurableObject<Env> {
   }
 
   private broadcastState(): void {
+    const spectatorList = this.spectators.size > 0
+      ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
+      : undefined;
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const playerId = tags[0];
       if (!playerId) continue;
+      const state = this.getStateForPlayer(playerId);
+      if (spectatorList) (state as any).spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
-        state: this.getStateForPlayer(playerId),
-      } as ServerMessage);
+        state,
+        isSpectator: this.spectators.has(playerId),
+      } as any);
     }
   }
 

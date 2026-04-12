@@ -29,6 +29,7 @@ export interface CardGameState {
   scores: Record<string, number>;
   /** Game-specific table state -- each subclass defines shape */
   tableState: unknown;
+  spectators?: { id: string; name: string }[];
 }
 
 /** Base action type -- each game extends this union */
@@ -49,4 +50,5 @@ export interface CardRoomStoredState {
   hostId: string;
   lastActivity: number;
   disconnectTimestamps?: [string, number][];
+  spectators?: [string, string][];
 }

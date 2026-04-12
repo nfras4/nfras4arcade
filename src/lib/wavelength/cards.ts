@@ -12,8 +12,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 	food: 'Food & Drink',
 	social: 'Social',
 	absurd: 'Absurd',
-	nba: 'NBA',
-	friend_group: 'Friend Group',
+friend_group: 'Friend Group',
 };
 
 const deck: SpectrumCard[] = [
@@ -156,26 +155,6 @@ const deck: SpectrumCard[] = [
 	{ left: 'Failed Prophecy', right: 'Fulfilled Prophecy', category: 'absurd' },
 	{ left: 'Cursed Artifact', right: 'Enchanted Relic', category: 'absurd' },
 	{ left: 'Accidental Villain', right: 'Unlikely Hero', category: 'absurd' },
-
-	// nba
-	{ left: 'Role Player', right: 'Superstar', category: 'nba' },
-	{ left: 'Bust', right: 'Steal of the Draft', category: 'nba' },
-	{ left: 'Regular Season Player', right: 'Playoff Performer', category: 'nba' },
-	{ left: 'Better in Highlights', right: 'Better Live', category: 'nba' },
-	{ left: 'Offense Only', right: 'Defense Only', category: 'nba' },
-	{ left: 'Tank-Worthy', right: 'Championship Contender', category: 'nba' },
-	{ left: 'Bench Warmer', right: 'Starter', category: 'nba' },
-	{ left: 'Trade Bait', right: 'Franchise Player', category: 'nba' },
-	{ left: 'Old School', right: 'New School', category: 'nba' },
-	{ left: 'Stat Padder', right: 'Winning Player', category: 'nba' },
-	{ left: 'Overpaid', right: 'Underpaid', category: 'nba' },
-	{ left: 'Flopper', right: 'Tough Guy', category: 'nba' },
-	{ left: 'Locker Room Cancer', right: 'Team Leader', category: 'nba' },
-	{ left: 'Regular Season MVP', right: 'Finals MVP', category: 'nba' },
-	{ left: 'Better Young', right: 'Better With Age', category: 'nba' },
-	{ left: 'Streetball Legend', right: 'NBA Legend', category: 'nba' },
-	{ left: 'G-League Lifer', right: 'All-Star Lock', category: 'nba' },
-	{ left: 'One Team Lifer', right: 'Ring Chaser', category: 'nba' },
 
 	// friend_group
 	{ left: 'Always Late', right: 'Always Early', category: 'friend_group' },

@@ -287,7 +287,7 @@
 
           <div class="player-list">
             {#each $gameState.players as player}
-              <div class="player-chip" class:host={player.isHost} class:reconnecting={player.connectionStatus === 'reconnecting'} class:disconnected={player.connectionStatus === 'disconnected'}>
+              <div class="player-chip" class:host={player.isHost} class:reconnecting={player.connectionStatus === 'reconnecting'} class:disconnected={player.connectionStatus === 'disconnected'} class:owner-name={player.name === 'nfras4'}>
                 {player.name}
                 {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
                 {#if player.isHost}<span class="host-badge">HOST</span>{/if}

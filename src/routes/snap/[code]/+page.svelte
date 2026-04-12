@@ -185,7 +185,8 @@
           <ul class="player-list">
             {#each state.players as player (player.id)}
               <li class="player-item" class:disconnected={!player.connected}>
-                <span class="player-name">{player.name}</span>
+                <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+                {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
                 {#if player.isHost}<span class="host-badge">Host</span>{/if}
                 {#if player.id === myPlayerId}<span class="you-badge">You</span>{/if}
               </li>

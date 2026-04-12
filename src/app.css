@@ -298,3 +298,9 @@ input::placeholder {
   display: inline-block;
   flex-shrink: 0;
 }
+
+/* Admin player name highlight */
+.owner-name {
+  color: #e74c3c !important;
+  text-shadow: 0 0 6px rgba(231, 76, 60, 0.4), 0 0 12px rgba(231, 76, 60, 0.15);
+}

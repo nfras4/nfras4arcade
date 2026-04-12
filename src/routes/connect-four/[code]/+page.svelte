@@ -12,7 +12,6 @@
   const myPlayerId = writable<string | null>(null);
   const error = writable<string | null>(null);
 
-  let showCopied = $state(false);
   let reconnecting = $state(true);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
@@ -88,12 +87,6 @@
     goto('/connect-four');
   }
 
-  function copyCode() {
-    navigator.clipboard.writeText(code);
-    showCopied = true;
-    setTimeout(() => { showCopied = false; }, 1500);
-  }
-
   function playerName(id: string): string {
     return state?.players?.find((p: any) => p.id === id)?.name ?? 'Unknown';
   }
@@ -135,12 +128,6 @@
       <p>Connecting...</p>
     </div>
   {:else}
-
-    <!-- Room header -->
-    <div class="room-header">
-      <button class="room-code-value" onclick={copyCode} aria-label="Copy room code">{code}</button>
-      <span class="room-code-hint">{showCopied ? 'Copied!' : 'tap to copy'}</span>
-    </div>
 
     <!-- LOBBY -->
     {#if state.phase === 'lobby'}
@@ -335,31 +322,6 @@
     justify-content: center;
     min-height: 50vh;
     color: var(--text-muted);
-  }
-
-  .room-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .room-code-value {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    color: var(--accent);
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    clip-path: none;
-  }
-
-  .room-code-hint {
-    font-size: 0.875rem;
-    color: var(--text-subtle);
   }
 
   .phase-panel {
@@ -587,7 +549,7 @@
     padding: 8px;
     border-radius: 8px;
     width: 100%;
-    max-width: 380px;
+    max-width: min(380px, calc(100vw - 2rem));
     aspect-ratio: 7 / 6;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
@@ -701,6 +663,7 @@
       padding: 5px;
       gap: 3px;
       border-radius: 6px;
+      max-width: calc(100vw - 1rem);
     }
 
     .score-bar {
@@ -710,6 +673,22 @@
 
     .score-item {
       max-width: none;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .game-page {
+      padding-left: 0.375rem;
+      padding-right: 0.375rem;
+    }
+    .phase-panel {
+      max-width: 100%;
+    }
+  }
+
+  @media (min-width: 421px) and (max-width: 768px) {
+    .phase-panel {
+      max-width: 460px;
     }
   }
 

@@ -18,7 +18,6 @@
   let reconnecting = $state(true);
   let lastSnapResult = $state<any>(null);
   let snapFlash = $state(false);
-  let showCopied = $state(false);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   $effect(() => {
@@ -88,11 +87,6 @@
   function playAgain() { socket.send({ type: 'play_again' }); }
   function leaveGame() { socket.disconnect(); goto('/snap'); }
 
-  function copyCode() {
-    navigator.clipboard.writeText(code);
-    showCopied = true;
-    setTimeout(() => { showCopied = false; }, 1500);
-  }
 </script>
 
 {#if error}
@@ -179,10 +173,6 @@
     <div class="snap-container player-lobby">
       <header class="lobby-header">
         <h1 class="lobby-title geo-title">Snap</h1>
-        <button class="code-badge" onclick={copyCode}>
-          {code}
-          {#if showCopied}<span class="copied-tip">Copied!</span>{/if}
-        </button>
       </header>
 
       <div class="panel">
@@ -216,7 +206,6 @@
     <div class="snap-container player-playing" class:snap-flash={snapFlash}>
       <!-- Top bar -->
       <div class="top-bar">
-        <span class="top-code">{code}</span>
         <span class="top-pile">Pile: {state.pileSize}</span>
         <span class="top-deck">Your cards: {myDeckSize}</span>
       </div>
@@ -520,31 +509,6 @@
     color: var(--accent);
   }
 
-  .code-badge {
-    position: relative;
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: 0.2em;
-    color: var(--accent);
-    background: var(--accent-faint);
-    border: 1px solid var(--accent-border);
-    padding: 0.4rem 0.875rem;
-    border-radius: 4px;
-    cursor: pointer;
-    clip-path: none;
-  }
-
-  .copied-tip {
-    position: absolute;
-    top: -1.75rem;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.65rem;
-    color: var(--accent);
-    white-space: nowrap;
-  }
-
   .panel {
     background: var(--bg-card);
     clip-path: var(--clip-card);
@@ -603,7 +567,7 @@
 
   .host-badge, .you-badge {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 0.625rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -660,14 +624,6 @@
     height: 50px;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border);
-  }
-
-  .top-code {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.15em;
-    color: var(--text-subtle);
   }
 
   .top-pile, .top-deck {
@@ -847,6 +803,22 @@
   /* === Shared button styles === */
   button:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  @media (max-width: 420px) {
+    .snap-result-overlay {
+      padding: 1rem;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .player-lobby {
+      padding-left: 0.375rem;
+      padding-right: 0.375rem;
+    }
+    .panel-inner {
+      padding: 1rem;
+    }
+  }
 
   @media (min-width: 480px) {
     .panel-inner { padding: 1.875rem; }

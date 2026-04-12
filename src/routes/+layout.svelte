@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { currentUser, isLoggedIn, logout, fetchUser } from '$lib/auth';
   import FeedbackWidget from '$lib/components/FeedbackWidget.svelte';
   import type { Snippet } from 'svelte';
@@ -8,6 +9,24 @@
   let { children }: { children: Snippet } = $props();
 
   let theme = $state<'dark' | 'light'>('dark');
+
+  let showCopied = $state(false);
+
+  let roomCode = $derived((() => {
+    const parts = $page.url.pathname.split('/').filter(Boolean);
+    if (parts.length >= 2) {
+      const maybeCode = parts[parts.length - 1].toUpperCase();
+      if (/^[A-Z]{4}$/.test(maybeCode)) return maybeCode;
+    }
+    return null;
+  })());
+
+  function copyRoomCode() {
+    if (!roomCode) return;
+    navigator.clipboard.writeText(roomCode);
+    showCopied = true;
+    setTimeout(() => { showCopied = false; }, 1500);
+  }
 
   $effect(() => {
     try {
@@ -37,6 +56,14 @@
 
 <nav class="top-nav">
   <a href="/" class="nav-brand geo-title">nfras4arcade</a>
+
+  {#if roomCode}
+    <button class="nav-room-code" onclick={copyRoomCode} title="Click to copy room code">
+      <span class="nav-room-label">ROOM</span>
+      <span class="nav-room-value">{roomCode}</span>
+      {#if showCopied}<span class="nav-copied">Copied!</span>{/if}
+    </button>
+  {/if}
 
   <div class="nav-right">
     <button
@@ -93,6 +120,8 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    overflow: hidden;
+    min-width: 0;
   }
 
   .theme-toggle {
@@ -210,6 +239,80 @@
     .nav-display-name {
       display: none;
     }
+  }
+
+  @media (max-width: 380px) {
+    .top-nav {
+      padding: 0 0.5rem;
+      gap: 0.25rem;
+    }
+    .nav-room-code {
+      padding: 0.25rem 0.4rem;
+      gap: 0.2rem;
+    }
+    .nav-room-value {
+      font-size: 0.85rem;
+      letter-spacing: 0.12em;
+    }
+    .nav-room-label {
+      display: none;
+    }
+  }
+
+  .nav-room-code {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    min-height: 44px;
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    cursor: pointer;
+    clip-path: none;
+    position: relative;
+    transition: background 0.15s ease;
+  }
+
+  .nav-room-code:hover {
+    background: var(--accent-border);
+  }
+
+  .nav-room-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .nav-room-value {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+  }
+
+  .nav-copied {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 4px;
+    background: var(--green, #22c55e);
+    color: #000;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 60;
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }

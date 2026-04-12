@@ -253,6 +253,7 @@
     .action-buttons button {
       padding: 0.6rem 0.25rem;
       font-size: 0.75rem;
+      min-height: 44px;
     }
   }
 </style>

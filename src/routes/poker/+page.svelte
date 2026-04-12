@@ -14,7 +14,7 @@
 
   let roomCode = $state('');
   let joining = $state(false);
-  let mode = $state<'menu' | 'create' | 'join'>('menu');
+  let mode = $state<'menu' | 'join'>('menu');
   let showRules = $state(false);
 
   let errorTimeout: ReturnType<typeof setTimeout>;
@@ -103,23 +103,8 @@
             <span class="identity-name">{displayName}</span>
           </div>
           <div class="action-row">
-            <button class="btn-primary btn-full" onclick={() => mode = 'create'}>Create Room</button>
+            <button class="btn-primary btn-full" onclick={createRoom} disabled={joining}>{joining ? 'Creating...' : 'Create Room'}</button>
             <button class="btn-secondary btn-full" onclick={() => mode = 'join'}>Join Room</button>
-          </div>
-        </div>
-
-      {:else if mode === 'create'}
-        <div class="panel-inner fade-in">
-          <div class="identity">
-            <span class="identity-label">Playing as</span>
-            <span class="identity-name">{displayName}</span>
-          </div>
-          <p class="panel-description">A new room will be created with a shareable 4-letter code. Each player starts with 1,000 chips.</p>
-          <div class="action-row">
-            <button class="btn-primary btn-full" onclick={createRoom} disabled={joining}>
-              {joining ? 'Creating room...' : 'Create New Room'}
-            </button>
-            <button class="btn-secondary btn-full" onclick={() => { mode = 'menu'; joining = false; }}>Back</button>
           </div>
         </div>
 

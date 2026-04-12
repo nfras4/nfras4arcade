@@ -18,7 +18,6 @@
   let chatInput = $state('');
   let chatContainer: HTMLElement;
   let showChat = $state(false);
-  let showCopied = $state(false);
   let unreadChat = $state(0);
 
   // Category list (fetched once)
@@ -178,12 +177,6 @@
     goto('/impostor');
   }
 
-  function copyCode() {
-    navigator.clipboard.writeText(code);
-    showCopied = true;
-    setTimeout(() => { showCopied = false; }, 1500);
-  }
-
   function handleChatKey(e: KeyboardEvent) {
     if (e.key === 'Enter') sendChat();
   }
@@ -255,11 +248,7 @@
   <header class="game-header">
     <div class="header-left">
       <button class="btn-secondary btn-small" onclick={leaveGame}>Leave</button>
-      <button type="button" class="room-code" onclick={copyCode} title="Click to copy">
-        <span class="connection-dot" class:online={$connected} class:offline={!$connected}></span>
-        <strong>{code}</strong>
-        {#if showCopied}<span class="copied-toast fade-in">Copied!</span>{/if}
-      </button>
+      <span class="connection-dot" class:online={$connected} class:offline={!$connected}></span>
     </div>
     {#if $gameState?.phase !== 'lobby' && $gameState?.hintRound}
       <div class="round-badge">
@@ -291,18 +280,6 @@
             </div>
           {/if}
           <h2>Waiting for players...</h2>
-
-          <div class="room-code-banner">
-            <span class="room-code-label">ROOM CODE</span>
-            <button class="room-code-value" onclick={copyCode} aria-label="Copy room code">{code}</button>
-            <span class="room-code-hint">
-              {#if showCopied}
-                <span class="copied-inline fade-in">Copied!</span>
-              {:else}
-                tap to copy — share with friends!
-              {/if}
-            </span>
-          </div>
 
           <div class="player-list">
             {#each $gameState.players as player}
@@ -786,52 +763,6 @@
     min-width: 0;
   }
 
-  /* Room code button in header: NO clip-path so .copied-toast child is visible */
-  .room-code {
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    background: none;
-    border: none;
-    padding: 0;
-    clip-path: none;
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    font-weight: inherit;
-    letter-spacing: 0.01em;
-    text-transform: none;
-    position: relative;
-  }
-
-  .room-code strong {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    color: var(--accent);
-    letter-spacing: 0.1em;
-    font-weight: 700;
-  }
-
-  .copied-toast {
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--green);
-    color: #000;
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 0.15rem 0.5rem;
-    border-radius: 2px;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-
-  .copied-inline {
-    color: var(--green);
-    font-weight: 600;
-  }
-
   .round-badge {
     background: var(--bg-input);
     clip-path: var(--clip-btn);
@@ -935,7 +866,7 @@
 
   .status-badge {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 0.625rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     padding: 0.1rem 0.4rem;
@@ -997,62 +928,6 @@
   .mode-toggle button.active {
     background: var(--accent);
     color: var(--btn-primary-text);
-  }
-
-  /* ─── Room code banner ───────────────────────────────── */
-
-  .room-code-banner {
-    background: var(--bg-input);
-    clip-path: var(--clip-card);
-    padding: 1.25rem;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    position: relative;
-  }
-
-  .room-code-banner::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    clip-path: var(--clip-card);
-    background: linear-gradient(135deg, var(--accent-border), var(--border));
-    z-index: -1;
-    pointer-events: none;
-  }
-
-  .room-code-label {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.2em;
-    color: var(--text-muted);
-    text-transform: uppercase;
-  }
-
-  .room-code-value {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: clamp(1.75rem, 8vw, 3rem);
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    color: var(--accent);
-    cursor: pointer;
-    transition: color 0.15s;
-    text-shadow: 0 0 20px var(--accent-faint);
-    background: none;
-    border: none;
-    padding: 0;
-    clip-path: none;
-  }
-
-  .room-code-value:hover {
-    color: var(--accent-hover);
-  }
-
-  .room-code-hint {
-    font-size: 0.8rem;
-    color: var(--text-muted);
   }
 
   .waiting-text {
@@ -1726,7 +1601,8 @@
   }
 
   .chat-panel {
-    width: 300px;
+    width: min(300px, 30vw);
+    min-width: 220px;
     border-left: 1px solid var(--accent-border);
     display: flex;
     flex-direction: column;
@@ -1893,7 +1769,7 @@
 
   .impostor-tag {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 0.625rem;
     font-weight: 700;
     letter-spacing: 0.06em;
     background: var(--red, #e74c3c);
@@ -2005,6 +1881,13 @@
     .round-badge {
       font-size: 0.7rem;
       padding: 0.2rem 0.5rem;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .game-page {
+      padding-left: 0.375rem;
+      padding-right: 0.375rem;
     }
   }
 </style>

@@ -18,7 +18,6 @@
   const myPlayerId = writable<string | null>(null);
   const error = writable<string | null>(null);
 
-  let showCopied = $state(false);
   let reconnecting = $state(true);
   let blindSetting = $state(10);
   let errorTimeout: ReturnType<typeof setTimeout>;
@@ -117,12 +116,6 @@
     goto('/poker');
   }
 
-  function copyCode() {
-    navigator.clipboard.writeText(code);
-    showCopied = true;
-    setTimeout(() => { showCopied = false; }, 1500);
-  }
-
   function playerName(id: string): string {
     return state?.players?.find((p: any) => p.id === id)?.name ?? 'Unknown';
   }
@@ -143,15 +136,6 @@
     addingBot = false;
   }
 
-  async function fillWithBots() {
-    addingBot = true;
-    const needed = Math.max(0, 2 - (state?.players?.length ?? 0));
-    for (let i = 0; i < needed; i++) {
-      await fetch(`/api/add-bot?room=${code}&game=poker`, { method: 'POST' });
-    }
-    addingBot = false;
-  }
-
   async function removeAllBots() {
     await fetch(`/api/remove-bots?room=${code}&game=poker`, { method: 'POST' });
   }
@@ -167,12 +151,6 @@
       <p>Connecting...</p>
     </div>
   {:else}
-
-    <!-- Room header -->
-    <div class="room-header">
-      <button class="room-code-value" onclick={copyCode} aria-label="Copy room code">{code}</button>
-      <span class="room-code-hint">{showCopied ? 'Copied!' : 'tap to copy'}</span>
-    </div>
 
     <!-- LOBBY -->
     {#if state.phase === 'lobby'}
@@ -210,9 +188,6 @@
           <div class="bot-controls">
             <button class="btn-secondary btn-sm" onclick={addBot} disabled={state.players.length >= 8 || addingBot}>
               {addingBot ? 'Adding...' : 'Add Bot'}
-            </button>
-            <button class="btn-secondary btn-sm" onclick={fillWithBots} disabled={state.players.length >= 2 || addingBot}>
-              Fill with Bots
             </button>
             {#if state.players.some((p: any) => p.isBot)}
               <button class="btn-secondary btn-sm btn-danger" onclick={removeAllBots}>
@@ -401,31 +376,6 @@
     justify-content: center;
     min-height: 50vh;
     color: var(--text-muted);
-  }
-
-  .room-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .room-code-value {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    color: var(--accent);
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    clip-path: none;
-  }
-
-  .room-code-hint {
-    font-size: 0.875rem;
-    color: var(--text-subtle);
   }
 
   .phase-panel {
@@ -788,6 +738,22 @@
 
     .hole-cards {
       gap: 0.375rem;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .game-page {
+      padding-left: 0.375rem;
+      padding-right: 0.375rem;
+    }
+    .phase-panel {
+      max-width: 100%;
+    }
+  }
+
+  @media (min-width: 421px) and (max-width: 768px) {
+    .phase-panel {
+      max-width: 460px;
     }
   }
 

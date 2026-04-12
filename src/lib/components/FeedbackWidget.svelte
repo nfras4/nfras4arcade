@@ -339,6 +339,8 @@
     animation: toastSlide 0.25s cubic-bezier(0.22, 1, 0.36, 1);
     white-space: nowrap;
     max-width: 90vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .toast-success {

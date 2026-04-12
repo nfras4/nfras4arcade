@@ -169,6 +169,15 @@ button:disabled {
   font-size: 0.8125rem;
 }
 
+@media (max-width: 420px) {
+  button {
+    padding: 0.625rem 1rem;
+  }
+  .btn-small {
+    padding: 0.35rem 0.75rem;
+  }
+}
+
 /* ─── Inputs ──────────────────────────────────────────── */
 
 input, select {
@@ -241,6 +250,9 @@ input::placeholder {
   text-transform: uppercase;
   animation: toastSlide 0.25s cubic-bezier(0.22, 1, 0.36, 1);
   white-space: nowrap;
+  max-width: calc(100vw - 2rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ─── Animations ──────────────────────────────────────── */

@@ -19,7 +19,6 @@
 
   const code = $page.params.code!;
 
-  let showCopied = $state(false);
   let reconnecting = $state(true);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
@@ -207,12 +206,6 @@
     goto('/wavelength');
   }
 
-  function copyCode() {
-    navigator.clipboard.writeText(code);
-    showCopied = true;
-    setTimeout(() => { showCopied = false; }, 1500);
-  }
-
   let addingBot = $state(false);
   let selectedRounds = $state(0); // 0 = default (one rotation)
   let selectedCategories = $state<string[]>([]); // empty = all categories
@@ -253,12 +246,6 @@
       <p>Connecting...</p>
     </div>
   {:else}
-
-    <!-- Room header -->
-    <div class="room-header">
-      <button class="room-code-value" onclick={copyCode} aria-label="Copy room code">{code}</button>
-      <span class="room-code-hint">{showCopied ? 'Copied!' : 'tap to copy'}</span>
-    </div>
 
     <!-- Timer -->
     {#if timeLeft != null && timeLeft > 0}
@@ -666,32 +653,6 @@
     font-size: 0.875rem;
     z-index: 100;
     animation: fadeUp 0.3s ease both;
-  }
-
-  /* Room header */
-  .room-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .room-code-value {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.5rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    color: var(--accent);
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    clip-path: none;
-  }
-
-  .room-code-hint {
-    font-size: 0.875rem;
-    color: var(--text-subtle);
   }
 
   /* Timer */
@@ -1207,6 +1168,22 @@
 
     .arrow-divider {
       display: none;
+    }
+  }
+
+  @media (max-width: 360px) {
+    .game-page {
+      padding-left: 0.375rem;
+      padding-right: 0.375rem;
+    }
+    .phase-panel {
+      max-width: 100%;
+    }
+  }
+
+  @media (min-width: 421px) and (max-width: 768px) {
+    .phase-panel {
+      max-width: 460px;
     }
   }
 

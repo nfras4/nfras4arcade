@@ -11,6 +11,8 @@ export interface AuthStats {
   gamesPlayed: number;
   gamesWon: number;
   chips: number;
+  xp: number;
+  level: number;
 }
 
 export interface AuthBadge {

@@ -233,7 +233,7 @@ export abstract class CardRoom extends DurableObject<Env> {
 
     // Handle common messages
     if (msg.type === 'start_game' && playerId === this.hostId) {
-      await this.handleStartGame(playerId);
+      await this.handleStartGame(playerId, msg);
     } else if (msg.type === 'play_again' && playerId === this.hostId) {
       this.phase = 'lobby';
       this.roundNumber = 0;
@@ -440,7 +440,7 @@ export abstract class CardRoom extends DurableObject<Env> {
 
   // --- Start game ---
 
-  private async handleStartGame(playerId: string): Promise<void> {
+  private async handleStartGame(playerId: string, msg?: any): Promise<void> {
     if (this.players.size < this.minPlayers) {
       this.sendTo(playerId, { type: 'error', message: `Need at least ${this.minPlayers} players` });
       return;
@@ -457,6 +457,9 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
     this.currentTurn = this.turnOrder[0];
     this.phase = 'playing';
+
+    // Allow subclasses to process start_game options
+    if (msg) this.onStartGameOptions(msg);
 
     this.initRound();
 
@@ -476,6 +479,9 @@ export abstract class CardRoom extends DurableObject<Env> {
       await this.scheduleBotTurn();
     }
   }
+
+  /** Hook for subclasses to process start_game message options. */
+  protected onStartGameOptions(_msg: any): void {}
 
   // --- Bot management ---
 
@@ -638,6 +644,14 @@ export abstract class CardRoom extends DurableObject<Env> {
               .bind(now, id)
           );
         }
+
+        // XP: +50 for participating, +50 bonus for winning
+        const xpGain = id === winnerId ? 100 : 50;
+        stmts.push(
+          db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
+            .bind(xpGain, now, id)
+        );
+
         // First Game badge
         stmts.push(
           db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')

@@ -36,12 +36,19 @@
   let guessThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   let lastSentAngle = $state<number | null>(null);
 
-  // Chat state
+  // Chat state (all chat - left side)
   let chatMessages = $state<Array<{ name: string; text: string; timestamp: number }>>([]);
   let chatInput = $state('');
   let showChat = $state(false);
   let unreadChat = $state(0);
   let chatContainer: HTMLElement;
+
+  // Player chat state (players only - right side, hidden from psychic)
+  let playerChatMessages = $state<Array<{ name: string; text: string; timestamp: number }>>([]);
+  let playerChatInput = $state('');
+  let showPlayerChat = $state(false);
+  let unreadPlayerChat = $state(0);
+  let playerChatContainer: HTMLElement;
 
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
@@ -57,6 +64,8 @@
         errorTimeout = setTimeout(() => error.set(null), 4000);
       } else if (msg.type === 'chat_message') {
         chatMessages = [...chatMessages, { name: msg.name, text: msg.text, timestamp: msg.timestamp }];
+      } else if (msg.type === 'player_chat_message') {
+        playerChatMessages = [...playerChatMessages, { name: msg.name, text: msg.text, timestamp: msg.timestamp }];
       }
     });
 
@@ -179,6 +188,26 @@
     }
   });
 
+  // Track unread player chat
+  let prevPlayerChatLen = 0;
+  $effect(() => {
+    const len = playerChatMessages.length;
+    if (len > prevPlayerChatLen && !showPlayerChat) {
+      unreadPlayerChat += len - prevPlayerChatLen;
+    }
+    prevPlayerChatLen = len;
+  });
+
+  $effect(() => {
+    if (showPlayerChat) unreadPlayerChat = 0;
+  });
+
+  $effect(() => {
+    if (playerChatMessages.length && playerChatContainer) {
+      playerChatContainer.scrollTop = playerChatContainer.scrollHeight;
+    }
+  });
+
   // Sorted scoreboard
   let sortedPlayers = $derived.by(() => {
     if (!state?.players) return [];
@@ -276,6 +305,19 @@
       sendChatMsg();
     }
   }
+
+  function sendPlayerChatMsg() {
+    if (!playerChatInput.trim()) return;
+    socket.send({ type: 'player_chat', text: playerChatInput.trim() });
+    playerChatInput = '';
+  }
+
+  function handlePlayerChatKey(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendPlayerChatMsg();
+    }
+  }
 </script>
 
 {#if $error}
@@ -297,16 +339,29 @@
       </div>
     {/if}
 
-    <!-- Chat toggle -->
+    <!-- All Chat toggle (left) -->
     <button
-      class="chat-toggle"
+      class="chat-toggle chat-toggle-left"
       onclick={() => showChat = !showChat}
     >
-      {showChat ? 'Hide Chat' : 'Chat'}
+      {showChat ? 'Hide' : 'All Chat'}
       {#if unreadChat > 0 && !showChat}
         <span class="chat-unread">{unreadChat > 9 ? '9+' : unreadChat}</span>
       {/if}
     </button>
+
+    <!-- Player Chat toggle (right, hidden from psychic) -->
+    {#if !isPsychic && state?.phase && state.phase !== 'lobby' && state.phase !== 'game_over'}
+      <button
+        class="chat-toggle chat-toggle-right"
+        onclick={() => showPlayerChat = !showPlayerChat}
+      >
+        {showPlayerChat ? 'Hide' : 'Players'}
+        {#if unreadPlayerChat > 0 && !showPlayerChat}
+          <span class="chat-unread">{unreadPlayerChat > 9 ? '9+' : unreadPlayerChat}</span>
+        {/if}
+      </button>
+    {/if}
 
     <!-- LOBBY -->
     {#if state.phase === 'lobby'}
@@ -671,9 +726,10 @@
       </div>
     {/if}
 
-    <!-- Chat panel -->
+    <!-- All Chat panel (left) -->
     {#if showChat}
-      <div class="chat-panel">
+      <div class="chat-panel chat-panel-left">
+        <div class="chat-panel-header">All Chat</div>
         <div class="chat-messages" bind:this={chatContainer}>
           {#each chatMessages as msg}
             <div class="chat-msg">
@@ -693,6 +749,35 @@
             onkeydown={handleChatKey}
           />
           <button class="btn-primary btn-sm" onclick={sendChatMsg} disabled={!chatInput.trim()}>
+            Send
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Player Chat panel (right) -->
+    {#if showPlayerChat && !isPsychic && state?.phase && state.phase !== 'lobby' && state.phase !== 'game_over'}
+      <div class="chat-panel chat-panel-right">
+        <div class="chat-panel-header player-chat-header">Players Only</div>
+        <div class="chat-messages" bind:this={playerChatContainer}>
+          {#each playerChatMessages as msg}
+            <div class="chat-msg">
+              <strong>{msg.name}</strong>
+              <span>{msg.text}</span>
+            </div>
+          {/each}
+          {#if playerChatMessages.length === 0}
+            <p class="chat-empty">Psychic can't see this</p>
+          {/if}
+        </div>
+        <div class="chat-input-row">
+          <input
+            class="input-field"
+            bind:value={playerChatInput}
+            placeholder="Talk about the psychic..."
+            onkeydown={handlePlayerChatKey}
+          />
+          <button class="btn-primary btn-sm" onclick={sendPlayerChatMsg} disabled={!playerChatInput.trim()}>
             Send
           </button>
         </div>
@@ -1231,7 +1316,6 @@
   .chat-toggle {
     position: fixed;
     bottom: 1rem;
-    right: 1rem;
     z-index: 50;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.85rem;
@@ -1245,6 +1329,9 @@
     cursor: pointer;
     transition: border-color 0.15s ease;
   }
+
+  .chat-toggle-left { left: 1rem; }
+  .chat-toggle-right { right: 1rem; }
 
   .chat-toggle:hover {
     border-color: var(--accent-border);
@@ -1269,7 +1356,6 @@
   .chat-panel {
     position: fixed;
     bottom: 3.5rem;
-    right: 1rem;
     z-index: 49;
     width: min(320px, calc(100vw - 2rem));
     max-height: 350px;
@@ -1280,6 +1366,24 @@
     border-radius: 4px;
     overflow: hidden;
     animation: fadeUp 0.2s ease both;
+  }
+
+  .chat-panel-left { left: 1rem; }
+  .chat-panel-right { right: 1rem; }
+
+  .chat-panel-header {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.75rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .player-chat-header {
+    color: #e67e22;
   }
 
   .chat-messages {
@@ -1343,6 +1447,11 @@
 
     .arrow-divider {
       display: none;
+    }
+
+    .chat-panel-left,
+    .chat-panel-right {
+      width: min(280px, calc(100vw - 2rem));
     }
   }
 

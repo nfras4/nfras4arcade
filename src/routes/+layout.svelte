@@ -2,7 +2,8 @@
   import '../app.css';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { currentUser, isLoggedIn, logout, fetchUser } from '$lib/auth';
+  import { currentUser, userStats, isLoggedIn, logout, fetchUser } from '$lib/auth';
+  import { xpToLevel } from '$lib/xp';
   import FeedbackWidget from '$lib/components/FeedbackWidget.svelte';
   import type { Snippet } from 'svelte';
 
@@ -11,6 +12,8 @@
   let theme = $state<'dark' | 'light'>('dark');
 
   let showCopied = $state(false);
+
+  let userLevel = $derived(xpToLevel($userStats?.xp ?? 0));
 
   let roomCode = $derived((() => {
     const parts = $page.url.pathname.split('/').filter(Boolean);
@@ -76,6 +79,10 @@
     </button>
 
     {#if $isLoggedIn}
+      {#if $userStats}
+        <span class="nav-level">Lv.{userLevel}</span>
+        <span class="nav-chips">{$userStats.chips}</span>
+      {/if}
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
         <span class="nav-display-name">{$currentUser?.displayName}</span>
@@ -235,8 +242,30 @@
     border-color: var(--red);
   }
 
+  .nav-level {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--yellow, #eab308);
+    padding: 0.1rem 0.35rem;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 2px;
+  }
+
+  .nav-chips {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+
   @media (max-width: 480px) {
     .nav-display-name {
+      display: none;
+    }
+    .nav-chips {
       display: none;
     }
   }

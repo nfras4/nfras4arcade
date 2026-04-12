@@ -28,6 +28,8 @@ interface PokerTableState {
   lastRaisePlayerId: string | null;
   bbHasActed: boolean;
   bbPlayerId: string | null;
+  gameMode: 'casual' | 'competitive';
+  casualChipCount: number;
 }
 
 type PokerAction = CardAction & (
@@ -81,6 +83,8 @@ export class PokerRoom extends CardRoom {
       lastRaisePlayerId: null,
       bbHasActed: false,
       bbPlayerId: null,
+      gameMode: 'casual' as const,
+      casualChipCount: 1000,
     };
   }
 
@@ -105,16 +109,19 @@ export class PokerRoom extends CardRoom {
           }
         } else {
           ts.isGuestPlayer[userId] = false;
-          if (chipsHeader !== null) {
-            const chips = parseInt(chipsHeader, 10);
-            if (!isNaN(chips) && chips > 0) {
-              ts.playerChips[userId] = chips;
-            } else {
-              // Registered player with 0 chips: auto-grant rebuy
-              ts.playerChips[userId] = DEFAULT_REBUY;
+          // For casual mode reconnects, DO state is authoritative
+          if (!(ts.gameMode === 'casual' && ts.playerChips[userId] !== undefined)) {
+            if (chipsHeader !== null) {
+              const chips = parseInt(chipsHeader, 10);
+              if (!isNaN(chips) && chips > 0) {
+                ts.playerChips[userId] = chips;
+              } else {
+                // Registered player with 0 chips: auto-grant rebuy based on mode
+                ts.playerChips[userId] = ts.gameMode === 'competitive' ? 0 : DEFAULT_REBUY;
+              }
+            } else if (ts.playerChips[userId] === undefined) {
+              ts.playerChips[userId] = DEFAULT_BUY_IN;
             }
-          } else if (ts.playerChips[userId] === undefined) {
-            ts.playerChips[userId] = DEFAULT_BUY_IN;
           }
         }
 
@@ -125,6 +132,34 @@ export class PokerRoom extends CardRoom {
 
     // Delegate to base class for actual WS upgrade / HTTP handling
     return super.fetch(request);
+  }
+
+  // ─── Start game options ─────────────────────────────────────────
+
+  protected onStartGameOptions(msg: any): void {
+    const ts = this.getTable();
+
+    // Fix blind bug: consume blindAmount from start_game message (allowlist)
+    const VALID_BLINDS = [2, 4, 10, 20, 50, 100];
+    if (typeof msg.blindAmount === 'number' && VALID_BLINDS.includes(msg.blindAmount)) {
+      ts.bigBlindAmount = msg.blindAmount;
+      ts.smallBlindAmount = Math.floor(msg.blindAmount / 2);
+    }
+
+    // Game mode
+    const mode = msg.gameMode === 'competitive' ? 'competitive' : 'casual';
+    ts.gameMode = mode;
+
+    if (mode === 'casual') {
+      const presets = [500, 1000, 2500, 5000, 10000];
+      const requested = typeof msg.casualChipCount === 'number' ? msg.casualChipCount : 1000;
+      ts.casualChipCount = presets.includes(requested) ? requested : 1000;
+      for (const [id] of this.players) {
+        ts.playerChips[id] = ts.casualChipCount;
+      }
+    }
+
+    this.setTable(ts);
   }
 
   // ─── Round init ─────────────────────────────────────────────────
@@ -668,6 +703,7 @@ export class PokerRoom extends CardRoom {
   // ─── Chip persistence ──────────────────────────────────────────
 
   private async persistChips(ts: PokerTableState): Promise<void> {
+    if (ts.gameMode === 'casual') return;
     try {
       const stmts: D1PreparedStatement[] = [];
       for (const [id] of this.players) {
@@ -791,6 +827,8 @@ export class PokerRoom extends CardRoom {
         bigBlindPlayerId: bbPlayerId,
         actionOnPlayerId: ts.actionOnPlayerId,
         myHand: player?.hand ?? [],
+        gameMode: ts.gameMode,
+        casualChipCount: ts.casualChipCount,
       },
     };
   }

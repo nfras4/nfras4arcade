@@ -20,6 +20,8 @@
 
   let reconnecting = $state(true);
   let blindSetting = $state(10);
+  let gameMode = $state<'casual' | 'competitive'>('casual');
+  let casualChipCount = $state(1000);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   $effect(() => {
@@ -103,7 +105,12 @@
   }
 
   function startGame() {
-    socket.send({ type: 'start_game', blindAmount: blindSetting });
+    socket.send({
+      type: 'start_game',
+      blindAmount: blindSetting,
+      gameMode,
+      casualChipCount: gameMode === 'casual' ? casualChipCount : undefined,
+    });
   }
 
   function nextHand() {
@@ -182,6 +189,33 @@
               <option value={50}>50</option>
             </select>
           </div>
+          <div class="mode-selector">
+            <label class="field-label">Game Mode</label>
+            <div class="mode-toggle">
+              <button class="mode-btn" class:active={gameMode === 'casual'} onclick={() => gameMode = 'casual'}>
+                Casual
+              </button>
+              <button class="mode-btn" class:active={gameMode === 'competitive'} onclick={() => gameMode = 'competitive'}>
+                Competitive
+              </button>
+            </div>
+          </div>
+
+          {#if gameMode === 'casual'}
+            <div class="chip-config">
+              <label class="field-label" for="chip-select">Starting Chips</label>
+              <select id="chip-select" class="input-field" bind:value={casualChipCount}>
+                <option value={500}>500</option>
+                <option value={1000}>1,000</option>
+                <option value={2500}>2,500</option>
+                <option value={5000}>5,000</option>
+                <option value={10000}>10,000</option>
+              </select>
+            </div>
+          {:else}
+            <p class="competitive-note">Using real chip balances from your profile</p>
+          {/if}
+
           <button class="btn-primary" onclick={startGame} disabled={state.players.length < 2}>
             Start Game
           </button>
@@ -713,6 +747,56 @@
     font-size: 0.9rem;
     font-weight: 700;
     color: var(--accent);
+  }
+
+  /* Mode selector */
+  .mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .mode-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .mode-btn {
+    flex: 1;
+    padding: 0.5rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .mode-btn.active {
+    background: var(--accent-faint);
+    color: var(--accent);
+  }
+
+  .mode-btn:hover:not(.active) {
+    color: var(--text);
+  }
+
+  .chip-config {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .competitive-note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
   }
 
   /* Mobile responsiveness */

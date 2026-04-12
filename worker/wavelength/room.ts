@@ -65,7 +65,8 @@ type ServerMessage =
   | { type: 'state_update'; state: Record<string, unknown> }
   | { type: 'error'; message: string }
   | { type: 'pong' }
-  | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number };
+  | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number }
+  | { type: 'player_chat_message'; playerId: string; name: string; text: string; timestamp: number };
 
 // Client -> Server message types
 interface ClientMessage {
@@ -158,6 +159,9 @@ export class WavelengthRoom extends DurableObject<Env> {
   // Awards tracking
   private roundResults: RoundResultEntry[] = [];
   private roundScores = new Map<string, number>(); // per-round scores for reveal display
+
+  // D1 tracking
+  private gameSessionId: string | null = null;
 
   // Bot state
   private botTurnPending = false;
@@ -585,7 +589,7 @@ export class WavelengthRoom extends DurableObject<Env> {
         }
         const rounds = typeof msg.rounds === 'number' ? Math.max(1, Math.min(10, Math.floor(msg.rounds))) : undefined;
         const categories = Array.isArray(msg.categories) ? msg.categories.filter((c: unknown) => typeof c === 'string') : undefined;
-        const result = this.startGame(rounds, categories);
+        const result = await this.startGame(rounds, categories);
         if (!result.success) {
           this.sendTo(playerId, { type: 'error', message: result.error! });
           break;
@@ -727,6 +731,7 @@ export class WavelengthRoom extends DurableObject<Env> {
         if (playerId !== this.hostId) break;
         this.phase = 'game_over';
         this.calculateAwards();
+        this.recordGameEnd().catch(() => {});
         this.broadcastState();
         break;
       }
@@ -743,6 +748,19 @@ export class WavelengthRoom extends DurableObject<Env> {
         });
         break;
       }
+
+      case 'player_chat': {
+        const player = this.players.get(playerId);
+        if (!player || playerId === this.psychicId) break;
+        this.broadcast({
+          type: 'player_chat_message',
+          playerId,
+          name: player.name,
+          text: sanitizeText(String(msg.text ?? ''), MAX_TEXT_LENGTH),
+          timestamp: Date.now(),
+        } as ServerMessage, this.psychicId);
+        break;
+      }
     }
 
     await this.saveState();
@@ -750,7 +768,7 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   // --- Game logic ---
 
-  private startGame(requestedRounds?: number, categories?: string[]): { success: boolean; error?: string } {
+  private async startGame(requestedRounds?: number, categories?: string[]): Promise<{ success: boolean; error?: string }> {
     const playerCount = this.players.size;
     if (playerCount < 2) {
       return { success: false, error: 'Need at least 2 players to start' };
@@ -778,6 +796,16 @@ export class WavelengthRoom extends DurableObject<Env> {
     }
 
     this.roundResults = [];
+
+    // Record game session in D1
+    try {
+      this.gameSessionId = crypto.randomUUID();
+      const now = Math.floor(Date.now() / 1000);
+      await this.env.DB.prepare(
+        'INSERT INTO game_sessions (id, game_type, room_code, player_count, started_at) VALUES (?, ?, ?, ?, ?)'
+      ).bind(this.gameSessionId, 'wavelength', this.code, this.players.size, now).run();
+    } catch {}
+
     this.startRound();
 
     return { success: true };
@@ -876,6 +904,7 @@ export class WavelengthRoom extends DurableObject<Env> {
     if (this.roundNumber > this.totalRounds) {
       this.phase = 'game_over';
       this.calculateAwards();
+      this.recordGameEnd().catch(() => {});
       return;
     }
     this.startRound();
@@ -916,6 +945,70 @@ export class WavelengthRoom extends DurableObject<Env> {
     return awards;
   }
 
+  private async recordGameEnd(): Promise<void> {
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const db = this.env.DB;
+      const stmts: D1PreparedStatement[] = [];
+
+      if (this.gameSessionId) {
+        // Find winner (highest score)
+        let winnerId: string | null = null;
+        let highScore = -1;
+        for (const [id] of this.players) {
+          const score = this.scores.get(id) ?? 0;
+          if (score > highScore) {
+            highScore = score;
+            winnerId = id;
+          }
+        }
+
+        stmts.push(
+          db.prepare('UPDATE game_sessions SET ended_at = ?, winner_id = ? WHERE id = ?')
+            .bind(now, winnerId, this.gameSessionId)
+        );
+
+        for (const [id, player] of this.players) {
+          if (id.startsWith('guest_') || player.isBot) continue;
+
+          stmts.push(
+            db.prepare('UPDATE player_profiles SET games_played = games_played + 1, updated_at = ? WHERE id = ?')
+              .bind(now, id)
+          );
+
+          const isWinner = id === winnerId;
+          if (isWinner) {
+            stmts.push(
+              db.prepare('UPDATE player_profiles SET games_won = games_won + 1, updated_at = ? WHERE id = ?')
+                .bind(now, id)
+            );
+          }
+
+          // XP: +50 for participating, +50 bonus for winning
+          const xpGain = isWinner ? 100 : 50;
+          stmts.push(
+            db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
+              .bind(xpGain, now, id)
+          );
+
+          // First Game badge
+          stmts.push(
+            db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+              .bind(id, 'b_first_game', now)
+          );
+          if (isWinner) {
+            stmts.push(
+              db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')
+                .bind(id, 'b_champion', now)
+            );
+          }
+        }
+      }
+
+      if (stmts.length > 0) await db.batch(stmts);
+    } catch {}
+  }
+
   private resetToLobby(): void {
     this.phase = 'lobby';
     this.roundNumber = 0;
@@ -929,6 +1022,7 @@ export class WavelengthRoom extends DurableObject<Env> {
     this.lockedIn = new Set();
     this.roundResults = [];
     this.deck = [];
+    this.gameSessionId = null;
 
     for (const id of this.players.keys()) {
       this.scores.set(id, 0);

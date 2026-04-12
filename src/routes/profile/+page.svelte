@@ -5,12 +5,17 @@
     gameHistory, perGameStats,
     type AuthBadge,
   } from '$lib/auth';
+  import { xpProgress } from '$lib/xp';
 
   let editingName = $state(false);
   let editName = $state('');
   let editAvatar = $state('');
   let saving = $state(false);
   let saveError = $state('');
+  let claiming = $state(false);
+  let canClaim = $state(false);
+  let nextClaimAt = $state<number | null>(null);
+  let claimCountdown = $state('');
 
   interface BadgeDef {
     slug: string;
@@ -61,6 +66,48 @@
   });
 
   $effect(() => {
+    if ($isLoggedIn) {
+      fetch('/api/chips/status').then(r => r.json()).then((data: any) => {
+        canClaim = data.canClaim;
+        nextClaimAt = data.nextClaimAt;
+      }).catch(() => {});
+    }
+  });
+
+  $effect(() => {
+    if (!canClaim && nextClaimAt) {
+      const interval = setInterval(() => {
+        const remaining = nextClaimAt! - Date.now();
+        if (remaining <= 0) {
+          canClaim = true;
+          claimCountdown = '';
+          clearInterval(interval);
+        } else {
+          const h = Math.floor(remaining / 3600000);
+          const m = Math.floor((remaining % 3600000) / 60000);
+          const s = Math.floor((remaining % 60000) / 1000);
+          claimCountdown = `${h}h ${m}m ${s}s`;
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  });
+
+  async function claimChips() {
+    claiming = true;
+    try {
+      const res = await fetch('/api/chips/claim', { method: 'POST' });
+      const data: any = await res.json();
+      if (data.success) {
+        canClaim = false;
+        nextClaimAt = data.nextClaimAt;
+        await fetchUser();
+      }
+    } catch {}
+    claiming = false;
+  }
+
+  $effect(() => {
     if ($currentUser) {
       editName = $currentUser.displayName;
       editAvatar = $currentUser.avatar || '';
@@ -83,6 +130,8 @@
   let visibleBadges = $derived(
     allBadges.filter(b => !b.secret || isEarned(b.slug))
   );
+
+  let xp = $derived(xpProgress($userStats?.xp ?? 0));
 
   let earnedCount = $derived($userBadges.length);
   let totalCount = $derived(allBadges.length);
@@ -188,6 +237,23 @@
           <div class="stat">
             <span class="stat-value">{$userStats?.chips ?? 0}</span>
             <span class="stat-label">Chips</span>
+            {#if canClaim}
+              <button class="btn-claim" onclick={claimChips} disabled={claiming}>
+                {claiming ? 'Claiming...' : 'Claim 500'}
+              </button>
+            {:else if claimCountdown}
+              <span class="claim-timer">{claimCountdown}</span>
+            {/if}
+          </div>
+        </div>
+
+        <div class="xp-section">
+          <div class="xp-header">
+            <span class="xp-level">Level {xp.level}</span>
+            <span class="xp-numbers">{xp.current} / {xp.needed} XP</span>
+          </div>
+          <div class="xp-bar">
+            <div class="xp-fill" style="width: {xp.percent}%"></div>
           </div>
         </div>
       </div>
@@ -409,6 +475,80 @@
     text-transform: uppercase;
     color: var(--text-muted);
     margin-top: 0.375rem;
+  }
+
+  /* XP section */
+  .xp-section {
+    width: 100%;
+    margin-top: 0.75rem;
+  }
+
+  .xp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+
+  .xp-level {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .xp-numbers {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .xp-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .xp-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+  }
+
+  .btn-claim {
+    display: inline-block;
+    margin-top: 0.375rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.5rem;
+    background: var(--accent-faint);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-claim:hover:not(:disabled) {
+    background: var(--accent-border);
+  }
+
+  .btn-claim:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .claim-timer {
+    display: block;
+    margin-top: 0.375rem;
+    font-size: 0.65rem;
+    color: var(--text-muted);
   }
 
   /* Per-game stats */

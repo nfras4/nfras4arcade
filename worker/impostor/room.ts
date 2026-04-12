@@ -952,6 +952,13 @@ export class ImpostorRoom extends DurableObject<Env> {
           );
         }
 
+        // XP: +50 for participating, +50 bonus for winning
+        const xpGain = isWinner ? 100 : 50;
+        stmts.push(
+          db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
+            .bind(xpGain, now, id)
+        );
+
         // Award "First Game" badge (ignore if already awarded)
         stmts.push(
           db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')

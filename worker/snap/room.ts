@@ -826,6 +826,13 @@ export class SnapRoom extends DurableObject<Env> {
           );
         }
 
+        // XP: +50 for participating, +50 bonus for winning
+        const xpGain = id === winnerId ? 100 : 50;
+        stmts.push(
+          db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
+            .bind(xpGain, now, id)
+        );
+
         // b_first_game badge
         stmts.push(
           db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')

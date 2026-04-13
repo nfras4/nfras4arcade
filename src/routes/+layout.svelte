@@ -43,9 +43,99 @@
     localStorage.setItem('theme', theme);
   });
 
+  let canClaim = $state(false);
+  let nextClaimAt = $state<number | null>(null);
+  let claimCountdown = $state('');
+  let claiming = $state(false);
+  let canHourlyClaim = $state(false);
+  let nextHourlyClaimAt = $state<number | null>(null);
+  let hourlyCountdown = $state('');
+  let claimingHourly = $state(false);
+
+  async function fetchChipStatus() {
+    try {
+      const res = await fetch('/api/chips/status');
+      if (!res.ok) return;
+      const data: any = await res.json();
+      canClaim = data.canClaim;
+      nextClaimAt = data.nextClaimAt;
+      canHourlyClaim = data.canHourlyClaim;
+      nextHourlyClaimAt = data.nextHourlyClaimAt;
+    } catch {}
+  }
+
   $effect(() => {
     fetchUser();
   });
+
+  $effect(() => {
+    if ($isLoggedIn) fetchChipStatus();
+  });
+
+  $effect(() => {
+    if (!canClaim && nextClaimAt) {
+      const interval = setInterval(() => {
+        const remaining = nextClaimAt! - Date.now();
+        if (remaining <= 0) {
+          canClaim = true;
+          claimCountdown = '';
+          clearInterval(interval);
+        } else {
+          const h = Math.floor(remaining / 3600000);
+          const m = Math.floor((remaining % 3600000) / 60000);
+          const s = Math.floor((remaining % 60000) / 1000);
+          claimCountdown = `${h}h ${m}m ${s}s`;
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  });
+
+  $effect(() => {
+    if (!canHourlyClaim && nextHourlyClaimAt) {
+      const interval = setInterval(() => {
+        const remaining = nextHourlyClaimAt! - Date.now();
+        if (remaining <= 0) {
+          canHourlyClaim = true;
+          hourlyCountdown = '';
+          clearInterval(interval);
+        } else {
+          const m = Math.floor(remaining / 60000);
+          const s = Math.floor((remaining % 60000) / 1000);
+          hourlyCountdown = `${m}m ${s}s`;
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  });
+
+  async function claimChips() {
+    claiming = true;
+    try {
+      const res = await fetch('/api/chips/claim', { method: 'POST' });
+      const data: any = await res.json();
+      if (data.success) {
+        canClaim = false;
+        nextClaimAt = data.nextClaimAt;
+        await fetchUser();
+      }
+    } catch {}
+    claiming = false;
+  }
+
+  async function claimHourly() {
+    claimingHourly = true;
+    try {
+      const res = await fetch('/api/chips/hourly', { method: 'POST' });
+      const data: any = await res.json();
+      if (data.success) {
+        canHourlyClaim = false;
+        nextHourlyClaimAt = data.nextHourlyClaimAt;
+        await fetchUser();
+      }
+    } catch {}
+    claimingHourly = false;
+  }
 
   function toggleTheme() {
     theme = theme === 'dark' ? 'light' : 'dark';
@@ -81,16 +171,32 @@
     {#if $isLoggedIn}
       {#if $userStats}
         <span class="nav-level">Lv.{userLevel}</span>
-        <span class="nav-chips" title="Chips to play poker with">
-          <svg class="chip-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <circle cx="12" cy="12" r="6" />
-            <line x1="12" y1="2" x2="12" y2="5" />
-            <line x1="12" y1="19" x2="12" y2="22" />
-            <line x1="2" y1="12" x2="5" y2="12" />
-            <line x1="19" y1="12" x2="22" y2="12" />
-          </svg>
-          {$userStats.chips}
+        <span class="nav-chips-group">
+          <span class="nav-chips" title="Chips">
+            <svg class="chip-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" />
+              <line x1="12" y1="2" x2="12" y2="5" />
+              <line x1="12" y1="19" x2="12" y2="22" />
+              <line x1="2" y1="12" x2="5" y2="12" />
+              <line x1="19" y1="12" x2="22" y2="12" />
+            </svg>
+            {$userStats.chips}
+          </span>
+          {#if canClaim}
+            <button class="nav-claim-btn" onclick={claimChips} disabled={claiming} title="Claim daily 500 chips">
+              {claiming ? '...' : '+500'}
+            </button>
+          {:else if claimCountdown}
+            <span class="nav-claim-timer" title="Daily claim">{claimCountdown}</span>
+          {/if}
+          {#if canHourlyClaim}
+            <button class="nav-claim-btn nav-claim-hourly" onclick={claimHourly} disabled={claimingHourly} title="Claim hourly 50 chips">
+              {claimingHourly ? '...' : '+50'}
+            </button>
+          {:else if hourlyCountdown}
+            <span class="nav-claim-timer nav-claim-timer-hourly" title="Hourly claim">{hourlyCountdown}</span>
+          {/if}
         </span>
       {/if}
       <a href="/profile" class="nav-profile-link" title="Profile">
@@ -280,11 +386,65 @@
     opacity: 0.85;
   }
 
+  .nav-chips-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .nav-claim-btn {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+    white-space: nowrap;
+  }
+
+  .nav-claim-btn:hover:not(:disabled) {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+
+  .nav-claim-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .nav-claim-hourly {
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.55rem;
+    padding: 0.1rem 0.3rem;
+  }
+
+  .nav-claim-hourly:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .nav-claim-timer {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .nav-claim-timer-hourly {
+    font-size: 0.5rem;
+  }
+
   @media (max-width: 480px) {
     .nav-display-name {
       display: none;
     }
-    .nav-chips {
+    .nav-chips-group {
       display: none;
     }
   }

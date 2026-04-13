@@ -56,16 +56,6 @@
       soloAction: 'tutorial' as const,
     },
     {
-      id: 'poker',
-      name: 'Texas Hold\'em',
-      description: 'Bet, bluff, and go all-in',
-      minPlayers: 2,
-      maxPlayers: 8,
-      type: 'card game',
-      route: '/poker',
-      soloAction: 'solo' as const,
-    },
-    {
       id: 'snap',
       name: 'Snap',
       description: 'Race to slap matching cards',
@@ -78,7 +68,7 @@
     {
       id: 'casino',
       name: 'Casino',
-      description: 'Blackjack, Roulette & more',
+      description: 'Poker, Blackjack, Roulette & more',
       minPlayers: 1,
       maxPlayers: 20,
       type: 'casino',
@@ -149,11 +139,11 @@
       <h2 class="section-heading geo-title">Games</h2>
       <div class="game-grid gap-4">
         {#each games as game}
-          <div class="game-card card" class:poker-featured={game.id === 'poker'} class:casino-featured={game.id === 'casino'} role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
+          <div class="game-card card" class:casino-featured={game.id === 'casino'} role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
             <div class="game-card-inner">
               <h3 class="game-name geo-title">
                 {game.name}
-                {#if game.id === 'poker'}<svg class="chips-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/></svg>{/if}
+                {#if game.id === 'casino'}<svg class="chips-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/></svg>{/if}
               </h3>
               <p class="game-desc">{game.description}</p>
               <div class="game-meta">

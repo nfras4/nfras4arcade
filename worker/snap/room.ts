@@ -860,6 +860,13 @@ export class SnapRoom extends DurableObject<Env> {
             .bind(xpGain, now, id)
         );
 
+        // Chip reward: +10 for playing, +25 bonus for winning
+        const chipReward = id === winnerId ? 35 : 10;
+        stmts.push(
+          db.prepare('UPDATE player_profiles SET chips = chips + ?, updated_at = ? WHERE id = ?')
+            .bind(chipReward, now, id)
+        );
+
         // b_first_game badge
         stmts.push(
           db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)')

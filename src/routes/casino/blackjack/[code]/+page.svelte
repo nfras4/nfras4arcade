@@ -153,6 +153,7 @@
   }
 
   function leaveGame() {
+    socket.send({ type: 'leave' });
     socket.disconnect();
     gameState.set(null);
     goto('/casino/blackjack');

@@ -217,6 +217,8 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       }
       this.spectators.clear();
       this.broadcastState();
+    } else if (msg.type === 'leave') {
+      await this.handleLeave(playerId);
     } else if (msg.type === 'next_round' && playerId === this.hostId) {
       if (this.phase === 'round_over') {
         await this.startNewRound();
@@ -249,14 +251,49 @@ export abstract class CasinoRoom extends DurableObject<Env> {
   async alarm(): Promise<void> {
     await this.loadState();
 
-    // Disconnect timeout
+    // Disconnect timeout - remove timed-out players and persist their chips
     if (this.disconnectTimestamps.size > 0) {
       const now = Date.now();
+      const nowSec = Math.floor(now / 1000);
+      const stmts: D1PreparedStatement[] = [];
+
       for (const [pid, ts] of this.disconnectTimestamps) {
         if (now - ts >= DISCONNECT_TIMEOUT_MS) {
           this.disconnectTimestamps.delete(pid);
+          const player = this.players.get(pid);
+          if (player) {
+            // Persist chips before removing
+            if (!player.isGuest && !pid.startsWith('guest_')) {
+              stmts.push(
+                this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
+                  .bind(player.chips, nowSec, pid)
+              );
+            }
+            this.players.delete(pid);
+
+            // Host promotion
+            if (pid === this.hostId && this.players.size > 0) {
+              const newHost = this.players.values().next().value!;
+              newHost.isHost = true;
+              this.hostId = newHost.id;
+            }
+          }
         }
       }
+
+      if (stmts.length > 0) {
+        try { await this.env.DB.batch(stmts); } catch {}
+      }
+
+      if (this.players.size === 0) {
+        this.phase = 'lobby';
+        this.tableState = null;
+        await this.removeTableRegistry();
+      } else {
+        await this.updateTableRegistry();
+        this.broadcastState();
+      }
+
       if (this.disconnectTimestamps.size > 0) {
         await this.scheduleDisconnectCheck();
       }
@@ -368,6 +405,42 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     if (this.players.size > 0) {
       this.broadcastState();
     }
+  }
+
+  private async handleLeave(playerId: string): Promise<void> {
+    const player = this.players.get(playerId);
+    if (!player) return;
+
+    // Persist chips before removing
+    if (!player.isGuest && !playerId.startsWith('guest_')) {
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        await this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
+          .bind(player.chips, now, playerId)
+          .run();
+      } catch {}
+    }
+
+    this.players.delete(playerId);
+    this.disconnectTimestamps.delete(playerId);
+
+    // Host promotion
+    if (playerId === this.hostId && this.players.size > 0) {
+      const newHost = this.players.values().next().value!;
+      newHost.isHost = true;
+      this.hostId = newHost.id;
+    }
+
+    // If no players left, reset to lobby
+    if (this.players.size === 0) {
+      this.phase = 'lobby';
+      this.tableState = null;
+      await this.removeTableRegistry();
+    } else {
+      await this.updateTableRegistry();
+    }
+
+    this.broadcastState();
   }
 
   // --- Start game ---

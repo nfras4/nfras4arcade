@@ -620,7 +620,7 @@ export class WavelengthRoom extends DurableObject<Env> {
           this.sendTo(playerId, { type: 'error', message: 'Only the host can start the game' });
           break;
         }
-        const rounds = typeof msg.rounds === 'number' ? Math.max(1, Math.min(10, Math.floor(msg.rounds))) : undefined;
+        const rounds = typeof msg.rounds === 'number' ? Math.max(1, Math.min(30, Math.floor(msg.rounds))) : undefined;
         const categories = Array.isArray(msg.categories) ? msg.categories.filter((c: unknown) => typeof c === 'string') : undefined;
         const result = await this.startGame(rounds, categories);
         if (!result.success) {

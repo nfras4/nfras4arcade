@@ -393,7 +393,7 @@
             <label class="field-label" for="rounds-select">Rounds</label>
             <select id="rounds-select" class="input-field rounds-select" bind:value={selectedRounds}>
               <option value={0}>Default ({state.players.length} — everyone psychic once)</option>
-              {#each [2, 3, 4, 5, 6, 8, 10] as n}
+              {#each [2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30] as n}
                 <option value={n}>{n} rounds</option>
               {/each}
             </select>

@@ -28,6 +28,8 @@ interface PokerTableState {
   lastRaisePlayerId: string | null;
   bbHasActed: boolean;
   bbPlayerId: string | null;
+  roundStartPlayerId: string | null;
+  actedThisRound: Record<string, boolean>;
   gameMode: 'casual' | 'competitive';
   casualChipCount: number;
 }
@@ -54,7 +56,11 @@ export class PokerRoom extends CardRoom {
   protected get gameType(): string { return 'poker'; }
 
   private getTable(): PokerTableState {
-    return (this.tableState as PokerTableState) ?? this.defaultTableState();
+    const ts = (this.tableState as PokerTableState) ?? this.defaultTableState();
+    // Backward compat for state saved before these fields existed
+    if (!ts.actedThisRound) ts.actedThisRound = {};
+    if (ts.roundStartPlayerId === undefined) ts.roundStartPlayerId = null;
+    return ts;
   }
 
   private setTable(table: PokerTableState): void {
@@ -83,6 +89,8 @@ export class PokerRoom extends CardRoom {
       lastRaisePlayerId: null,
       bbHasActed: false,
       bbPlayerId: null,
+      roundStartPlayerId: null,
+      actedThisRound: {},
       gameMode: 'casual' as const,
       casualChipCount: 1000,
     };
@@ -236,6 +244,8 @@ export class PokerRoom extends CardRoom {
     ts.lastRaisePlayerId = null;
     ts.bbHasActed = false;
     ts.bbPlayerId = bbPlayer;
+    ts.roundStartPlayerId = playerIds[utgIndex];
+    ts.actedThisRound = {};
 
     this.currentTurn = ts.actionOnPlayerId;
     this.setTable(ts);
@@ -316,6 +326,9 @@ export class PokerRoom extends CardRoom {
     if (ts.bettingRound === 'preflop' && playerId === ts.bbPlayerId) {
       ts.bbHasActed = true;
     }
+
+    // Track that this player has acted this round
+    ts.actedThisRound[playerId] = true;
 
     switch (action.type) {
       case 'fold': {
@@ -480,9 +493,12 @@ export class PokerRoom extends CardRoom {
       return true;
     }
 
-    // If no one has raised (e.g. everyone checked), complete when action
-    // returns to the first player who acted this round
-    if (!ts.lastRaisePlayerId) return true;
+    // If no one has raised (e.g. everyone checked), complete when all
+    // acting players have had a chance to act this round
+    if (!ts.lastRaisePlayerId) {
+      const allActed = acting.every(id => ts.actedThisRound[id]);
+      return allActed;
+    }
 
     return false;
   }
@@ -568,6 +584,7 @@ export class PokerRoom extends CardRoom {
     const acting = this.getActingPlayers(ts);
     if (acting.length === 0) {
       ts.actionOnPlayerId = null;
+      ts.roundStartPlayerId = null;
       return;
     }
 
@@ -578,6 +595,8 @@ export class PokerRoom extends CardRoom {
       const id = this.turnOrder[idx];
       if (!ts.playerFolded[id] && !ts.playerAllIn[id]) {
         ts.actionOnPlayerId = id;
+        ts.roundStartPlayerId = id;
+        ts.actedThisRound = {};
         this.currentTurn = id;
         return;
       }

@@ -5,6 +5,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   avatar: string | null;
+  nameColour: string | null;
 }
 
 export interface AuthStats {

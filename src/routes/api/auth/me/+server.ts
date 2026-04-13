@@ -36,6 +36,23 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       .bind(locals.user.id)
       .first<{ games_played: number; games_won: number; chips: number; xp: number }>();
 
+    // Fetch equipped name colour
+    const equippedColour = await db
+      .prepare(
+        `SELECT si.metadata FROM player_equipped pe
+         JOIN shop_items si ON si.id = pe.name_colour_id
+         WHERE pe.player_id = ?`
+      )
+      .bind(locals.user.id)
+      .first<{ metadata: string }>();
+
+    let nameColour: string | null = null;
+    if (equippedColour?.metadata) {
+      try {
+        nameColour = JSON.parse(equippedColour.metadata).hex || null;
+      } catch {}
+    }
+
     // Recent game history (last 20)
     const historyRows = await db
       .prepare(
@@ -93,7 +110,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     }));
 
     return json({
-      user: locals.user,
+      user: { ...locals.user, nameColour },
       stats: profile ? { gamesPlayed: profile.games_played, gamesWon: profile.games_won, chips: profile.chips, xp: profile.xp ?? 0, level: xpToLevel(profile.xp ?? 0) } : null,
       badges,
       gameHistory,
@@ -101,5 +118,5 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     });
   }
 
-  return json({ user: locals.user, stats: null, badges });
+  return json({ user: { ...locals.user, nameColour: null }, stats: null, badges });
 };

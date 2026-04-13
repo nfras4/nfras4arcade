@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { currentUser, userStats, isLoggedIn, logout, fetchUser } from '$lib/auth';
+  import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
   import { xpToLevel } from '$lib/xp';
   import FeedbackWidget from '$lib/components/FeedbackWidget.svelte';
   import type { Snippet } from 'svelte';
@@ -43,26 +44,10 @@
     localStorage.setItem('theme', theme);
   });
 
-  let canClaim = $state(false);
-  let nextClaimAt = $state<number | null>(null);
   let claimCountdown = $state('');
   let claiming = $state(false);
-  let canHourlyClaim = $state(false);
-  let nextHourlyClaimAt = $state<number | null>(null);
   let hourlyCountdown = $state('');
   let claimingHourly = $state(false);
-
-  async function fetchChipStatus() {
-    try {
-      const res = await fetch('/api/chips/status');
-      if (!res.ok) return;
-      const data: any = await res.json();
-      canClaim = data.canClaim;
-      nextClaimAt = data.nextClaimAt;
-      canHourlyClaim = data.canHourlyClaim;
-      nextHourlyClaimAt = data.nextHourlyClaimAt;
-    } catch {}
-  }
 
   $effect(() => {
     fetchUser();
@@ -73,11 +58,12 @@
   });
 
   $effect(() => {
-    if (!canClaim && nextClaimAt) {
+    if (!$canClaim && $nextClaimAt) {
+      const target = $nextClaimAt;
       const interval = setInterval(() => {
-        const remaining = nextClaimAt! - Date.now();
+        const remaining = target - Date.now();
         if (remaining <= 0) {
-          canClaim = true;
+          canClaim.set(true);
           claimCountdown = '';
           clearInterval(interval);
         } else {
@@ -92,11 +78,12 @@
   });
 
   $effect(() => {
-    if (!canHourlyClaim && nextHourlyClaimAt) {
+    if (!$canHourlyClaim && $nextHourlyClaimAt) {
+      const target = $nextHourlyClaimAt;
       const interval = setInterval(() => {
-        const remaining = nextHourlyClaimAt! - Date.now();
+        const remaining = target - Date.now();
         if (remaining <= 0) {
-          canHourlyClaim = true;
+          canHourlyClaim.set(true);
           hourlyCountdown = '';
           clearInterval(interval);
         } else {
@@ -115,8 +102,8 @@
       const res = await fetch('/api/chips/claim', { method: 'POST' });
       const data: any = await res.json();
       if (data.success) {
-        canClaim = false;
-        nextClaimAt = data.nextClaimAt;
+        canClaim.set(false);
+        nextClaimAt.set(data.nextClaimAt);
         await fetchUser();
       }
     } catch {}
@@ -129,8 +116,8 @@
       const res = await fetch('/api/chips/hourly', { method: 'POST' });
       const data: any = await res.json();
       if (data.success) {
-        canHourlyClaim = false;
-        nextHourlyClaimAt = data.nextHourlyClaimAt;
+        canHourlyClaim.set(false);
+        nextHourlyClaimAt.set(data.nextHourlyClaimAt);
         await fetchUser();
       }
     } catch {}
@@ -183,14 +170,14 @@
             </svg>
             {$userStats.chips}
           </span>
-          {#if canClaim}
+          {#if $canClaim}
             <button class="nav-claim-btn" onclick={claimChips} disabled={claiming} title="Claim daily 500 chips">
               {claiming ? '...' : '+500'}
             </button>
           {:else if claimCountdown}
             <span class="nav-claim-timer" title="Daily claim">{claimCountdown}</span>
           {/if}
-          {#if canHourlyClaim}
+          {#if $canHourlyClaim}
             <button class="nav-claim-btn nav-claim-hourly" onclick={claimHourly} disabled={claimingHourly} title="Claim hourly 50 chips">
               {claimingHourly ? '...' : '+50'}
             </button>
@@ -201,7 +188,7 @@
       {/if}
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
-        <span class="nav-display-name">{$currentUser?.displayName}</span>
+        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>
       </a>
       <button class="nav-logout-btn" onclick={handleLogout} title="Log out">
         Log Out

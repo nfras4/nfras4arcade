@@ -5,6 +5,7 @@
     gameHistory, perGameStats,
     type AuthBadge,
   } from '$lib/auth';
+  import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
   import { xpProgress } from '$lib/xp';
 
   let editingName = $state(false);
@@ -13,12 +14,8 @@
   let saving = $state(false);
   let saveError = $state('');
   let claiming = $state(false);
-  let canClaim = $state(false);
-  let nextClaimAt = $state<number | null>(null);
   let claimCountdown = $state('');
   let claimingHourly = $state(false);
-  let canHourlyClaim = $state(false);
-  let nextHourlyClaimAt = $state<number | null>(null);
   let hourlyCountdown = $state('');
 
   interface BadgeDef {
@@ -76,22 +73,16 @@
   });
 
   $effect(() => {
-    if ($isLoggedIn) {
-      fetch('/api/chips/status').then(r => r.json()).then((data: any) => {
-        canClaim = data.canClaim;
-        nextClaimAt = data.nextClaimAt;
-        canHourlyClaim = data.canHourlyClaim;
-        nextHourlyClaimAt = data.nextHourlyClaimAt;
-      }).catch(() => {});
-    }
+    if ($isLoggedIn) fetchChipStatus();
   });
 
   $effect(() => {
-    if (!canClaim && nextClaimAt) {
+    if (!$canClaim && $nextClaimAt) {
+      const target = $nextClaimAt;
       const interval = setInterval(() => {
-        const remaining = nextClaimAt! - Date.now();
+        const remaining = target - Date.now();
         if (remaining <= 0) {
-          canClaim = true;
+          canClaim.set(true);
           claimCountdown = '';
           clearInterval(interval);
         } else {
@@ -111,8 +102,8 @@
       const res = await fetch('/api/chips/claim', { method: 'POST' });
       const data: any = await res.json();
       if (data.success) {
-        canClaim = false;
-        nextClaimAt = data.nextClaimAt;
+        canClaim.set(false);
+        nextClaimAt.set(data.nextClaimAt);
         await fetchUser();
       }
     } catch {}
@@ -120,11 +111,12 @@
   }
 
   $effect(() => {
-    if (!canHourlyClaim && nextHourlyClaimAt) {
+    if (!$canHourlyClaim && $nextHourlyClaimAt) {
+      const target = $nextHourlyClaimAt;
       const interval = setInterval(() => {
-        const remaining = nextHourlyClaimAt! - Date.now();
+        const remaining = target - Date.now();
         if (remaining <= 0) {
-          canHourlyClaim = true;
+          canHourlyClaim.set(true);
           hourlyCountdown = '';
           clearInterval(interval);
         } else {
@@ -143,8 +135,8 @@
       const res = await fetch('/api/chips/hourly', { method: 'POST' });
       const data: any = await res.json();
       if (data.success) {
-        canHourlyClaim = false;
-        nextHourlyClaimAt = data.nextHourlyClaimAt;
+        canHourlyClaim.set(false);
+        nextHourlyClaimAt.set(data.nextHourlyClaimAt);
         await fetchUser();
       }
     } catch {}
@@ -252,7 +244,7 @@
                 </div>
               </div>
             {:else}
-              <h2 class="display-name">{$currentUser.displayName}</h2>
+              <h2 class="display-name" style:color={$currentUser.nameColour || undefined}>{$currentUser.displayName}</h2>
               <p class="email">{$currentUser.email}</p>
               <button class="btn-secondary btn-small edit-btn" onclick={() => { editingName = true; }}>
                 Edit Profile
@@ -281,14 +273,14 @@
           <div class="stat">
             <span class="stat-value">{$userStats?.chips ?? 0}</span>
             <span class="stat-label">Chips</span>
-            {#if canClaim}
+            {#if $canClaim}
               <button class="btn-claim" onclick={claimChips} disabled={claiming}>
                 {claiming ? 'Claiming...' : 'Claim 500'}
               </button>
             {:else if claimCountdown}
               <span class="claim-timer">{claimCountdown}</span>
             {/if}
-            {#if canHourlyClaim}
+            {#if $canHourlyClaim}
               <button class="btn-claim btn-claim-hourly" onclick={claimHourly} disabled={claimingHourly}>
                 {claimingHourly ? 'Claiming...' : 'Claim 50'}
               </button>

@@ -32,6 +32,7 @@
         }
       } else if (msg.type === 'error') {
         error.set(msg.message);
+        reconnecting = false;
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => error.set(null), 4000);
       }
@@ -40,8 +41,6 @@
     socket.connect(code, !$isLoggedIn)
       .then(() => socket.joinRoom(code))
       .catch(() => goto('/casino/blackjack'));
-
-    setTimeout(() => { reconnecting = false; }, 3000);
 
     return () => { unsub(); socket.disconnect(); };
   });

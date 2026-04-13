@@ -31,6 +31,13 @@ interface RoundResultEntry {
   avgScore: number;
   spread: number;
   roundNumber: number;
+  card: { left: string; right: string } | null;
+  targetAngle: number;
+  playerScores: Record<string, number>;
+  playerAngles: Record<string, number>;
+  closestGuesserId: string | null;
+  closestDiff: number;
+  bullseyeCount: number;
 }
 
 interface WavelengthRoomState {
@@ -891,13 +898,27 @@ export class WavelengthRoom extends DurableObject<Env> {
     // Score each guesser
     const guesserScores: number[] = [];
     const guesserAngles: number[] = [];
+    const playerScores: Record<string, number> = {};
+    const playerAngles: Record<string, number> = {};
+    let closestGuesserId: string | null = null;
+    let closestDiff = Infinity;
+    let bullseyeCount = 0;
 
     for (const [id, angle] of this.guesses) {
       if (id === this.psychicId) continue;
       const score = calculateScore(angle, this.targetAngle);
+      const diff = Math.abs(angle - this.targetAngle);
       guesserScores.push(score);
       guesserAngles.push(angle);
+      playerScores[id] = score;
+      playerAngles[id] = angle;
       this.roundScores.set(id, score);
+
+      if (score === 4) bullseyeCount++;
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestGuesserId = id;
+      }
 
       const current = this.scores.get(id) ?? 0;
       this.scores.set(id, current + score);
@@ -922,6 +943,13 @@ export class WavelengthRoom extends DurableObject<Env> {
       avgScore,
       spread,
       roundNumber: this.roundNumber,
+      card: this.currentCard,
+      targetAngle: this.targetAngle,
+      playerScores,
+      playerAngles,
+      closestGuesserId,
+      closestDiff: closestDiff === Infinity ? 0 : closestDiff,
+      bullseyeCount,
     });
   }
 
@@ -938,34 +966,116 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   private calculateAwards(): Record<string, unknown> {
     const awards: Record<string, unknown> = {};
+    if (this.roundResults.length === 0) return awards;
 
-    if (this.roundResults.length > 0) {
-      // bestClue: round with highest average guesser score
-      let bestClueRound = this.roundResults[0];
-      for (const rr of this.roundResults) {
-        if (rr.avgScore > bestClueRound.avgScore) {
-          bestClueRound = rr;
-        }
-      }
-      awards.bestClue = {
-        psychicId: bestClueRound.psychicId,
-        psychicName: this.players.get(bestClueRound.psychicId)?.name ?? 'Unknown',
-        avgScore: bestClueRound.avgScore,
-      };
+    // bestClue: round with highest average guesser score
+    let bestClueRound = this.roundResults[0];
+    for (const rr of this.roundResults) {
+      if (rr.avgScore > bestClueRound.avgScore) bestClueRound = rr;
+    }
+    awards.bestClue = {
+      psychicId: bestClueRound.psychicId,
+      psychicName: this.players.get(bestClueRound.psychicId)?.name ?? 'Unknown',
+      avgScore: bestClueRound.avgScore,
+    };
 
-      // mindMeld: round with smallest guesser spread
-      let mindMeldRound = this.roundResults[0];
-      for (const rr of this.roundResults) {
-        if (rr.spread < mindMeldRound.spread) {
-          mindMeldRound = rr;
-        }
+    // mindMeld: round with smallest guesser spread
+    let mindMeldRound = this.roundResults[0];
+    for (const rr of this.roundResults) {
+      if (rr.spread < mindMeldRound.spread) mindMeldRound = rr;
+    }
+    awards.mindMeld = {
+      psychicId: mindMeldRound.psychicId,
+      psychicName: this.players.get(mindMeldRound.psychicId)?.name ?? 'Unknown',
+      spread: mindMeldRound.spread,
+      roundNumber: mindMeldRound.roundNumber,
+    };
+
+    // sharpshooter: player with most bullseyes (score = 4) across all rounds
+    const bullseyeCounts = new Map<string, number>();
+    for (const rr of this.roundResults) {
+      for (const [pid, score] of Object.entries(rr.playerScores)) {
+        if (score === 4) bullseyeCounts.set(pid, (bullseyeCounts.get(pid) ?? 0) + 1);
       }
-      awards.mindMeld = {
-        psychicId: mindMeldRound.psychicId,
-        psychicName: this.players.get(mindMeldRound.psychicId)?.name ?? 'Unknown',
-        spread: mindMeldRound.spread,
-        roundNumber: mindMeldRound.roundNumber,
+    }
+    if (bullseyeCounts.size > 0) {
+      let bestId = '';
+      let bestCount = 0;
+      for (const [pid, count] of bullseyeCounts) {
+        if (count > bestCount) { bestId = pid; bestCount = count; }
+      }
+      awards.sharpshooter = {
+        playerName: this.players.get(bestId)?.name ?? 'Unknown',
+        bullseyes: bestCount,
       };
+    }
+
+    // onTheNose: single closest guess across all rounds
+    let noseId = '';
+    let noseDiff = Infinity;
+    let noseRound = 0;
+    for (const rr of this.roundResults) {
+      if (rr.closestGuesserId && rr.closestDiff < noseDiff) {
+        noseId = rr.closestGuesserId;
+        noseDiff = rr.closestDiff;
+        noseRound = rr.roundNumber;
+      }
+    }
+    if (noseId && noseDiff < Infinity) {
+      awards.onTheNose = {
+        playerName: this.players.get(noseId)?.name ?? 'Unknown',
+        diff: noseDiff,
+        roundNumber: noseRound,
+      };
+    }
+
+    // lostInSpace: farthest single guess across all rounds
+    let lostId = '';
+    let lostDiff = 0;
+    let lostRound = 0;
+    for (const rr of this.roundResults) {
+      for (const [pid, angle] of Object.entries(rr.playerAngles)) {
+        const diff = Math.abs(angle - rr.targetAngle);
+        if (diff > lostDiff) { lostId = pid; lostDiff = diff; lostRound = rr.roundNumber; }
+      }
+    }
+    if (lostId && lostDiff > 0) {
+      awards.lostInSpace = {
+        playerName: this.players.get(lostId)?.name ?? 'Unknown',
+        diff: lostDiff,
+        roundNumber: lostRound,
+      };
+    }
+
+    // hardCard: round with lowest average score
+    let hardRound = this.roundResults[0];
+    for (const rr of this.roundResults) {
+      if (rr.avgScore < hardRound.avgScore) hardRound = rr;
+    }
+    if (hardRound.card) {
+      awards.hardCard = {
+        card: hardRound.card,
+        avgScore: hardRound.avgScore,
+        roundNumber: hardRound.roundNumber,
+      };
+    }
+
+    // hotStreak: longest consecutive rounds scoring 3+ for any player
+    let streakName = '';
+    let streakLen = 0;
+    for (const [pid] of this.players) {
+      let current = 0;
+      let best = 0;
+      for (const rr of this.roundResults) {
+        if (pid === rr.psychicId) { current = 0; continue; }
+        const score = rr.playerScores[pid] ?? 0;
+        if (score >= 3) { current++; best = Math.max(best, current); }
+        else { current = 0; }
+      }
+      if (best > streakLen) { streakLen = best; streakName = this.players.get(pid)?.name ?? 'Unknown'; }
+    }
+    if (streakLen >= 2) {
+      awards.hotStreak = { playerName: streakName, streak: streakLen };
     }
 
     return awards;
@@ -1229,6 +1339,9 @@ export class WavelengthRoom extends DurableObject<Env> {
       guessTimerSeconds: this.guessTimerSeconds,
       roundResults: isRevealOrGameOver ? this.roundResults : [],
       awards: this.phase === 'game_over' ? this.calculateAwards() : null,
+      roundInsight: this.phase === 'reveal' && this.roundResults.length > 0
+        ? this.roundResults[this.roundResults.length - 1]
+        : null,
     };
   }
 

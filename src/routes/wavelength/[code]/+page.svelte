@@ -658,6 +658,52 @@
           </div>
         </div>
 
+        <!-- Round Insights -->
+        {#if state.roundInsight}
+          {@const ri = state.roundInsight}
+          {@const closestName = state.players.find((p: any) => p.id === ri.closestGuesserId)?.name}
+          <div class="round-insights">
+            <h3 class="section-label">Round Insights</h3>
+            <div class="insight-cards">
+              {#if closestName}
+                <div class="insight-card">
+                  <span class="insight-icon">&#127919;</span>
+                  <span class="insight-text"><strong>{closestName}</strong> was closest at {ri.closestDiff.toFixed(0)}&deg; off</span>
+                </div>
+              {/if}
+              {#if ri.bullseyeCount > 0}
+                <div class="insight-card bullseye">
+                  <span class="insight-icon">&#11088;</span>
+                  <span class="insight-text">{ri.bullseyeCount} bullseye{ri.bullseyeCount > 1 ? 's' : ''} this round!</span>
+                </div>
+              {/if}
+              <div class="insight-card" class:tight-spread={ri.spread < 20} class:wide-spread={ri.spread > 60}>
+                <span class="insight-icon">{ri.spread < 20 ? '&#129309;' : ri.spread > 60 ? '&#128165;' : '&#128064;'}</span>
+                <span class="insight-text">
+                  {#if ri.spread < 20}
+                    Tight group! Only {ri.spread.toFixed(0)}&deg; spread
+                  {:else if ri.spread > 60}
+                    All over the place! {ri.spread.toFixed(0)}&deg; spread
+                  {:else}
+                    {ri.spread.toFixed(0)}&deg; spread between guesses
+                  {/if}
+                </span>
+              </div>
+              {#if ri.avgScore >= 3.5}
+                <div class="insight-card perfect-round">
+                  <span class="insight-icon">&#128293;</span>
+                  <span class="insight-text">Incredible round! Avg {ri.avgScore.toFixed(1)} points</span>
+                </div>
+              {:else if ri.avgScore <= 1}
+                <div class="insight-card rough-round">
+                  <span class="insight-icon">&#129764;</span>
+                  <span class="insight-text">Tough card! Only {ri.avgScore.toFixed(1)} avg</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
         <!-- Scoreboard -->
         <div class="scoreboard">
           <h3 class="section-label">Scoreboard</h3>
@@ -709,7 +755,7 @@
                 <span class="award-icon">&#127942;</span>
                 <div class="award-info">
                   <span class="award-title">Best Psychic</span>
-                  <span class="award-detail">{state.awards.bestClue.psychicName} — avg +{state.awards.bestClue.avgScore.toFixed(1)}</span>
+                  <span class="award-detail">{state.awards.bestClue.psychicName} - avg +{state.awards.bestClue.avgScore.toFixed(1)}</span>
                 </div>
               </div>
             {/if}
@@ -718,7 +764,52 @@
                 <span class="award-icon">&#129504;</span>
                 <div class="award-info">
                   <span class="award-title">Mind Meld</span>
-                  <span class="award-detail">Round {state.awards.mindMeld.roundNumber} — {state.awards.mindMeld.spread.toFixed(0)}&#176; spread</span>
+                  <span class="award-detail">Round {state.awards.mindMeld.roundNumber} - {state.awards.mindMeld.spread.toFixed(0)}&#176; spread</span>
+                </div>
+              </div>
+            {/if}
+            {#if state.awards.sharpshooter}
+              <div class="award-card">
+                <span class="award-icon">&#127919;</span>
+                <div class="award-info">
+                  <span class="award-title">Sharpshooter</span>
+                  <span class="award-detail">{state.awards.sharpshooter.playerName} - {state.awards.sharpshooter.bullseyes} bullseye{state.awards.sharpshooter.bullseyes > 1 ? 's' : ''}</span>
+                </div>
+              </div>
+            {/if}
+            {#if state.awards.onTheNose}
+              <div class="award-card">
+                <span class="award-icon">&#128175;</span>
+                <div class="award-info">
+                  <span class="award-title">On the Nose</span>
+                  <span class="award-detail">{state.awards.onTheNose.playerName} - {state.awards.onTheNose.diff.toFixed(0)}&#176; off in round {state.awards.onTheNose.roundNumber}</span>
+                </div>
+              </div>
+            {/if}
+            {#if state.awards.hotStreak}
+              <div class="award-card">
+                <span class="award-icon">&#128293;</span>
+                <div class="award-info">
+                  <span class="award-title">Hot Streak</span>
+                  <span class="award-detail">{state.awards.hotStreak.playerName} - {state.awards.hotStreak.streak} rounds of 3+ in a row</span>
+                </div>
+              </div>
+            {/if}
+            {#if state.awards.lostInSpace}
+              <div class="award-card">
+                <span class="award-icon">&#128640;</span>
+                <div class="award-info">
+                  <span class="award-title">Lost in Space</span>
+                  <span class="award-detail">{state.awards.lostInSpace.playerName} - {state.awards.lostInSpace.diff.toFixed(0)}&#176; off in round {state.awards.lostInSpace.roundNumber}</span>
+                </div>
+              </div>
+            {/if}
+            {#if state.awards.hardCard}
+              <div class="award-card">
+                <span class="award-icon">&#129764;</span>
+                <div class="award-info">
+                  <span class="award-title">Hard Card</span>
+                  <span class="award-detail">"{state.awards.hardCard.card.left} vs {state.awards.hardCard.card.right}" - avg {state.awards.hardCard.avgScore.toFixed(1)}</span>
                 </div>
               </div>
             {/if}
@@ -1285,6 +1376,70 @@
   .award-detail {
     font-size: 0.8rem;
     color: var(--text-muted);
+  }
+
+  /* Round insights */
+  .round-insights {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .insight-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .insight-card {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    animation: fadeUp 0.3s ease both;
+  }
+
+  .insight-card.bullseye {
+    border-color: rgba(245, 200, 66, 0.4);
+    background: rgba(245, 200, 66, 0.06);
+  }
+
+  .insight-card.tight-spread {
+    border-color: rgba(46, 204, 113, 0.3);
+    background: rgba(46, 204, 113, 0.06);
+  }
+
+  .insight-card.wide-spread {
+    border-color: rgba(231, 76, 60, 0.3);
+    background: rgba(231, 76, 60, 0.06);
+  }
+
+  .insight-card.perfect-round {
+    border-color: rgba(245, 200, 66, 0.4);
+    background: rgba(245, 200, 66, 0.06);
+  }
+
+  .insight-card.rough-round {
+    border-color: rgba(155, 89, 182, 0.3);
+    background: rgba(155, 89, 182, 0.06);
+  }
+
+  .insight-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .insight-text {
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.3;
+  }
+
+  .insight-text strong {
+    color: var(--accent);
   }
 
   /* Final scoreboard */

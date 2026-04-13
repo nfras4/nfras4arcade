@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-13** - Deployed to nfras4arcade. Summary: Casino visual polish, roulette CS2-style redesign with auto-spin timer, wavelength 275 cards. Branch: `main`, commit: `a20324a`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Fix coloured name cosmetics rendering, daily claim sync across nav/profile, blackjack lobby redirect race. Branch: `main`, commit: `b5ea06e`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Add casino section with Blackjack, Roulette, chip shop, and multiplayer table lobby. Branch: `main`, commit: `23a385b`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Increase shop prices 3-4x, add hourly 50-chip claim, casino badges, game labels. Branch: `main`, commit: `7509f33`.

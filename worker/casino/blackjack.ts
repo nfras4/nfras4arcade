@@ -437,9 +437,11 @@ export class BlackjackRoom extends CasinoRoom {
       dealerHand = [ts.dealerHand[0]]; // only show first card
     }
 
-    const dealerValue = ts.dealerRevealed
-      ? calculateHandValue(ts.dealerHand).value
-      : calculateHandValue([ts.dealerHand[0]]).value;
+    const dealerValue = ts.dealerHand.length === 0
+      ? 0
+      : ts.dealerRevealed
+        ? calculateHandValue(ts.dealerHand).value
+        : calculateHandValue([ts.dealerHand[0]]).value;
 
     return {
       code: this.code,

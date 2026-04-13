@@ -200,3 +200,6 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 
 ## Word Categories
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
+
+## Recent deployments
+- **2026-04-13** - Deployed to nfras4arcade. Summary: Add casino section with Blackjack, Roulette, chip shop, and multiplayer table lobby. Branch: `main`, commit: `23a385b`.

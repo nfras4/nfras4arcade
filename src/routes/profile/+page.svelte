@@ -16,6 +16,10 @@
   let canClaim = $state(false);
   let nextClaimAt = $state<number | null>(null);
   let claimCountdown = $state('');
+  let claimingHourly = $state(false);
+  let canHourlyClaim = $state(false);
+  let nextHourlyClaimAt = $state<number | null>(null);
+  let hourlyCountdown = $state('');
 
   interface BadgeDef {
     slug: string;
@@ -45,6 +49,10 @@
     { slug: 'royal_flush',      label: 'Royal Flush',       description: 'Get a royal flush in Texas Hold\'em',               emoji: '\u{1F451}', secret: true },
     { slug: 'all_in_win',       label: 'All In Win',        description: 'Win an all-in showdown',                            emoji: '\u{1F4B0}', secret: true },
     { slug: 'snap_streak',      label: 'Snap Streak',       description: 'Win 3 snaps in a row',                              emoji: '\u{1F525}', secret: true },
+    { slug: 'b_blackjack_natural', label: 'Natural',        description: 'Get a natural blackjack (21 on first two cards)',    emoji: '\u{1F0A1}', secret: true },
+    { slug: 'b_high_roller',   label: 'High Roller',       description: 'Win 1000+ chips in a single casino round',           emoji: '\u{1F4B5}', secret: true },
+    { slug: 'b_roulette_win',  label: 'Lucky Number',      description: 'Win a straight-up roulette bet',                     emoji: '\u{1F3B0}', secret: true },
+    { slug: 'b_lucky_streak',  label: 'Lucky Streak',      description: 'Win 5 casino rounds in a row',                       emoji: '\u{1F340}', secret: true },
   ];
 
   const gameTypeLabels: Record<string, string> = {
@@ -57,6 +65,8 @@
     'poker': 'Texas Hold\'em',
     'snap': 'Snap',
     'wavelength': 'Wavelength',
+    'blackjack': 'Blackjack',
+    'roulette': 'Roulette',
   };
 
   $effect(() => {
@@ -70,6 +80,8 @@
       fetch('/api/chips/status').then(r => r.json()).then((data: any) => {
         canClaim = data.canClaim;
         nextClaimAt = data.nextClaimAt;
+        canHourlyClaim = data.canHourlyClaim;
+        nextHourlyClaimAt = data.nextHourlyClaimAt;
       }).catch(() => {});
     }
   });
@@ -105,6 +117,38 @@
       }
     } catch {}
     claiming = false;
+  }
+
+  $effect(() => {
+    if (!canHourlyClaim && nextHourlyClaimAt) {
+      const interval = setInterval(() => {
+        const remaining = nextHourlyClaimAt! - Date.now();
+        if (remaining <= 0) {
+          canHourlyClaim = true;
+          hourlyCountdown = '';
+          clearInterval(interval);
+        } else {
+          const m = Math.floor(remaining / 60000);
+          const s = Math.floor((remaining % 60000) / 1000);
+          hourlyCountdown = `${m}m ${s}s`;
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  });
+
+  async function claimHourly() {
+    claimingHourly = true;
+    try {
+      const res = await fetch('/api/chips/hourly', { method: 'POST' });
+      const data: any = await res.json();
+      if (data.success) {
+        canHourlyClaim = false;
+        nextHourlyClaimAt = data.nextHourlyClaimAt;
+        await fetchUser();
+      }
+    } catch {}
+    claimingHourly = false;
   }
 
   $effect(() => {
@@ -243,6 +287,13 @@
               </button>
             {:else if claimCountdown}
               <span class="claim-timer">{claimCountdown}</span>
+            {/if}
+            {#if canHourlyClaim}
+              <button class="btn-claim btn-claim-hourly" onclick={claimHourly} disabled={claimingHourly}>
+                {claimingHourly ? 'Claiming...' : 'Claim 50'}
+              </button>
+            {:else if hourlyCountdown}
+              <span class="claim-timer claim-timer-hourly">{hourlyCountdown}</span>
             {/if}
           </div>
         </div>
@@ -549,6 +600,25 @@
     margin-top: 0.375rem;
     font-size: 0.65rem;
     color: var(--text-muted);
+  }
+
+  .btn-claim-hourly {
+    background: var(--card-bg);
+    border: 1px solid var(--accent-border);
+    color: var(--accent);
+    font-size: 0.6rem;
+    padding: 0.15rem 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  .btn-claim-hourly:hover:not(:disabled) {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .claim-timer-hourly {
+    font-size: 0.55rem;
+    margin-top: 0.15rem;
   }
 
   /* Per-game stats */

@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
-  import { isLoggedIn } from '$lib/auth';
+  import { isLoggedIn, userStats } from '$lib/auth';
   import { fireWinConfetti } from '$lib/vfx';
 
   const code = $page.params.code!;
@@ -205,6 +205,13 @@
   let history = $derived((ts?.history ?? []) as string[]);
   let payouts = $derived(ts?.payouts as Record<string, number> | null);
   let myChips = $derived(state?.players?.find((p: any) => p.id === pid)?.chips ?? 0);
+
+  // Sync chips to nav bar
+  $effect(() => {
+    if (myChips !== undefined && myChips !== null) {
+      userStats.update(s => s ? { ...s, chips: myChips } : s);
+    }
+  });
 
   // Hide newest history entry during spin animation (prevents spoiling result)
   let visibleHistory = $derived(

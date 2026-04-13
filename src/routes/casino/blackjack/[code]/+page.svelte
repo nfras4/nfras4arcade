@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
-  import { isLoggedIn } from '$lib/auth';
+  import { isLoggedIn, userStats } from '$lib/auth';
   import Card from '$lib/components/cards/Card.svelte';
 
   const code = $page.params.code!;
@@ -18,6 +18,32 @@
   let betPlaced = $state(false);
   let hasPlayedRound = $state(false);
   let errorTimeout: ReturnType<typeof setTimeout>;
+  let bettingTimeLeft = $state(0);
+  let nextRoundIn = $state(0);
+
+  // Card deal SFX via Web Audio API
+  let audioCtx: AudioContext | null = null;
+  function playDealSound() {
+    try {
+      if (!audioCtx) audioCtx = new AudioContext();
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.08, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / audioCtx.sampleRate;
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 60) * 0.3;
+      }
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 2000;
+      src.connect(filter).connect(audioCtx.destination);
+      src.start();
+    } catch {}
+  }
+
+  // Track phase transitions for deal SFX
+  let prevPhase = $state<string | null>(null);
 
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
@@ -85,6 +111,57 @@
     if (state?.phase === 'betting' && hasPlayedRound && !betPlaced && betInput >= minBet && betInput <= myChips) {
       placeBet();
     }
+  });
+
+  // Sync chips to nav bar
+  $effect(() => {
+    if (myChips !== undefined && myChips !== null) {
+      userStats.update(s => s ? { ...s, chips: myChips } : s);
+    }
+  });
+
+  // Betting countdown timer
+  $effect(() => {
+    if (state?.phase === 'betting' && ts?.bettingEndsAt > 0) {
+      const endAt = ts.bettingEndsAt;
+      const update = () => {
+        bettingTimeLeft = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      };
+      update();
+      const interval = setInterval(update, 200);
+      return () => clearInterval(interval);
+    } else {
+      bettingTimeLeft = 0;
+    }
+  });
+
+  // Round-over countdown timer
+  $effect(() => {
+    if (state?.phase === 'round_over' && ts?.displayEndsAt > 0) {
+      const endAt = ts.displayEndsAt;
+      const update = () => {
+        nextRoundIn = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      };
+      update();
+      const interval = setInterval(update, 200);
+      return () => clearInterval(interval);
+    } else {
+      nextRoundIn = 0;
+    }
+  });
+
+  // Play deal SFX when entering playing phase
+  $effect(() => {
+    const phase = state?.phase;
+    if (phase === 'playing' && prevPhase === 'betting') {
+      // Stagger deal sounds for each card
+      const playerCount = state?.players?.length ?? 1;
+      const totalCards = (playerCount + 1) * 2;
+      for (let i = 0; i < totalCards; i++) {
+        setTimeout(() => playDealSound(), i * 120);
+      }
+    }
+    prevPhase = phase ?? null;
   });
 
   // Can double down: exactly 2 cards in active hand and enough chips
@@ -248,6 +325,13 @@
           <span class="chips-display">{myChips} chips</span>
         </div>
 
+        {#if bettingTimeLeft > 0}
+          <div class="countdown-bar">
+            <div class="countdown-fill" style="width: {(bettingTimeLeft / 20) * 100}%"></div>
+            <span class="countdown-text" class:countdown-urgent={bettingTimeLeft <= 5}>{bettingTimeLeft}s</span>
+          </div>
+        {/if}
+
         {#if betPlaced || myBet !== null}
           <div class="bet-confirmed">
             <span class="bet-confirmed-label geo-title">Bet placed:</span>
@@ -355,14 +439,14 @@
           <!-- Action buttons for my turn -->
           {#if isMyTurn && activeHand && !activeHand.stood && !activeHand.busted}
             <div class="action-buttons">
-              <button class="btn-action btn-hit" onclick={() => socket.send({ type: 'hit' })}>
+              <button class="btn-action btn-hit" onclick={() => { playDealSound(); socket.send({ type: 'hit' }); }}>
                 Hit
               </button>
               <button class="btn-action btn-stand" onclick={() => socket.send({ type: 'stand' })}>
                 Stand
               </button>
               {#if canDoubleDown}
-                <button class="btn-action btn-double" onclick={() => socket.send({ type: 'double_down' })}>
+                <button class="btn-action btn-double" onclick={() => { playDealSound(); socket.send({ type: 'double_down' }); }}>
                   Double
                 </button>
               {/if}
@@ -496,14 +580,12 @@
           <span class="next-bet-amount">{betInput}</span>
         </div>
 
-        {#if isHost}
-          <div class="action-bar">
-            <button class="btn-primary" onclick={() => socket.send({ type: 'next_round' })}>Deal Next Round</button>
-            <button class="btn-secondary" onclick={() => socket.send({ type: 'play_again' })}>Back to Lobby</button>
+        <div class="next-round-timer">
+          <span class="next-round-label">Next round in {nextRoundIn}s</span>
+          <div class="countdown-bar mini">
+            <div class="countdown-fill" style="width: {(nextRoundIn / 6) * 100}%"></div>
           </div>
-        {:else}
-          <p class="waiting-text">Waiting for host to deal...</p>
-        {/if}
+        </div>
 
         <button class="btn-secondary btn-leave" onclick={leaveGame}>Leave</button>
       </div>
@@ -1242,6 +1324,68 @@
   .btn-leave {
     align-self: center;
     min-width: 120px;
+  }
+
+  /* Countdown bar */
+  .countdown-bar {
+    position: relative;
+    width: 100%;
+    height: 28px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .countdown-bar.mini {
+    height: 6px;
+    margin-top: 0.25rem;
+  }
+
+  .countdown-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(74, 144, 217, 0.4), rgba(74, 144, 217, 0.25));
+    transition: width 0.2s linear;
+  }
+
+  .countdown-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    z-index: 1;
+  }
+
+  .countdown-urgent {
+    color: #e74c3c;
+    animation: pulse 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes pulse {
+    from { opacity: 1; }
+    to { opacity: 0.5; }
+  }
+
+  /* Next round timer */
+  .next-round-timer {
+    text-align: center;
+  }
+
+  .next-round-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
   }
 
   /* Game over */

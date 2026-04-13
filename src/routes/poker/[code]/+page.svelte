@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
-  import { isLoggedIn } from '$lib/auth';
+  import { isLoggedIn, userStats } from '$lib/auth';
   import { getGuestDisplayName } from '$lib/guest';
   import { fireWinConfetti } from '$lib/vfx';
   import Card from '$lib/components/cards/Card.svelte';
@@ -90,6 +90,78 @@
   let callAmount = $derived(Math.min(toCall, myChips));
   let minRaise = $derived(currentBet + bigBlindAmount);
   let maxRaise = $derived(myChips + myBet);
+
+  // Sync chips to nav bar
+  $effect(() => {
+    if (myChips !== undefined && myChips !== null) {
+      userStats.update(s => s ? { ...s, chips: myChips } : s);
+    }
+  });
+
+  // Client-side hand name evaluator
+  const RANK_VAL: Record<string, number> = {
+    '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14
+  };
+  const RANK_LABEL: Record<number, string> = {
+    2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K',14:'A'
+  };
+
+  function evaluateHandName(holeCards: {suit:string;rank:string}[], community: {suit:string;rank:string}[]): string {
+    const all = [...holeCards, ...community];
+    if (all.length < 2) return '';
+    const vals = all.map(c => RANK_VAL[c.rank] ?? 0).sort((a,b) => b - a);
+    const suits = all.map(c => c.suit);
+
+    // Count ranks
+    const counts = new Map<number, number>();
+    for (const v of vals) counts.set(v, (counts.get(v) ?? 0) + 1);
+    const groups = [...counts.entries()].sort((a,b) => b[1] - a[1] || b[0] - a[0]);
+
+    // Check flush (5+ of same suit)
+    const suitCounts = new Map<string, number>();
+    for (const s of suits) suitCounts.set(s, (suitCounts.get(s) ?? 0) + 1);
+    let flushSuit: string | null = null;
+    for (const [s, c] of suitCounts) { if (c >= 5) { flushSuit = s; break; } }
+
+    // Check straight (using unique sorted values)
+    const unique = [...new Set(vals)].sort((a,b) => a - b);
+    // Add low ace for A-2-3-4-5
+    if (unique.includes(14)) unique.unshift(1);
+    let straightHigh = 0;
+    for (let i = 0; i <= unique.length - 5; i++) {
+      if (unique[i+4] - unique[i] === 4) {
+        straightHigh = unique[i+4];
+      }
+    }
+
+    // Straight flush / royal flush
+    if (flushSuit && straightHigh) {
+      const flushCards = all.filter(c => c.suit === flushSuit);
+      const fv = [...new Set(flushCards.map(c => RANK_VAL[c.rank]))].sort((a,b) => a - b);
+      if (fv.includes(14)) fv.unshift(1);
+      let sfHigh = 0;
+      for (let i = 0; i <= fv.length - 5; i++) {
+        if (fv[i+4] - fv[i] === 4) sfHigh = fv[i+4];
+      }
+      if (sfHigh === 14) return 'Royal Flush';
+      if (sfHigh > 0) return 'Straight Flush';
+    }
+
+    if (groups[0][1] >= 4) return `Four of a Kind, ${RANK_LABEL[groups[0][0]]}s`;
+    if (groups[0][1] >= 3 && groups.length > 1 && groups[1][1] >= 2) return `Full House`;
+    if (flushSuit) return 'Flush';
+    if (straightHigh) return `Straight`;
+    if (groups[0][1] >= 3) return `Three of a Kind`;
+    if (groups[0][1] >= 2 && groups.length > 1 && groups[1][1] >= 2) return `Two Pair`;
+    if (groups[0][1] >= 2) return `Pair of ${RANK_LABEL[groups[0][0]]}s`;
+    return `High Card ${RANK_LABEL[groups[0][0]]}`;
+  }
+
+  let myHandName = $derived(
+    myHand.length >= 2 && !amIFolded
+      ? evaluateHandName(myHand, communityCards)
+      : ''
+  );
 
   // VFX: confetti on hand win
   let vfxFired = $state(false);
@@ -324,6 +396,9 @@
               <span class="no-cards">No cards dealt</span>
             {/if}
           </div>
+          {#if myHandName}
+            <div class="hand-name">{myHandName}</div>
+          {/if}
         </div>
 
         <!-- Showdown: reveal opponent hands -->
@@ -635,6 +710,16 @@
 
   .hole-cards.dimmed {
     opacity: 0.3;
+  }
+
+  .hand-name {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    text-align: center;
+    margin-top: 0.25rem;
   }
 
   .no-cards {

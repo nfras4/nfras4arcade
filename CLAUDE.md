@@ -204,3 +204,4 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 ## Recent deployments
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Add casino section with Blackjack, Roulette, chip shop, and multiplayer table lobby. Branch: `main`, commit: `23a385b`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Increase shop prices 3-4x, add hourly 50-chip claim, casino badges, game labels. Branch: `main`, commit: `7509f33`.
+- **2026-04-13** - Deployed to nfras4arcade. Summary: Nav chip claim buttons, registration security note. Branch: `main`, commit: `c2b5f77`.

@@ -90,6 +90,9 @@
     <p class="guest-note">
       Login is optional, but signing in lets us save your stats and helps us improve the game during development.
     </p>
+    <p class="security-note">
+      Your password is hashed using PBKDF2-SHA256 (industry standard) and stored securely in a Cloudflare D1 database. We never store plaintext passwords.
+    </p>
     <p class="auth-link">
       Already have an account? <a href="/login">Login</a>
     </p>
@@ -215,6 +218,15 @@
     line-height: 1.5;
     text-align: center;
     margin-top: 0.5rem;
+  }
+
+  .security-note {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    text-align: center;
+    margin-top: 0.25rem;
+    opacity: 0.7;
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }

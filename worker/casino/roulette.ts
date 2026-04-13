@@ -1,63 +1,54 @@
 import { CasinoRoom } from './casinoRoom';
 import type { CasinoAction, CasinoGameState } from './types';
 
-// European roulette: numbers 0-36
-const RED_NUMBERS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
-const BLACK_NUMBERS = new Set([2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35]);
-
-type BetType = 'straight' | 'split' | 'street' | 'corner' | 'red' | 'black' | 'odd' | 'even' | 'low' | 'high' | 'dozen' | 'column';
+type BetType = 'red' | 'black' | 'green';
 
 interface RouletteBet {
   type: BetType;
-  numbers: number[];
   amount: number;
 }
 
 interface RouletteTableState {
   playerBets: Record<string, RouletteBet[]>;
-  result: number | null;
-  history: number[];
+  result: string | null;
+  resultSlotIndex: number | null;
+  history: string[];
   payouts: Record<string, number> | null;
   betTotals: Record<string, number>;
+  bettingEndsAt: number;
+  displayEndsAt: number;
 }
 
 const PAYOUT_MULTIPLIERS: Record<BetType, number> = {
-  straight: 35,
-  split: 17,
-  street: 11,
-  corner: 8,
   red: 1,
   black: 1,
-  odd: 1,
-  even: 1,
-  low: 1,
-  high: 1,
-  dozen: 2,
-  column: 2,
+  green: 13,
 };
 
-// Valid number counts per bet type
-const VALID_BET_SIZES: Record<BetType, number> = {
-  straight: 1,
-  split: 2,
-  street: 3,
-  corner: 4,
-  red: 0,
-  black: 0,
-  odd: 0,
-  even: 0,
-  low: 0,
-  high: 0,
-  dozen: 0,
-  column: 0,
-};
+// 15-slot weighted array matching frontend strip pattern: 7 red, 7 black, 1 green
+const WHEEL: BetType[] = [
+  'red', 'black', 'red', 'black', 'red', 'black', 'red', 'black',
+  'red', 'black', 'red', 'black', 'red', 'green', 'black',
+];
+
+const VALID_BET_TYPES = new Set<string>(['red', 'black', 'green']);
+const BETTING_DURATION_MS = 30_000;
+const RESULT_DISPLAY_MS = 8_000;
+const DEFAULT_BUY_IN = 1000;
+const DISCONNECT_TIMEOUT_MS = 30_000;
+const ROOM_EXPIRY_MS = 30 * 60 * 1000;
 
 export class RouletteRoom extends CasinoRoom {
   protected get gameType(): string { return 'roulette'; }
-  protected get maxSeats(): number { return 20; }
+  protected get maxSeats(): number { return 50; }
 
   private getTable(): RouletteTableState {
-    return (this.tableState as RouletteTableState) ?? this.defaultTable();
+    if (!this.tableState) return this.defaultTable();
+    const ts = this.tableState as any;
+    // Ensure new fields have defaults for backward compatibility
+    if (ts.bettingEndsAt === undefined) ts.bettingEndsAt = 0;
+    if (ts.displayEndsAt === undefined) ts.displayEndsAt = 0;
+    return ts as RouletteTableState;
   }
 
   private setTable(table: RouletteTableState): void {
@@ -68,9 +59,12 @@ export class RouletteRoom extends CasinoRoom {
     return {
       playerBets: {},
       result: null,
+      resultSlotIndex: null,
       history: [],
       payouts: null,
       betTotals: {},
+      bettingEndsAt: 0,
+      displayEndsAt: 0,
     };
   }
 
@@ -78,9 +72,72 @@ export class RouletteRoom extends CasinoRoom {
     const ts = this.getTable();
     ts.playerBets = {};
     ts.result = null;
+    ts.resultSlotIndex = null;
     ts.payouts = null;
     ts.betTotals = {};
     this.setTable(ts);
+  }
+
+  // Override: always allow joining (single shared table, no spectators)
+  protected async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+    const existing = this.players.get(playerId);
+
+    if (existing) {
+      existing.connected = true;
+      this.disconnectTimestamps.delete(playerId);
+      this.sendToWs(ws, {
+        type: 'joined',
+        playerId,
+        state: this.getGameStateForPlayer(playerId),
+      });
+      this.broadcastState();
+      await this.saveState();
+      return;
+    }
+
+    if (this.players.size >= this.maxSeats) {
+      this.sendToWs(ws, { type: 'error', message: 'Table is full' });
+      return;
+    }
+
+    const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
+    const name = storedName || 'Player';
+    const chips = await this.ctx.storage.get<number>(`chips:${playerId}`) ?? DEFAULT_BUY_IN;
+    const isGuest = await this.ctx.storage.get<boolean>(`guest:${playerId}`) ?? playerId.startsWith('guest_');
+    const isHost = this.players.size === 0 || !this.hostId;
+
+    const player = { id: playerId, name, connected: true, isHost, chips, isGuest };
+    this.players.set(playerId, player);
+    if (isHost) this.hostId = playerId;
+
+    // Auto-start game when first player joins an idle table
+    if (this.phase === 'lobby') {
+      this.phase = 'betting';
+      this.roundNumber = 1;
+      this.initRound();
+      const ts = this.getTable();
+      ts.bettingEndsAt = Date.now() + BETTING_DURATION_MS;
+      this.setTable(ts);
+
+      try {
+        this.gameSessionId = crypto.randomUUID();
+        const now = Math.floor(Date.now() / 1000);
+        await this.env.DB.prepare(
+          'INSERT INTO game_sessions (id, game_type, room_code, player_count, started_at) VALUES (?, ?, ?, ?, ?)'
+        ).bind(this.gameSessionId, this.gameType, this.code, this.players.size, now).run();
+      } catch {}
+
+      await this.scheduleNextAlarm();
+    }
+
+    await this.updateTableRegistry();
+    this.sendToWs(ws, {
+      type: 'joined',
+      playerId,
+      state: this.getGameStateForPlayer(playerId),
+    });
+    this.broadcastState();
+    await this.saveState();
   }
 
   protected async handlePlayerAction(playerId: string, action: CasinoAction): Promise<void> {
@@ -92,13 +149,13 @@ export class RouletteRoom extends CasinoRoom {
         return;
       }
 
-      const bet = action as CasinoAction & { bet: RouletteBet };
-      if (!bet.bet || !this.validateBet(bet.bet)) {
+      const bet = (action as CasinoAction & { bet: RouletteBet }).bet;
+      if (!bet || !this.validateBet(bet)) {
         this.sendTo(playerId, { type: 'error', message: 'Invalid bet' });
         return;
       }
 
-      if (!this.placeBet(playerId, bet.bet.amount)) {
+      if (!this.placeBet(playerId, bet.amount)) {
         this.sendTo(playerId, { type: 'error', message: 'Insufficient chips' });
         return;
       }
@@ -107,8 +164,8 @@ export class RouletteRoom extends CasinoRoom {
         ts.playerBets[playerId] = [];
         ts.betTotals[playerId] = 0;
       }
-      ts.playerBets[playerId].push(bet.bet);
-      ts.betTotals[playerId] += bet.bet.amount;
+      ts.playerBets[playerId].push(bet);
+      ts.betTotals[playerId] += bet.amount;
       this.setTable(ts);
       this.broadcastState();
       return;
@@ -118,7 +175,6 @@ export class RouletteRoom extends CasinoRoom {
       if (this.phase !== 'betting') return;
       const bets = ts.playerBets[playerId];
       if (bets) {
-        // Refund all bets
         const total = bets.reduce((sum, b) => sum + b.amount, 0);
         this.awardChips(playerId, total);
         delete ts.playerBets[playerId];
@@ -128,181 +184,36 @@ export class RouletteRoom extends CasinoRoom {
       }
       return;
     }
-
-    if (action.type === 'spin') {
-      if (this.phase !== 'betting') return;
-      if (playerId !== this.hostId) {
-        this.sendTo(playerId, { type: 'error', message: 'Only the host can spin' });
-        return;
-      }
-
-      // Need at least one bet placed
-      const hasBets = Object.keys(ts.playerBets).length > 0;
-      if (!hasBets) {
-        this.sendTo(playerId, { type: 'error', message: 'No bets placed' });
-        return;
-      }
-
-      this.phase = 'resolving';
-      this.setTable(ts);
-      this.broadcastState();
-
-      await this.resolveRound();
-      this.setTable(ts);
-      this.broadcastState();
-      return;
-    }
   }
 
   private validateBet(bet: RouletteBet): boolean {
-    if (!bet.type || bet.amount < this.minBet) return false;
-    if (!(bet.type in PAYOUT_MULTIPLIERS)) return false;
-
-    const expectedSize = VALID_BET_SIZES[bet.type];
-
-    // For outside bets, numbers array is ignored
-    if (expectedSize === 0) {
-      return true;
-    }
-
-    if (!Array.isArray(bet.numbers) || bet.numbers.length !== expectedSize) return false;
-
-    // Validate all numbers are 0-36
-    for (const n of bet.numbers) {
-      if (typeof n !== 'number' || n < 0 || n > 36 || !Number.isInteger(n)) return false;
-    }
-
-    // Validate specific bet type constraints
-    switch (bet.type) {
-      case 'straight':
-        return true;
-      case 'split':
-        return this.isAdjacentPair(bet.numbers[0], bet.numbers[1]);
-      case 'street':
-        return this.isValidStreet(bet.numbers);
-      case 'corner':
-        return this.isValidCorner(bet.numbers);
-      default:
-        return true;
-    }
+    if (!bet.type || !VALID_BET_TYPES.has(bet.type)) return false;
+    if (bet.amount < this.minBet) return false;
+    return true;
   }
 
-  private isAdjacentPair(a: number, b: number): boolean {
-    if (a === 0 || b === 0) return (a <= 3 && b <= 3); // 0 pairs with 1,2,3
-    const min = Math.min(a, b);
-    const max = Math.max(a, b);
-    // Horizontal adjacency (same row)
-    if (max - min === 1 && Math.ceil(min / 3) === Math.ceil(max / 3)) return true;
-    // Vertical adjacency
-    if (max - min === 3) return true;
-    return false;
-  }
-
-  private isValidStreet(nums: number[]): boolean {
-    const sorted = [...nums].sort((a, b) => a - b);
-    if (sorted[0] === 0) return false; // no street with 0
-    // Street: 3 consecutive numbers in a row (1-3, 4-6, 7-9, ...)
-    return sorted[0] % 3 === 1 && sorted[1] === sorted[0] + 1 && sorted[2] === sorted[0] + 2;
-  }
-
-  private isValidCorner(nums: number[]): boolean {
-    if (nums.includes(0)) return false;
-    const sorted = [...nums].sort((a, b) => a - b);
-    // Corner: 4 numbers forming a 2x2 block on the grid
-    const base = sorted[0];
-    if (base % 3 === 0) return false; // rightmost column can't be top-left of corner
-    return (
-      sorted[1] === base + 1 &&
-      sorted[2] === base + 3 &&
-      sorted[3] === base + 4
-    );
-  }
-
-  private getWinningNumbers(result: number, betType: BetType): Set<number> {
-    switch (betType) {
-      case 'red': return RED_NUMBERS;
-      case 'black': return BLACK_NUMBERS;
-      case 'odd': {
-        const s = new Set<number>();
-        for (let i = 1; i <= 36; i += 2) s.add(i);
-        return s;
-      }
-      case 'even': {
-        const s = new Set<number>();
-        for (let i = 2; i <= 36; i += 2) s.add(i);
-        return s;
-      }
-      case 'low': {
-        const s = new Set<number>();
-        for (let i = 1; i <= 18; i++) s.add(i);
-        return s;
-      }
-      case 'high': {
-        const s = new Set<number>();
-        for (let i = 19; i <= 36; i++) s.add(i);
-        return s;
-      }
-      case 'dozen': {
-        // Determined by bet.numbers content at resolve time, not here
-        return new Set<number>();
-      }
-      case 'column': {
-        return new Set<number>();
-      }
-      default:
-        return new Set<number>();
-    }
-  }
-
-  private doesBetWin(bet: RouletteBet, result: number): boolean {
-    if (result === 0) {
-      // 0 only wins straight bets on 0
-      return bet.type === 'straight' && bet.numbers[0] === 0;
-    }
-
-    switch (bet.type) {
-      case 'straight':
-      case 'split':
-      case 'street':
-      case 'corner':
-        return bet.numbers.includes(result);
-      case 'red':
-        return RED_NUMBERS.has(result);
-      case 'black':
-        return BLACK_NUMBERS.has(result);
-      case 'odd':
-        return result % 2 === 1;
-      case 'even':
-        return result % 2 === 0;
-      case 'low':
-        return result >= 1 && result <= 18;
-      case 'high':
-        return result >= 19 && result <= 36;
-      case 'dozen': {
-        // Numbers field indicates which dozen: [1]=1st, [2]=2nd, [3]=3rd
-        const dozenNum = bet.numbers[0];
-        if (dozenNum === 1) return result >= 1 && result <= 12;
-        if (dozenNum === 2) return result >= 13 && result <= 24;
-        if (dozenNum === 3) return result >= 25 && result <= 36;
-        return false;
-      }
-      case 'column': {
-        // Numbers field indicates column: [1]=1st, [2]=2nd, [3]=3rd
-        const col = bet.numbers[0];
-        return result % 3 === (col % 3); // col 1: r%3==1, col 2: r%3==2, col 3: r%3==0
-      }
-      default:
-        return false;
-    }
+  protected async startNewRound(): Promise<void> {
+    this.roundNumber++;
+    this.phase = 'betting';
+    this.initRound();
+    const ts = this.getTable();
+    ts.bettingEndsAt = Date.now() + BETTING_DURATION_MS;
+    ts.displayEndsAt = 0;
+    this.setTable(ts);
+    this.broadcastState();
+    await this.scheduleNextAlarm();
   }
 
   protected async resolveRound(): Promise<void> {
     const ts = this.getTable();
 
-    // Generate random result (0-36) using crypto
+    // Pick random slot from 15-element weighted wheel
     const randomBytes = crypto.getRandomValues(new Uint32Array(1));
-    ts.result = randomBytes[0] % 37;
+    const slotIndex = randomBytes[0] % 15;
+    const result = WHEEL[slotIndex];
 
+    ts.result = result;
+    ts.resultSlotIndex = slotIndex;
     ts.payouts = {};
     const profitedPlayers: string[] = [];
 
@@ -310,9 +221,9 @@ export class RouletteRoom extends CasinoRoom {
       let totalPayout = 0;
 
       for (const bet of bets) {
-        if (this.doesBetWin(bet, ts.result)) {
+        if (bet.type === result) {
           const multiplier = PAYOUT_MULTIPLIERS[bet.type];
-          const payout = bet.amount + bet.amount * multiplier; // original bet + winnings
+          const payout = bet.amount + bet.amount * multiplier;
           totalPayout += payout;
         }
       }
@@ -325,7 +236,7 @@ export class RouletteRoom extends CasinoRoom {
     }
 
     // Track history (last 20 results)
-    ts.history.unshift(ts.result);
+    ts.history.unshift(result);
     if (ts.history.length > 20) ts.history.pop();
 
     // Roulette winner badge
@@ -357,11 +268,130 @@ export class RouletteRoom extends CasinoRoom {
     }
 
     this.phase = 'round_over';
+    ts.bettingEndsAt = 0;
+    ts.displayEndsAt = Date.now() + RESULT_DISPLAY_MS;
     this.setTable(ts);
 
     await this.persistChips();
     await this.recordCasinoRound(profitedPlayers);
     await this.updateTableRegistry();
+  }
+
+  // Override alarm to handle roulette auto-timers + disconnect + expiry
+  async alarm(): Promise<void> {
+    await this.loadState();
+    const now = Date.now();
+
+    // Keep room alive while players are connected
+    if (this.players.size > 0) {
+      this.lastActivity = now;
+    }
+
+    // Auto-spin when betting timer expires
+    if (this.phase === 'betting' && this.players.size > 0) {
+      const ts = this.getTable();
+      if (ts.bettingEndsAt > 0 && now >= ts.bettingEndsAt) {
+        const hasBets = Object.keys(ts.playerBets).length > 0;
+        if (hasBets) {
+          this.phase = 'resolving';
+          this.broadcastState();
+          await this.resolveRound();
+          this.broadcastState();
+        } else {
+          // No bets placed, restart betting timer
+          ts.bettingEndsAt = now + BETTING_DURATION_MS;
+          this.setTable(ts);
+          this.broadcastState();
+        }
+        await this.saveState();
+      }
+    }
+
+    // Auto-advance from round_over to next betting round
+    if (this.phase === 'round_over' && this.players.size > 0) {
+      const ts = this.getTable();
+      if (ts.displayEndsAt > 0 && now >= ts.displayEndsAt) {
+        await this.startNewRound();
+        await this.saveState();
+      }
+    }
+
+    // Disconnect timeout handling
+    if (this.disconnectTimestamps.size > 0) {
+      const nowSec = Math.floor(now / 1000);
+      const stmts: D1PreparedStatement[] = [];
+
+      for (const [pid, dcTime] of this.disconnectTimestamps) {
+        if (now - dcTime >= DISCONNECT_TIMEOUT_MS) {
+          this.disconnectTimestamps.delete(pid);
+          const player = this.players.get(pid);
+          if (player) {
+            if (!player.isGuest && !pid.startsWith('guest_')) {
+              stmts.push(
+                this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
+                  .bind(player.chips, nowSec, pid)
+              );
+            }
+            this.players.delete(pid);
+            if (pid === this.hostId && this.players.size > 0) {
+              const newHost = this.players.values().next().value!;
+              newHost.isHost = true;
+              this.hostId = newHost.id;
+            }
+          }
+        }
+      }
+
+      if (stmts.length > 0) {
+        try { await this.env.DB.batch(stmts); } catch {}
+      }
+
+      if (this.players.size === 0) {
+        this.phase = 'lobby';
+        this.tableState = null;
+        await this.removeTableRegistry();
+      } else {
+        await this.updateTableRegistry();
+        this.broadcastState();
+      }
+
+      await this.saveState();
+    }
+
+    // Room expiry (only when no players)
+    if (this.players.size === 0 && now - this.lastActivity > ROOM_EXPIRY_MS) {
+      try {
+        await this.env.DB.prepare('DELETE FROM casino_tables WHERE code = ?').bind(this.code).run();
+      } catch {}
+      for (const ws of this.ctx.getWebSockets()) {
+        try {
+          this.sendToWs(ws, { type: 'error', message: 'Room expired' });
+          ws.close(1000, 'Room expired');
+        } catch {}
+      }
+      await this.ctx.storage.deleteAll();
+      return;
+    }
+
+    await this.scheduleNextAlarm();
+  }
+
+  private async scheduleNextAlarm(): Promise<void> {
+    const now = Date.now();
+    let soonest = this.lastActivity + ROOM_EXPIRY_MS;
+    const ts = this.getTable();
+
+    if (this.phase === 'betting' && ts.bettingEndsAt > 0) {
+      soonest = Math.min(soonest, ts.bettingEndsAt);
+    }
+    if (this.phase === 'round_over' && ts.displayEndsAt > 0) {
+      soonest = Math.min(soonest, ts.displayEndsAt);
+    }
+    for (const dcTs of this.disconnectTimestamps.values()) {
+      soonest = Math.min(soonest, dcTs + DISCONNECT_TIMEOUT_MS);
+    }
+
+    await this.ctx.storage.setAlarm(Math.max(soonest, now + 100));
   }
 
   protected getGameStateForPlayer(playerId: string): CasinoGameState {
@@ -386,9 +416,12 @@ export class RouletteRoom extends CasinoRoom {
         myBets: ts.playerBets[playerId] ?? [],
         myBetTotal: ts.betTotals[playerId] ?? 0,
         result: ts.result,
+        resultSlotIndex: ts.resultSlotIndex,
         history: ts.history,
         payouts: ts.payouts,
         totalBettors: Object.keys(ts.playerBets).length,
+        bettingEndsAt: ts.bettingEndsAt,
+        displayEndsAt: ts.displayEndsAt,
       },
     };
   }

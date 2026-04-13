@@ -13,12 +13,14 @@
     selected = false,
     disabled = false,
     onclick = undefined,
+    dealDelay = 0,
   }: {
     card?: { suit: string; rank: string } | null;
     faceUp?: boolean;
     selected?: boolean;
     disabled?: boolean;
     onclick?: (() => void) | undefined;
+    dealDelay?: number;
   } = $props();
 
   let isRed = $derived(card?.suit === 'hearts' || card?.suit === 'diamonds');
@@ -32,6 +34,8 @@
     class:selected
     class:disabled
     class:red={isRed && faceUp}
+    class:deal-animate={dealDelay > 0}
+    style={dealDelay > 0 ? `animation-delay: ${dealDelay}ms` : ''}
     {disabled}
     onclick={onclick}
   >
@@ -48,6 +52,8 @@
     class:face-down={!faceUp}
     class:selected
     class:red={isRed && faceUp}
+    class:deal-animate={dealDelay > 0}
+    style={dealDelay > 0 ? `animation-delay: ${dealDelay}ms` : ''}
   >
     {#if faceUp && card}
       <span class="rank">{card.rank}</span>
@@ -138,6 +144,21 @@
 
   .red .rank { color: #e63232; }
   .red .suit-icon { fill: #e63232; }
+
+  @keyframes dealIn {
+    from {
+      opacity: 0;
+      transform: translateY(-30px) scale(0.8);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .deal-animate {
+    animation: dealIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
 </style>

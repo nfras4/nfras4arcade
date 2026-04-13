@@ -16,6 +16,7 @@
   let reconnecting = $state(true);
   let betInput = $state(25);
   let betPlaced = $state(false);
+  let hasPlayedRound = $state(false);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   $effect(() => {
@@ -29,6 +30,9 @@
         // Reset bet placed flag when a new round starts
         if (msg.state?.phase === 'betting') {
           betPlaced = false;
+        }
+        if (msg.state?.phase === 'round_over') {
+          hasPlayedRound = true;
         }
       } else if (msg.type === 'error') {
         error.set(msg.message);
@@ -76,6 +80,13 @@
   let minBet = $derived(state?.minBet ?? 10);
   let maxBet = $derived(state?.maxBet ?? 500);
 
+  // Auto-place bet when returning to betting phase after a round
+  $effect(() => {
+    if (state?.phase === 'betting' && hasPlayedRound && !betPlaced && betInput >= minBet && betInput <= myChips) {
+      placeBet();
+    }
+  });
+
   // Can double down: exactly 2 cards in active hand and enough chips
   let canDoubleDown = $derived(
     isMyTurn &&
@@ -106,8 +117,10 @@
       if (card.rank === 'A') {
         aces++;
         total += 11;
+      } else if (card.rank === 'K' || card.rank === 'Q' || card.rank === 'J') {
+        total += 10;
       } else {
-        total += card.value ?? 10;
+        total += parseInt(card.rank, 10);
       }
     }
     while (total > 21 && aces > 0) {
@@ -298,7 +311,7 @@
           </div>
           <div class="card-row">
             {#each dealerHand as card, i}
-              <Card {card} faceUp={dealerRevealed || i === 0} />
+              <Card {card} faceUp={dealerRevealed || i === 0} dealDelay={i * 120} />
             {/each}
             {#if dealerHand.length === 0}
               <span class="no-cards">Waiting for deal...</span>
@@ -331,8 +344,8 @@
                   {#if hand.doubled}<span class="hand-status">2x</span>{/if}
                 </div>
                 <div class="card-row">
-                  {#each hand.cards as card}
-                    <Card {card} faceUp={true} />
+                  {#each hand.cards as card, i}
+                    <Card {card} faceUp={true} dealDelay={i * 120} />
                   {/each}
                 </div>
               </div>
@@ -391,8 +404,8 @@
                       <div class="other-hand-row">
                         {#if theirHands.length > 1}<span class="hand-index-small">H{hi + 1}</span>{/if}
                         <div class="other-cards">
-                          {#each hand.cards as card}
-                            <Card {card} faceUp={true} />
+                          {#each hand.cards as card, i}
+                            <Card {card} faceUp={true} dealDelay={i * 100} />
                           {/each}
                         </div>
                         <span class="hand-value-small" class:bust={handValue(hand) > 21}>
@@ -426,8 +439,8 @@
             {/if}
           </div>
           <div class="card-row">
-            {#each dealerHand as card}
-              <Card {card} faceUp={true} />
+            {#each dealerHand as card, i}
+              <Card {card} faceUp={true} dealDelay={i * 80} />
             {/each}
           </div>
         </div>
@@ -450,8 +463,8 @@
                 <div class="result-hand-row">
                   {#if theirHands.length > 1}<span class="hand-index-small">H{hi + 1}</span>{/if}
                   <div class="result-cards">
-                    {#each hand.cards as card}
-                      <Card {card} faceUp={true} />
+                    {#each hand.cards as card, i}
+                      <Card {card} faceUp={true} dealDelay={i * 80} />
                     {/each}
                   </div>
                   {#if playerResults[hi]}
@@ -465,13 +478,31 @@
           {/each}
         </div>
 
+        <!-- Inline bet adjuster for next round -->
+        <div class="next-bet-strip">
+          <span class="next-bet-label geo-title">Next Bet</span>
+          <div class="next-bet-presets">
+            {#each BET_PRESETS as preset}
+              <button
+                class="preset-btn preset-sm"
+                class:active={betInput === preset}
+                onclick={() => setBetPreset(preset)}
+                disabled={preset > myChips || preset < minBet || preset > maxBet}
+              >
+                {preset}
+              </button>
+            {/each}
+          </div>
+          <span class="next-bet-amount">{betInput}</span>
+        </div>
+
         {#if isHost}
           <div class="action-bar">
-            <button class="btn-primary" onclick={() => socket.send({ type: 'next_round' })}>Next Round</button>
+            <button class="btn-primary" onclick={() => socket.send({ type: 'next_round' })}>Deal Next Round</button>
             <button class="btn-secondary" onclick={() => socket.send({ type: 'play_again' })}>Back to Lobby</button>
           </div>
         {:else}
-          <p class="waiting-text">Waiting for host...</p>
+          <p class="waiting-text">Waiting for host to deal...</p>
         {/if}
 
         <button class="btn-secondary btn-leave" onclick={leaveGame}>Leave</button>
@@ -1153,6 +1184,46 @@
     background: var(--bg-input);
     color: var(--text-muted);
     border: 1px solid var(--border);
+  }
+
+  /* Next bet strip (inline in round_over) */
+  .next-bet-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    flex-wrap: wrap;
+  }
+
+  .next-bet-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .next-bet-presets {
+    display: flex;
+    gap: 0.25rem;
+    flex: 1;
+    flex-wrap: wrap;
+  }
+
+  .preset-sm {
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  .next-bet-amount {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #f39c12;
+    min-width: 36px;
+    text-align: right;
   }
 
   /* Action bar */

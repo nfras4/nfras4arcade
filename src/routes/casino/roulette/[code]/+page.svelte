@@ -4,6 +4,7 @@
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
   import { isLoggedIn } from '$lib/auth';
+  import { fireWinConfetti } from '$lib/vfx';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/roulette');
@@ -16,23 +17,74 @@
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   // Bet interaction state
-  let selectedChip = $state(10);
-  let spinning = $state(false);
-  let spinComplete = $state(false);
-  let wheelDeg = $state(0);
-  let prevResult = $state<number | null>(null);
+  let betAmount = $state(10);
+  let sliding = $state(false);
+  let stripOffset = $state(0);
+  let showResult = $state(false);
+  let displayedChips = $state(0);
+  let chipAnimating = $state(false);
 
-  const CHIP_VALUES = [1, 5, 10, 25, 50, 100];
+  // Countdown timers
+  let timeLeft = $state(0);
+  let nextRoundIn = $state(0);
 
-  const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
-
-  function numberColor(n: number): 'green' | 'red' | 'black' {
-    if (n === 0) return 'green';
-    return RED_NUMBERS.has(n) ? 'red' : 'black';
+  // Tick SFX using Web Audio API
+  let audioCtx: AudioContext | null = null;
+  function playTick() {
+    try {
+      if (!audioCtx) audioCtx = new AudioContext();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = 800 + Math.random() * 400;
+      osc.type = 'square';
+      gain.gain.value = 0.06;
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.04);
+    } catch {}
   }
 
-  // European wheel number order (for visual segment positioning)
-  const WHEEL_ORDER = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+  function startTickSfx() {
+    let count = 0;
+    const maxTicks = 40;
+    function tick() {
+      if (count >= maxTicks || !sliding) return;
+      playTick();
+      count++;
+      const delay = 40 + (count / maxTicks) * 160;
+      setTimeout(tick, delay);
+    }
+    tick();
+  }
+
+  // Animate chip count up/down
+  function animateChips(target: number) {
+    const start = displayedChips;
+    const diff = target - start;
+    if (diff === 0) return;
+    chipAnimating = true;
+    const steps = 20;
+    const stepTime = 40;
+    let step = 0;
+    function frame() {
+      step++;
+      displayedChips = Math.round(start + (diff * step) / steps);
+      if (step < steps) {
+        setTimeout(frame, stepTime);
+      } else {
+        displayedChips = target;
+        chipAnimating = false;
+      }
+    }
+    frame();
+  }
+
+  const STRIP_PATTERN = ['red','black','red','black','red','black','red','black','red','black','red','black','red','green','black'];
+  const SEGMENT_WIDTH = 56;
+  const REPETITIONS = 10;
+  const TOTAL_SEGMENTS = STRIP_PATTERN.length * REPETITIONS;
 
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
@@ -65,100 +117,157 @@
     }
   });
 
-  // Trigger wheel spin animation when result arrives
+  const SEGMENT_GAP = 6;
+  const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP;
+  let prevPhase = $state<string | null>(null);
+
+  // Trigger strip slide animation when result arrives
   $effect(() => {
-    const result = state?.tableState?.result;
-    if (result !== null && result !== undefined && result !== prevResult && state?.phase === 'round_over') {
-      prevResult = result;
-      spinning = true;
-      spinComplete = false;
-      // Calculate target angle: find position of result number in wheel order
-      const idx = WHEEL_ORDER.indexOf(result);
-      const segAngle = 360 / WHEEL_ORDER.length;
-      // Add several full rotations + land on the segment
-      const targetOffset = 360 - (idx * segAngle + segAngle / 2);
-      wheelDeg = (wheelDeg % 360) + 1800 + targetOffset;
+    const slotIndex = state?.tableState?.resultSlotIndex;
+    const phase = state?.phase;
+    if (slotIndex !== null && slotIndex !== undefined && phase === 'round_over' && !sliding && prevPhase !== 'round_over') {
+      sliding = true;
+      showResult = false;
+      prevPhase = 'round_over';
+      // Land on segment in a random middle repetition for visual variety
+      const rep = 4 + Math.floor(Math.random() * 3);
+      const targetSeg = rep * STRIP_PATTERN.length + slotIndex;
+      const viewport = document.querySelector('.strip-viewport');
+      const containerCenter = viewport ? viewport.clientWidth / 2 : 250;
+      stripOffset = targetSeg * SEGMENT_STEP + SEGMENT_WIDTH / 2 - containerCenter;
+      // Start tick SFX
+      startTickSfx();
+      // Show result + VFX after spin completes
       setTimeout(() => {
-        spinning = false;
-        spinComplete = true;
+        sliding = false;
+        showResult = true;
+        // Check if we won and fire VFX
+        const payout = myPayout();
+        if (payout > 0) {
+          fireWinConfetti();
+        }
+        // Animate chip count
+        animateChips(myChips);
       }, 3200);
     }
-    if (state?.phase === 'betting') {
-      spinComplete = false;
+    if (phase === 'betting') {
+      showResult = false;
+      prevPhase = 'betting';
+      stripOffset = 0;
+      // Sync displayed chips without animation
+      displayedChips = myChips;
+    }
+  });
+
+  // Initialize displayedChips when first connected
+  $effect(() => {
+    if (myChips > 0 && displayedChips === 0 && !chipAnimating) {
+      displayedChips = myChips;
+    }
+  });
+
+  // Betting countdown timer
+  $effect(() => {
+    if (state?.phase === 'betting' && ts?.bettingEndsAt > 0) {
+      const endAt = ts.bettingEndsAt;
+      const update = () => {
+        timeLeft = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      };
+      update();
+      const interval = setInterval(update, 200);
+      return () => clearInterval(interval);
+    } else {
+      timeLeft = 0;
+    }
+  });
+
+  // Next round countdown timer
+  $effect(() => {
+    if (state?.phase === 'round_over' && ts?.displayEndsAt > 0 && showResult) {
+      const endAt = ts.displayEndsAt;
+      const update = () => {
+        nextRoundIn = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      };
+      update();
+      const interval = setInterval(update, 200);
+      return () => clearInterval(interval);
+    } else {
+      nextRoundIn = 0;
     }
   });
 
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
-  let isHost = $derived(state?.players?.find((p: any) => p.id === pid)?.isHost ?? false);
   let ts = $derived(state?.tableState);
-  let myBets = $derived((ts?.myBets ?? []) as { type: string; numbers: number[]; amount: number }[]);
+  let myBets = $derived((ts?.myBets ?? []) as { type: string; amount: number }[]);
   let myBetTotal = $derived(ts?.myBetTotal ?? 0);
-  let result = $derived(ts?.result as number | null);
-  let history = $derived((ts?.history ?? []) as number[]);
+  let result = $derived(ts?.result as string | null);
+  let history = $derived((ts?.history ?? []) as string[]);
   let payouts = $derived(ts?.payouts as Record<string, number> | null);
   let myChips = $derived(state?.players?.find((p: any) => p.id === pid)?.chips ?? 0);
 
-  function placeBet(type: string, numbers: number[]) {
+  // Hide newest history entry during spin animation (prevents spoiling result)
+  let visibleHistory = $derived(
+    state?.phase === 'round_over' && !showResult && result
+      ? history.slice(1)
+      : history
+  );
+
+  let historyStats = $derived({
+    red: visibleHistory.filter((h: string) => h === 'red').length,
+    black: visibleHistory.filter((h: string) => h === 'black').length,
+    green: visibleHistory.filter((h: string) => h === 'green').length,
+  });
+
+  // Per-color bets from all players
+  let allBetsByColor = $derived(() => {
+    const playerBets = ts?.playerBets as Record<string, { type: string; amount: number }[]> | undefined;
+    const players = state?.players as { id: string; name: string }[] | undefined;
+    if (!playerBets || !players) return { red: [] as { name: string; amount: number }[], black: [] as { name: string; amount: number }[], green: [] as { name: string; amount: number }[] };
+    const nameMap = new Map(players.map((p: any) => [p.id, p.name]));
+    const result: Record<string, { name: string; amount: number }[]> = { red: [], black: [], green: [] };
+    for (const [playerId, bets] of Object.entries(playerBets)) {
+      const name = nameMap.get(playerId) ?? 'Player';
+      const totals: Record<string, number> = {};
+      for (const b of bets) {
+        totals[b.type] = (totals[b.type] ?? 0) + b.amount;
+      }
+      for (const [color, amount] of Object.entries(totals)) {
+        if (result[color]) result[color].push({ name, amount });
+      }
+    }
+    return result;
+  });
+
+  function betOnColor(color: string): number {
+    return myBets
+      .filter(b => b.type === color)
+      .reduce((sum, b) => sum + b.amount, 0);
+  }
+
+  function placeBet(color: string) {
     if (state?.phase !== 'betting') return;
-    socket.send({ type: 'place_bet', bet: { type, numbers, amount: selectedChip } });
+    if (betAmount < 1 || betAmount > myChips) return;
+    socket.send({ type: 'place_bet', bet: { type: color, amount: betAmount } });
+  }
+
+  function adjustBet(delta: number) {
+    betAmount = Math.max(1, Math.min(myChips, betAmount + delta));
+  }
+
+  function multiplyBet(factor: number) {
+    betAmount = Math.max(1, Math.min(myChips, Math.floor(betAmount * factor)));
   }
 
   function clearBets() {
     socket.send({ type: 'clear_bets' });
   }
 
-  function spin() {
-    socket.send({ type: 'spin' });
-  }
-
-  function nextRound() {
-    socket.send({ type: 'next_round' });
-  }
-
-  function playAgain() {
-    socket.send({ type: 'play_again' });
-  }
-
   function leaveGame() {
     socket.send({ type: 'leave' });
     socket.disconnect();
     gameState.set(null);
-    goto('/casino/roulette');
-  }
-
-  function startGame() {
-    socket.send({ type: 'start_game' });
-  }
-
-  // Check if a number has a bet on it
-  function betOnNumber(n: number): number {
-    return myBets
-      .filter(b => b.type === 'straight' && b.numbers[0] === n)
-      .reduce((sum, b) => sum + b.amount, 0);
-  }
-
-  function betOnType(type: string): number {
-    return myBets
-      .filter(b => b.type === type)
-      .reduce((sum, b) => sum + b.amount, 0);
-  }
-
-  // Roulette grid layout: 3 columns x 12 rows (numbers 1-36), 0 spans top
-  // Column mapping: col 1 = 1,4,7,...,34; col 2 = 2,5,8,...,35; col 3 = 3,6,9,...,36
-  function gridRow(n: number): number {
-    return Math.ceil(n / 3);
-  }
-  function gridCol(n: number): number {
-    return ((n - 1) % 3) + 1;
-  }
-
-  const ROWS = Array.from({ length: 12 }, (_, i) => i + 1); // rows 1-12
-  const COLS = [1, 2, 3];
-
-  function numbersInRow(row: number): number[] {
-    // row 1 = 1,2,3; row 2 = 4,5,6 etc
-    return [(row - 1) * 3 + 1, (row - 1) * 3 + 2, (row - 1) * 3 + 3];
+    goto('/casino');
   }
 
   function myPayout(): number {
@@ -178,368 +287,199 @@
     </div>
   {:else}
 
-    <!-- LOBBY -->
-    {#if state.phase === 'lobby'}
-      <div class="phase-panel">
-        <h2 class="geo-title phase-title">Roulette Lobby</h2>
-        <div class="room-code-strip">
-          <span class="room-code-label">Room</span>
-          <span class="room-code-val">{state.code}</span>
+    <div class="game-layout">
+
+      <!-- Top bar -->
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <button class="leave-btn" onclick={leaveGame}>Leave</button>
         </div>
-        <div class="player-list">
+        <div class="player-chips-strip">
           {#each state.players as player}
-            <div class="player-item" class:disconnected={!player.connected}>
-              <span class="player-name">{player.name}</span>
-              {#if player.isHost}<span class="host-badge">HOST</span>{/if}
-              {#if !player.connected}<span class="dc-badge">DC</span>{/if}
-              <span class="chip-count">{player.chips ?? 1000} chips</span>
+            <div class="player-chip-item" class:disconnected={!player.connected}>
+              <span class="pci-name">{player.name}</span>
+              <span class="pci-chips">{player.chips ?? 0}</span>
             </div>
           {/each}
         </div>
-        <p class="player-count">{state.players.length} player{state.players.length !== 1 ? 's' : ''} in room</p>
-        {#if isHost}
-          <button class="btn-primary" onclick={startGame}>
-            Start Game
-          </button>
-        {:else}
-          <p class="waiting-text">Waiting for host to start...</p>
-        {/if}
-        <button class="btn-secondary" onclick={leaveGame}>Leave</button>
       </div>
 
-    <!-- BETTING / ROUND_OVER -->
-    {:else if state.phase === 'betting' || state.phase === 'round_over'}
-      <div class="game-layout">
-
-        <!-- Top bar -->
-        <div class="top-bar">
-          <div class="top-bar-left">
-            <span class="room-code-label">Room</span>
-            <span class="room-code-val">{state.code}</span>
+      <!-- History strip with stats (uses visibleHistory to hide spoilers during spin) -->
+      {#if visibleHistory.length > 0}
+        <div class="history-section">
+          <div class="history-stats">
+            <span class="stat-label">LAST {visibleHistory.length}</span>
+            <span class="stat-dot stat-red"></span><span class="stat-count">{historyStats.red}</span>
+            <span class="stat-dot stat-green"></span><span class="stat-count">{historyStats.green}</span>
+            <span class="stat-dot stat-black"></span><span class="stat-count">{historyStats.black}</span>
           </div>
-          <div class="player-chips-strip">
-            {#each state.players as player}
-              <div class="player-chip-item" class:disconnected={!player.connected}>
-                <span class="pci-name">{player.name}</span>
-                <span class="pci-chips">{player.chips ?? 0}</span>
+          <div class="history-strip">
+            {#each visibleHistory.slice(-20) as h}
+              <span class="history-tile" class:ht-red={h==='red'} class:ht-black={h==='black'} class:ht-green={h==='green'}></span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Countdown timer -->
+      {#if state.phase === 'betting' && timeLeft > 0}
+        <div class="countdown-bar">
+          <div class="countdown-info">
+            <span class="countdown-label">SPINNING IN</span>
+            <span class="countdown-time">{timeLeft}s</span>
+          </div>
+          <div class="countdown-track">
+            <div class="countdown-fill" style="width: {Math.min(100, (timeLeft / 30) * 100)}%"></div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Sliding strip -->
+      <div class="strip-container">
+        <div class="strip-marker"></div>
+        <div class="strip-viewport">
+          <div
+            class="strip-track"
+            style="transform: translateX(-{stripOffset}px); transition: {sliding ? 'transform 3.2s cubic-bezier(0.17, 0.67, 0.12, 1.0)' : 'none'};"
+          >
+            {#each Array(TOTAL_SEGMENTS) as _, i}
+              {@const color = STRIP_PATTERN[i % STRIP_PATTERN.length]}
+              <div class="strip-segment" class:seg-red={color==='red'} class:seg-black={color==='black'} class:seg-green={color==='green'}>
+                {color === 'green' ? 'G' : ''}
               </div>
             {/each}
           </div>
         </div>
+      </div>
 
-        <!-- History strip -->
-        {#if history.length > 0}
-          <div class="history-strip">
-            <span class="history-label">Last</span>
-            {#each history.slice(-20) as h}
-              <span class="history-ball" class:hb-red={numberColor(h) === 'red'} class:hb-black={numberColor(h) === 'black'} class:hb-green={numberColor(h) === 'green'}>
-                {h}
-              </span>
-            {/each}
+      <!-- Result / status display -->
+      {#if showResult && result}
+        <div class="result-display" class:res-red={result==='red'} class:res-black={result==='black'} class:res-green={result==='green'} class:win-glow={myPayout() > 0}>
+          <span class="result-color-text">{result.toUpperCase()}</span>
+          {#if result === 'green'}<span class="result-multiplier">14x</span>{/if}
+        </div>
+      {:else if state.phase === 'betting'}
+        <div class="phase-status">
+          <span class="phase-status-text">Place your bets</span>
+          {#if ts?.totalBettors > 0}
+            <span class="bettors-count">{ts.totalBettors} betting</span>
+          {/if}
+        </div>
+      {:else if state.phase === 'resolving' || (state.phase === 'round_over' && !showResult)}
+        <div class="phase-status">
+          <span class="phase-status-text spinning-text">Spinning...</span>
+        </div>
+      {/if}
+
+      <!-- Bet amount controls -->
+      <div class="bet-amount-bar">
+        <div class="bet-amount-left">
+          <span class="bet-amount-label">Play amount</span>
+          <span class="bet-amount-value">{betAmount}</span>
+        </div>
+        <div class="bet-amount-buttons">
+          <button class="amt-btn" onclick={clearBets} disabled={myBetTotal === 0 || state.phase !== 'betting'}>CLEAR</button>
+          <button class="amt-btn amt-minus" onclick={() => adjustBet(-100)} disabled={state.phase !== 'betting'}>-100</button>
+          <button class="amt-btn amt-minus" onclick={() => adjustBet(-10)} disabled={state.phase !== 'betting'}>-10</button>
+          <button class="amt-btn amt-minus" onclick={() => adjustBet(-1)} disabled={state.phase !== 'betting'}>-1</button>
+          <button class="amt-btn" onclick={() => adjustBet(1)} disabled={state.phase !== 'betting'}>+1</button>
+          <button class="amt-btn" onclick={() => adjustBet(10)} disabled={state.phase !== 'betting'}>+10</button>
+          <button class="amt-btn" onclick={() => adjustBet(100)} disabled={state.phase !== 'betting'}>+100</button>
+          <button class="amt-btn" onclick={() => multiplyBet(0.5)} disabled={state.phase !== 'betting'}>1/2</button>
+          <button class="amt-btn" onclick={() => multiplyBet(2)} disabled={state.phase !== 'betting'}>X2</button>
+          <button class="amt-btn" onclick={() => { betAmount = myChips; }} disabled={state.phase !== 'betting'}>MAX</button>
+        </div>
+      </div>
+
+      <!-- Color bet cards -->
+      <div class="color-bets">
+        <div class="color-card card-red">
+          <div class="color-card-top">
+            <span class="color-card-name">RED</span>
+            <span class="color-card-multi">2x</span>
           </div>
-        {/if}
-
-        <!-- Wheel -->
-        <div class="wheel-container">
-          <div class="wheel-outer">
-            <div
-              class="wheel-inner"
-              class:spinning={spinning}
-              style="transform: rotate({wheelDeg}deg); transition: {spinning ? 'transform 3.2s cubic-bezier(0.17, 0.67, 0.12, 1.0)' : 'none'};"
-            >
-              {#each WHEEL_ORDER as num, i}
-                {@const angle = (i / WHEEL_ORDER.length) * 360}
-                {@const color = numberColor(num)}
-                <div
-                  class="wheel-segment"
-                  class:seg-red={color === 'red'}
-                  class:seg-black={color === 'black'}
-                  class:seg-green={color === 'green'}
-                  style="transform: rotate({angle}deg);"
-                >
-                  <div class="seg-label" style="transform: rotate(90deg) translateY(-42px);">{num}</div>
-                </div>
-              {/each}
-              <div class="wheel-center"></div>
-            </div>
-            <div class="wheel-marker"></div>
+          {#if betOnColor('red') > 0}<span class="color-card-bet">You: {betOnColor('red')}</span>{/if}
+          {#each allBetsByColor().red as bet}
+            <span class="color-card-other">{bet.name}: {bet.amount}</span>
+          {/each}
+          <button class="color-play-btn play-red" onclick={() => placeBet('red')} disabled={state.phase !== 'betting'}>
+            Play
+          </button>
+        </div>
+        <div class="color-card card-green">
+          <div class="color-card-top">
+            <span class="color-card-name">GREEN</span>
+            <span class="color-card-multi">14x</span>
           </div>
+          {#if betOnColor('green') > 0}<span class="color-card-bet">You: {betOnColor('green')}</span>{/if}
+          {#each allBetsByColor().green as bet}
+            <span class="color-card-other">{bet.name}: {bet.amount}</span>
+          {/each}
+          <button class="color-play-btn play-green" onclick={() => placeBet('green')} disabled={state.phase !== 'betting'}>
+            Play
+          </button>
+        </div>
+        <div class="color-card card-black">
+          <div class="color-card-top">
+            <span class="color-card-name">BLACK</span>
+            <span class="color-card-multi">2x</span>
+          </div>
+          {#if betOnColor('black') > 0}<span class="color-card-bet">You: {betOnColor('black')}</span>{/if}
+          {#each allBetsByColor().black as bet}
+            <span class="color-card-other">{bet.name}: {bet.amount}</span>
+          {/each}
+          <button class="color-play-btn play-black" onclick={() => placeBet('black')} disabled={state.phase !== 'betting'}>
+            Play
+          </button>
+        </div>
+      </div>
 
-          {#if state.phase === 'round_over' && result !== null}
-            <div class="result-display" class:res-red={numberColor(result) === 'red'} class:res-black={numberColor(result) === 'black'} class:res-green={numberColor(result) === 'green'}>
-              <span class="result-number">{result}</span>
-              <span class="result-color-label">{numberColor(result).toUpperCase()}</span>
-            </div>
-          {:else if state.phase === 'betting'}
-            <div class="phase-status">
-              <span class="phase-status-text">Place your bets</span>
-              {#if ts?.totalBettors > 0}
-                <span class="bettors-count">{ts.totalBettors} betting</span>
+      <!-- Round info -->
+      <div class="round-controls">
+        {#if state.phase === 'round_over' && showResult}
+          {#if payouts !== null}
+            <div class="payout-panel fade-in">
+              {#if myPayout() > 0}
+                <span class="payout-win">+{myPayout()} chips</span>
+              {:else if myBetTotal > 0}
+                <span class="payout-lose">-{myBetTotal} chips</span>
+              {:else}
+                <span class="payout-none">No bets placed</span>
               {/if}
             </div>
           {/if}
-        </div>
-
-        <!-- Betting board -->
-        <div class="betting-board">
-          <!-- Zero -->
-          <div class="board-zero">
-            <button
-              class="num-cell zero-cell"
-              class:has-bet={betOnNumber(0) > 0}
-              class:winning-cell={state.phase === 'round_over' && result === 0}
-              onclick={() => placeBet('straight', [0])}
-              disabled={state.phase !== 'betting'}
-            >
-              0
-              {#if betOnNumber(0) > 0}
-                <span class="chip-indicator">{betOnNumber(0)}</span>
-              {/if}
-            </button>
-          </div>
-
-          <!-- Number grid: 12 rows x 3 cols -->
-          <div class="number-grid">
-            {#each ROWS as row}
-              {#each numbersInRow(row) as n}
-                {@const nc = numberColor(n)}
-                <button
-                  class="num-cell"
-                  class:cell-red={nc === 'red'}
-                  class:cell-black={nc === 'black'}
-                  class:has-bet={betOnNumber(n) > 0}
-                  class:winning-cell={state.phase === 'round_over' && result === n}
-                  onclick={() => placeBet('straight', [n])}
-                  disabled={state.phase !== 'betting'}
-                >
-                  {n}
-                  {#if betOnNumber(n) > 0}
-                    <span class="chip-indicator">{betOnNumber(n)}</span>
-                  {/if}
-                </button>
-              {/each}
-            {/each}
-          </div>
-
-          <!-- Column bets -->
-          <div class="column-bets">
-            <button
-              class="outside-bet col-bet"
-              class:has-bet={betOnType('column1') > 0}
-              onclick={() => placeBet('column', [1])}
-              disabled={state.phase !== 'betting'}
-            >
-              Col 1
-              {#if betOnType('column1') > 0}<span class="chip-indicator">{betOnType('column1')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet col-bet"
-              class:has-bet={betOnType('column2') > 0}
-              onclick={() => placeBet('column', [2])}
-              disabled={state.phase !== 'betting'}
-            >
-              Col 2
-              {#if betOnType('column2') > 0}<span class="chip-indicator">{betOnType('column2')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet col-bet"
-              class:has-bet={betOnType('column3') > 0}
-              onclick={() => placeBet('column', [3])}
-              disabled={state.phase !== 'betting'}
-            >
-              Col 3
-              {#if betOnType('column3') > 0}<span class="chip-indicator">{betOnType('column3')}</span>{/if}
-            </button>
-          </div>
-
-          <!-- Outside bets row 1: dozens -->
-          <div class="outside-row">
-            <button
-              class="outside-bet dozen-bet"
-              class:has-bet={betOnType('dozen1') > 0}
-              onclick={() => placeBet('dozen', [1])}
-              disabled={state.phase !== 'betting'}
-            >
-              1st 12
-              {#if betOnType('dozen1') > 0}<span class="chip-indicator">{betOnType('dozen1')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet dozen-bet"
-              class:has-bet={betOnType('dozen2') > 0}
-              onclick={() => placeBet('dozen', [2])}
-              disabled={state.phase !== 'betting'}
-            >
-              2nd 12
-              {#if betOnType('dozen2') > 0}<span class="chip-indicator">{betOnType('dozen2')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet dozen-bet"
-              class:has-bet={betOnType('dozen3') > 0}
-              onclick={() => placeBet('dozen', [3])}
-              disabled={state.phase !== 'betting'}
-            >
-              3rd 12
-              {#if betOnType('dozen3') > 0}<span class="chip-indicator">{betOnType('dozen3')}</span>{/if}
-            </button>
-          </div>
-
-          <!-- Outside bets row 2: even-money -->
-          <div class="outside-row">
-            <button
-              class="outside-bet evenmoney-bet"
-              class:has-bet={betOnType('low') > 0}
-              onclick={() => placeBet('low', [])}
-              disabled={state.phase !== 'betting'}
-            >
-              1-18
-              {#if betOnType('low') > 0}<span class="chip-indicator">{betOnType('low')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet evenmoney-bet"
-              class:has-bet={betOnType('even') > 0}
-              onclick={() => placeBet('even', [])}
-              disabled={state.phase !== 'betting'}
-            >
-              Even
-              {#if betOnType('even') > 0}<span class="chip-indicator">{betOnType('even')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet evenmoney-bet bet-red"
-              class:has-bet={betOnType('red') > 0}
-              onclick={() => placeBet('red', [])}
-              disabled={state.phase !== 'betting'}
-            >
-              Red
-              {#if betOnType('red') > 0}<span class="chip-indicator">{betOnType('red')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet evenmoney-bet bet-black"
-              class:has-bet={betOnType('black') > 0}
-              onclick={() => placeBet('black', [])}
-              disabled={state.phase !== 'betting'}
-            >
-              Black
-              {#if betOnType('black') > 0}<span class="chip-indicator">{betOnType('black')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet evenmoney-bet"
-              class:has-bet={betOnType('odd') > 0}
-              onclick={() => placeBet('odd', [])}
-              disabled={state.phase !== 'betting'}
-            >
-              Odd
-              {#if betOnType('odd') > 0}<span class="chip-indicator">{betOnType('odd')}</span>{/if}
-            </button>
-            <button
-              class="outside-bet evenmoney-bet"
-              class:has-bet={betOnType('high') > 0}
-              onclick={() => placeBet('high', [])}
-              disabled={state.phase !== 'betting'}
-            >
-              19-36
-              {#if betOnType('high') > 0}<span class="chip-indicator">{betOnType('high')}</span>{/if}
-            </button>
-          </div>
-        </div>
-
-        <!-- Bet controls -->
-        <div class="bet-controls">
-          <div class="chip-selector">
-            {#each CHIP_VALUES as val}
-              <button
-                class="chip-btn"
-                class:chip-selected={selectedChip === val}
-                onclick={() => selectedChip = val}
-              >
-                {val}
-              </button>
-            {/each}
-          </div>
-
-          <div class="bet-summary">
-            <span class="bet-summary-label">Total bet:</span>
-            <span class="bet-summary-val">{myBetTotal}</span>
-            <span class="bet-summary-label">Chips:</span>
-            <span class="bet-summary-val">{myChips}</span>
-          </div>
-
-          <div class="bet-actions">
-            {#if state.phase === 'betting'}
-              <button class="btn-secondary btn-sm" onclick={clearBets} disabled={myBetTotal === 0}>
-                Clear Bets
-              </button>
-              {#if isHost}
-                <button class="btn-primary btn-sm spin-btn" onclick={spin}>
-                  Spin!
-                </button>
-              {/if}
-            {:else if state.phase === 'round_over'}
-              <!-- Payout display -->
-              {#if payouts !== null}
-                <div class="payout-panel fade-in">
-                  {#if myPayout() > 0}
-                    <span class="payout-win">+{myPayout()} chips</span>
-                  {:else if myBetTotal > 0}
-                    <span class="payout-lose">-{myBetTotal} chips</span>
-                  {:else}
-                    <span class="payout-none">No bets placed</span>
-                  {/if}
-                </div>
-              {/if}
-              {#if isHost}
-                <button class="btn-primary btn-sm" onclick={nextRound}>
-                  Next Round
-                </button>
-              {:else}
-                <p class="waiting-text">Waiting for host...</p>
-              {/if}
-            {/if}
-          </div>
-        </div>
-
-        <!-- All players payouts on round over -->
-        {#if state.phase === 'round_over' && payouts !== null}
-          <div class="all-payouts fade-in">
-            <span class="all-payouts-label">Round Results</span>
-            {#each state.players as player}
-              {@const payout = payouts[player.id] ?? 0}
-              <div class="payout-row">
-                <span class="pr-name">{player.name}</span>
-                <span class="pr-chips">{player.chips ?? 0} chips</span>
-                {#if payout > 0}
-                  <span class="pr-win">+{payout}</span>
-                {:else}
-                  <span class="pr-neutral">--</span>
-                {/if}
-              </div>
-            {/each}
-          </div>
+          {#if nextRoundIn > 0}
+            <div class="next-round-timer">Next round in {nextRoundIn}s</div>
+          {/if}
         {/if}
-
+        <div class="bet-summary">
+          <span class="bet-summary-label">Total bet:</span>
+          <span class="bet-summary-val">{myBetTotal}</span>
+          <span class="bet-summary-label">Chips:</span>
+          <span class="bet-summary-val" class:chip-counting={chipAnimating}>{displayedChips}</span>
+        </div>
       </div>
 
-    <!-- GAME OVER / back to lobby -->
-    {:else if state.phase === 'lobby_again'}
-      <div class="phase-panel">
-        <h2 class="geo-title phase-title">Roulette</h2>
-        <div class="player-list">
+      <!-- All players payouts on round over -->
+      {#if state.phase === 'round_over' && showResult && payouts !== null}
+        <div class="all-payouts fade-in">
+          <span class="all-payouts-label">Round Results</span>
           {#each state.players as player}
-            <div class="player-item" class:disconnected={!player.connected}>
-              <span class="player-name">{player.name}</span>
-              {#if player.isHost}<span class="host-badge">HOST</span>{/if}
-              <span class="chip-count">{player.chips ?? 0} chips</span>
+            {@const payout = payouts[player.id] ?? 0}
+            <div class="payout-row">
+              <span class="pr-name">{player.name}</span>
+              <span class="pr-chips">{player.chips ?? 0} chips</span>
+              {#if payout > 0}
+                <span class="pr-win">+{payout}</span>
+              {:else}
+                <span class="pr-neutral">--</span>
+              {/if}
             </div>
           {/each}
         </div>
-        {#if isHost}
-          <button class="btn-primary" onclick={startGame}>Start New Game</button>
-          <button class="btn-secondary" onclick={playAgain}>Play Again (same players)</button>
-        {:else}
-          <p class="waiting-text">Waiting for host...</p>
-        {/if}
-        <button class="btn-secondary" onclick={leaveGame}>Leave</button>
-      </div>
-    {/if}
+      {/if}
+
+    </div>
 
   {/if}
 </div>
@@ -561,103 +501,6 @@
     justify-content: center;
     min-height: 50vh;
     color: var(--text-muted);
-  }
-
-  /* ---- Lobby ---- */
-  .phase-panel {
-    width: 100%;
-    max-width: 500px;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    animation: fadeUp 0.3s ease both;
-  }
-
-  .phase-title {
-    font-size: 1.25rem;
-    letter-spacing: 0.12em;
-    color: #f39c12;
-    text-align: center;
-  }
-
-  .room-code-strip {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    justify-content: center;
-    padding: 0.4rem 0;
-  }
-
-  .room-code-label {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-subtle);
-  }
-
-  .room-code-val {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: 0.3em;
-    color: #f39c12;
-  }
-
-  .player-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
-
-  .player-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-  }
-
-  .player-item.disconnected { opacity: 0.4; }
-
-  .player-name {
-    flex: 1;
-    font-size: 0.9rem;
-    color: var(--text);
-  }
-
-  .chip-count {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-  }
-
-  .host-badge, .dc-badge {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    padding: 0.15rem 0.4rem;
-    border-radius: 2px;
-  }
-
-  .host-badge { background: rgba(243, 156, 18, 0.12); color: #f39c12; }
-  .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
-
-  .player-count {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  .waiting-text {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-    text-align: center;
   }
 
   /* ---- Game layout ---- */
@@ -683,6 +526,22 @@
     gap: 0.375rem;
     flex-shrink: 0;
   }
+
+  .leave-btn {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .leave-btn:hover { color: #e74c3c; border-color: #e74c3c; }
 
   .player-chips-strip {
     display: flex;
@@ -715,11 +574,50 @@
     color: #f39c12;
   }
 
-  /* History strip */
+  /* History section */
+  .history-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .history-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-subtle);
+    margin-right: 0.25rem;
+  }
+
+  .stat-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .stat-red { background: #c0392b; }
+  .stat-green { background: #1e7e34; }
+  .stat-black { background: #1a1a2e; border: 1px solid #444; }
+
+  .stat-count {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-right: 0.5rem;
+  }
+
   .history-strip {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 3px;
     overflow-x: auto;
     padding: 0.25rem 0;
     scrollbar-width: none;
@@ -727,147 +625,113 @@
 
   .history-strip::-webkit-scrollbar { display: none; }
 
-  .history-label {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-subtle);
+  .history-tile {
     flex-shrink: 0;
-    margin-right: 0.125rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
   }
 
-  .history-ball {
+  .ht-red { background: #c0392b; }
+  .ht-black { background: #1a1a2e; border: 1px solid #333; }
+  .ht-green { background: #1e7e34; }
+
+  /* ---- Countdown bar ---- */
+  .countdown-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .countdown-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .countdown-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--text-subtle);
+  }
+
+  .countdown-time {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #f39c12;
+  }
+
+  .countdown-track {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-input);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .countdown-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #f39c12, #d68910);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  /* ---- Sliding strip ---- */
+  .strip-container {
+    width: 100%;
+    position: relative;
+  }
+
+  .strip-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    background: #fff;
+    z-index: 20;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+    border-radius: 1px;
+  }
+
+  .strip-viewport {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #0d0d0d;
+    padding: 6px 0;
+  }
+
+  .strip-track {
+    display: flex;
+    gap: 6px;
+    will-change: transform;
+    padding: 0 4px;
+  }
+
+  .strip-segment {
     flex-shrink: 0;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
+    width: 56px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 1.1rem;
     font-weight: 700;
-    color: #fff;
+    color: rgba(255, 255, 255, 0.85);
+    border-radius: 6px;
   }
 
-  .hb-red { background: #c0392b; }
-  .hb-black { background: #1a1a1a; border: 1px solid #444; }
-  .hb-green { background: #1e7e34; }
+  .seg-red { background: #c0392b; }
+  .seg-black { background: #1a1a2e; border: 1px solid #2a2a3e; }
+  .seg-green { background: #1e7e34; }
 
-  /* ---- Wheel ---- */
-  .wheel-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .wheel-outer {
-    position: relative;
-    width: 180px;
-    height: 180px;
-    flex-shrink: 0;
-  }
-
-  .wheel-inner {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    position: relative;
-    overflow: hidden;
-    border: 3px solid #f39c12;
-    box-shadow: 0 0 24px rgba(243, 156, 18, 0.25), inset 0 0 12px rgba(0,0,0,0.5);
-    will-change: transform;
-  }
-
-  .wheel-segment {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 50%;
-    height: 2px;
-    transform-origin: left center;
-    overflow: visible;
-  }
-
-  .seg-red::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: -45px;
-    width: 100%;
-    height: 90px;
-    background: #c0392b;
-    clip-path: polygon(0 50%, 100% 0%, 100% 100%);
-    opacity: 0.9;
-  }
-
-  .seg-black::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: -45px;
-    width: 100%;
-    height: 90px;
-    background: #1a1a1a;
-    clip-path: polygon(0 50%, 100% 0%, 100% 100%);
-    opacity: 0.9;
-  }
-
-  .seg-green::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: -45px;
-    width: 100%;
-    height: 90px;
-    background: #1e7e34;
-    clip-path: polygon(0 50%, 100% 0%, 100% 100%);
-    opacity: 0.9;
-  }
-
-  .seg-label {
-    position: absolute;
-    left: 28px;
-    top: -5px;
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.42rem;
-    font-weight: 700;
-    color: rgba(255,255,255,0.85);
-    width: 10px;
-    text-align: center;
-    pointer-events: none;
-  }
-
-  .wheel-center {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: #f39c12;
-    z-index: 10;
-    box-shadow: 0 0 8px rgba(243, 156, 18, 0.6);
-  }
-
-  .wheel-marker {
-    position: absolute;
-    top: -6px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 7px solid transparent;
-    border-right: 7px solid transparent;
-    border-top: 14px solid #f39c12;
-    z-index: 20;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-  }
-
+  /* ---- Result display ---- */
   .result-display {
     display: flex;
     flex-direction: column;
@@ -877,32 +741,50 @@
     border-radius: 4px;
     border: 2px solid;
     animation: fadeUp 0.4s ease both;
+    align-self: center;
   }
 
   .res-red { background: rgba(192, 57, 43, 0.2); border-color: #c0392b; }
   .res-black { background: rgba(26, 26, 26, 0.6); border-color: #555; }
   .res-green { background: rgba(30, 126, 52, 0.2); border-color: #1e7e34; }
 
-  .result-number {
+  .result-color-text {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 2.25rem;
     font-weight: 700;
     color: #fff;
     line-height: 1;
+    letter-spacing: 0.1em;
   }
 
-  .result-color-label {
+  .result-multiplier {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.65rem;
+    font-size: 1rem;
     font-weight: 700;
-    letter-spacing: 0.16em;
-    color: rgba(255,255,255,0.6);
+    color: #2ecc71;
+    letter-spacing: 0.08em;
+  }
+
+  .win-glow {
+    animation: winPulse 0.6s ease 2;
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.5);
+  }
+
+  @keyframes winPulse {
+    0%, 100% { box-shadow: 0 0 12px rgba(46, 204, 113, 0.3); }
+    50% { box-shadow: 0 0 28px rgba(46, 204, 113, 0.7); }
+  }
+
+  .chip-counting {
+    color: #2ecc71 !important;
+    text-shadow: 0 0 8px rgba(46, 204, 113, 0.5);
   }
 
   .phase-status {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    justify-content: center;
   }
 
   .phase-status-text {
@@ -914,6 +796,15 @@
     color: #f39c12;
   }
 
+  .spinning-text {
+    animation: pulse 0.8s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
   .bettors-count {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.7rem;
@@ -921,206 +812,184 @@
     color: var(--text-muted);
   }
 
-  /* ---- Betting board ---- */
-  .betting-board {
-    background: #0b3d1a;
-    border: 2px solid rgba(243, 156, 18, 0.3);
+  /* ---- Bet amount bar ---- */
+  .bet-amount-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .bet-amount-left {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.125rem;
+    min-width: 70px;
   }
 
-  .board-zero {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 0.125rem;
-  }
-
-  .zero-cell {
-    width: 100%;
-    background: #1e7e34 !important;
-    color: #fff !important;
-  }
-
-  .number-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2px;
-  }
-
-  .num-cell {
-    position: relative;
-    padding: 0.4rem 0.2rem;
+  .bet-amount-label {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 2px;
-    cursor: pointer;
-    text-align: center;
-    transition: filter 0.12s, transform 0.08s;
-    line-height: 1;
-    min-height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
   }
 
-  .num-cell:disabled {
-    cursor: default;
-  }
-
-  .num-cell:not(:disabled):hover {
-    filter: brightness(1.3);
-    transform: scale(1.05);
-    z-index: 1;
-  }
-
-  .num-cell:not(:disabled):active {
-    transform: scale(0.96);
-  }
-
-  .cell-red { background: #a93226; }
-  .cell-black { background: #1c1c1c; }
-
-  .num-cell.has-bet {
-    outline: 2px solid #f39c12;
-    outline-offset: -2px;
-  }
-
-  .num-cell.winning-cell {
-    background: #f39c12 !important;
-    color: #000 !important;
-    outline: none;
-    box-shadow: 0 0 12px rgba(243, 156, 18, 0.6);
-    animation: pulseWin 0.5s ease 3;
-  }
-
-  @keyframes pulseWin {
-    0%, 100% { box-shadow: 0 0 8px rgba(243, 156, 18, 0.5); }
-    50% { box-shadow: 0 0 20px rgba(243, 156, 18, 0.9); }
-  }
-
-  .chip-indicator {
-    position: absolute;
-    bottom: 1px;
-    right: 2px;
+  .bet-amount-value {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.5rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: #f39c12;
     line-height: 1;
-    pointer-events: none;
   }
 
-  .column-bets {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2px;
-    margin-top: 0.125rem;
-  }
-
-  .outside-row {
+  .bet-amount-buttons {
     display: flex;
-    gap: 2px;
+    gap: 4px;
+    flex-wrap: wrap;
+    flex: 1;
+    justify-content: flex-end;
   }
 
-  .outside-bet {
+  .amt-btn {
+    padding: 0.3rem 0.5rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .amt-btn:hover:not(:disabled) {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .amt-btn:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+
+  .amt-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .amt-minus {
+    color: #e74c3c;
+  }
+
+  .amt-minus:hover:not(:disabled) {
+    color: #ff6b6b;
+  }
+
+  /* ---- Color bet cards ---- */
+  .color-bets {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .color-card {
     flex: 1;
-    position: relative;
-    padding: 0.35rem 0.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+  }
+
+  .color-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .color-card-name {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text);
+  }
+
+  .color-card-multi {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+
+  .color-card-bet {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #f39c12;
+  }
+
+  .color-card-other {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    opacity: 0.8;
+  }
+
+  .color-play-btn {
+    width: 100%;
+    padding: 0.5rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.8);
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 2px;
+    letter-spacing: 0.08em;
+    border: none;
+    border-radius: 4px;
     cursor: pointer;
-    text-align: center;
-    transition: filter 0.12s, background 0.12s;
-    min-height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    transition: filter 0.1s, transform 0.08s;
+    color: #fff;
   }
 
-  .outside-bet:not(:disabled):hover {
-    filter: brightness(1.3);
-    background: rgba(255,255,255,0.12);
+  .color-play-btn:not(:disabled):hover {
+    filter: brightness(1.15);
   }
 
-  .outside-bet:disabled {
-    cursor: default;
+  .color-play-btn:not(:disabled):active {
+    transform: scale(0.97);
   }
 
-  .outside-bet.has-bet {
-    outline: 2px solid #f39c12;
-    outline-offset: -2px;
-    color: #f39c12;
+  .color-play-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
-  .col-bet { background: rgba(243, 156, 18, 0.08); }
-  .dozen-bet { background: rgba(255,255,255,0.05); }
-  .evenmoney-bet { background: rgba(255,255,255,0.05); }
+  .play-red { background: #c0392b; }
+  .play-green { background: #1e7e34; }
+  .play-black { background: #2a2a3e; }
 
-  .bet-red { background: rgba(169, 50, 38, 0.5) !important; }
-  .bet-red:not(:disabled):hover { background: rgba(169, 50, 38, 0.7) !important; filter: none; }
-
-  .bet-black { background: rgba(28, 28, 28, 0.8) !important; border-color: rgba(255,255,255,0.25) !important; }
-  .bet-black:not(:disabled):hover { background: rgba(60, 60, 60, 0.8) !important; filter: none; }
-
-  /* ---- Bet controls ---- */
-  .bet-controls {
+  /* ---- Round controls ---- */
+  .round-controls {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0.5rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-
-  .chip-selector {
-    display: flex;
-    gap: 0.375rem;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .chip-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.8rem;
-    font-weight: 700;
-    background: #1c1c1c;
-    color: #f39c12;
-    border: 2px solid rgba(243, 156, 18, 0.3);
-    cursor: pointer;
-    transition: all 0.12s;
-    display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 0;
   }
 
-  .chip-btn:hover {
-    border-color: #f39c12;
-    background: rgba(243, 156, 18, 0.1);
-  }
-
-  .chip-btn.chip-selected {
-    background: #f39c12;
-    color: #000;
-    border-color: #f39c12;
-    box-shadow: 0 0 10px rgba(243, 156, 18, 0.4);
+  .next-round-timer {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
   }
 
   .bet-summary {
@@ -1146,31 +1015,6 @@
     font-weight: 700;
     color: #f39c12;
     margin-right: 0.5rem;
-  }
-
-  .bet-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .btn-sm {
-    padding: 0.5rem 1rem !important;
-    font-size: 0.875rem !important;
-  }
-
-  .spin-btn {
-    background: linear-gradient(135deg, #f39c12, #d68910) !important;
-    color: #000 !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.08em;
-  }
-
-  .spin-btn:hover:not(:disabled) {
-    filter: brightness(1.1);
-    transform: scale(1.02);
   }
 
   /* ---- Payout panel ---- */
@@ -1265,20 +1109,18 @@
       padding-right: 0.375rem;
     }
 
-    .wheel-outer {
-      width: 150px;
-      height: 150px;
+    .strip-segment {
+      width: 64px;
+      height: 64px;
+      font-size: 1.1rem;
     }
 
-    .chip-btn {
-      width: 34px;
-      height: 34px;
-      font-size: 0.72rem;
+    .color-card {
+      padding: 0.5rem;
     }
 
-    .num-cell {
-      font-size: 0.65rem;
-      min-height: 24px;
+    .color-card-name {
+      font-size: 0.75rem;
     }
   }
 

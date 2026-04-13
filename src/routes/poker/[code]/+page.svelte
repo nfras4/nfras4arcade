@@ -317,8 +317,8 @@
         <div class="hand-area">
           <div class="hand-label geo-title">Your Hand</div>
           <div class="hole-cards" class:dimmed={amIFolded}>
-            {#each myHand as card}
-              <Card {card} faceUp={true} />
+            {#each myHand as card, i}
+              <Card {card} faceUp={true} dealDelay={i * 150} />
             {/each}
             {#if myHand.length === 0}
               <span class="no-cards">No cards dealt</span>
@@ -334,8 +334,8 @@
                 <div class="opponent-hand fade-in">
                   <span class="opponent-name">{player.name}</span>
                   <div class="opponent-cards">
-                    {#each playerHands[player.id] ?? [] as card}
-                      <Card {card} faceUp={true} />
+                    {#each playerHands[player.id] ?? [] as card, i}
+                      <Card {card} faceUp={true} dealDelay={i * 100} />
                     {/each}
                   </div>
                 </div>

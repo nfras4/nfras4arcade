@@ -17,6 +17,7 @@
   let hintInput = $state('');
   let chatInput = $state('');
   let chatContainer: HTMLElement;
+  let hintBubblesContainer: HTMLElement;
   let showChat = $state(false);
   let unreadChat = $state(0);
 
@@ -101,6 +102,20 @@
     if ($chatMessages.length && chatContainer) {
       tick().then(() => {
         chatContainer.scrollTop = chatContainer.scrollHeight;
+      });
+    }
+  });
+
+  // Auto-scroll to latest hint when new hints arrive
+  $effect(() => {
+    const hints = $gameState?.hints;
+    const allHints = $gameState?.allHints;
+    if ((hints?.length || allHints?.length) && hintBubblesContainer) {
+      tick().then(() => {
+        const lastBubble = hintBubblesContainer.querySelector('.hint-bubble:last-child');
+        if (lastBubble) {
+          lastBubble.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
       });
     }
   });
@@ -394,7 +409,7 @@
           </div>
 
           <!-- Hints as chat bubbles -->
-          <div class="hint-bubbles">
+          <div class="hint-bubbles" bind:this={hintBubblesContainer}>
             {#if $gameState.allHints.length > 0}
               {#each $gameState.allHints as roundHints, i}
                 {#if roundHints.length > 0}

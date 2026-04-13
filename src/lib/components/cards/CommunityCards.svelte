@@ -20,8 +20,8 @@
     <div class="card-group">
       {#each { length: 3 } as _, i}
         {#if flopCards[i]}
-          <div class="community-card fade-in">
-            <Card card={flopCards[i]} faceUp={true} />
+          <div class="community-card">
+            <Card card={flopCards[i]} faceUp={true} dealDelay={i * 120} />
           </div>
         {:else}
           <div class="card-placeholder"></div>
@@ -33,7 +33,7 @@
     <!-- Turn -->
     <div class="card-group">
       {#if turnCard}
-        <div class="community-card fade-in">
+        <div class="community-card">
           <Card card={turnCard} faceUp={true} />
         </div>
       {:else}
@@ -45,7 +45,7 @@
     <!-- River -->
     <div class="card-group">
       {#if riverCard}
-        <div class="community-card fade-in">
+        <div class="community-card">
           <Card card={riverCard} faceUp={true} />
         </div>
       {:else}

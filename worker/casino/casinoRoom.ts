@@ -320,7 +320,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
   // --- Join / Disconnect ---
 
-  private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+  protected async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
     const existing = this.players.get(playerId);
 
     if (existing) {

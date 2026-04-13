@@ -40,7 +40,7 @@
       name: 'Roulette',
       description: 'Bet on the wheel',
       maxPlayers: 20,
-      route: '/casino/roulette',
+      route: '/casino/roulette/MAIN',
     },
   ];
 </script>

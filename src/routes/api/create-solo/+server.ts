@@ -7,6 +7,8 @@ const GAME_CONFIG: Record<string, { binding: string; minPlayers: number }> = {
   'connect-four': { binding: 'CONNECT_FOUR_ROOM', minPlayers: 2 },
   poker: { binding: 'POKER_ROOM', minPlayers: 2 },
   wavelength: { binding: 'WAVELENGTH_ROOM', minPlayers: 2 },
+  blackjack: { binding: 'BLACKJACK_ROOM', minPlayers: 1 },
+  roulette: { binding: 'ROULETTE_ROOM', minPlayers: 1 },
 };
 
 function generateCode(): string {

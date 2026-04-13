@@ -7,6 +7,8 @@ export interface Env {
   WAVELENGTH_ROOM: DurableObjectNamespace;
   POKER_ROOM: DurableObjectNamespace;
   SNAP_ROOM: DurableObjectNamespace;
+  BLACKJACK_ROOM: DurableObjectNamespace;
+  ROULETTE_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
 }

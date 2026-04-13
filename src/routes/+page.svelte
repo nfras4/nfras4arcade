@@ -75,6 +75,16 @@
       route: '/snap',
       soloAction: 'tutorial' as const,
     },
+    {
+      id: 'casino',
+      name: 'Casino',
+      description: 'Blackjack, Roulette & more',
+      minPlayers: 1,
+      maxPlayers: 20,
+      type: 'casino',
+      route: '/casino',
+      soloAction: 'tutorial' as const,
+    },
   ];
 
   let creatingSolo = $state<string | null>(null);
@@ -139,7 +149,7 @@
       <h2 class="section-heading geo-title">Games</h2>
       <div class="game-grid gap-4">
         {#each games as game}
-          <div class="game-card card" class:poker-featured={game.id === 'poker'} role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
+          <div class="game-card card" class:poker-featured={game.id === 'poker'} class:casino-featured={game.id === 'casino'} role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
             <div class="game-card-inner">
               <h3 class="game-name geo-title">
                 {game.name}
@@ -431,8 +441,13 @@
     box-shadow: 0 0 12px rgba(243, 156, 18, 0.25), inset 0 0 8px rgba(243, 156, 18, 0.05);
   }
 
-  .poker-featured:hover {
+  .poker-featured:hover, .casino-featured:hover {
     box-shadow: 0 0 18px rgba(243, 156, 18, 0.35), inset 0 0 10px rgba(243, 156, 18, 0.08);
+  }
+
+  .casino-featured {
+    border: 1.5px solid #f39c12 !important;
+    box-shadow: 0 0 12px rgba(243, 156, 18, 0.25), inset 0 0 8px rgba(243, 156, 18, 0.05);
   }
 
   .chips-icon {

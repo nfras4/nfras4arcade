@@ -304,7 +304,8 @@
         <div class="player-chips-strip">
           {#each state.players as player}
             <div class="player-chip-item" class:disconnected={!player.connected}>
-              <span class="pci-name">{player.name}</span>
+              <span class="pci-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+              {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
               <span class="pci-chips">{player.chips ?? 0}</span>
             </div>
           {/each}
@@ -474,7 +475,8 @@
           {#each state.players as player}
             {@const payout = payouts[player.id] ?? 0}
             <div class="payout-row">
-              <span class="pr-name">{player.name}</span>
+              <span class="pr-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+              {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
               <span class="pr-chips">{player.chips ?? 0} chips</span>
               {#if payout > 0}
                 <span class="pr-win">+{payout}</span>
@@ -1133,4 +1135,5 @@
 
   button:focus-visible { outline: 2px solid #f39c12; outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+  .owner-crown { font-size: 0.85rem; margin-left: -0.25rem; }
 </style>

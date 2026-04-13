@@ -42,6 +42,13 @@
       maxPlayers: 20,
       route: '/casino/roulette/MAIN',
     },
+    {
+      id: 'baccarat',
+      name: 'Baccarat',
+      description: 'Player, Banker, or Tie',
+      maxPlayers: 50,
+      route: '/casino/baccarat',
+    },
   ];
 </script>
 
@@ -116,7 +123,7 @@
         <div class="table-list">
           {#each tables as table}
             <button class="table-row" onclick={() => goto(`/casino/${table.game_type}/${table.code}`)}>
-              <span class="table-game">{table.game_type === 'blackjack' ? 'Blackjack' : 'Roulette'}</span>
+              <span class="table-game">{table.game_type === 'blackjack' ? 'Blackjack' : table.game_type === 'baccarat' ? 'Baccarat' : table.game_type === 'poker' ? 'Poker' : 'Roulette'}</span>
               <span class="table-code">{table.code}</span>
               <span class="table-seats">{table.player_count}/{table.max_seats}</span>
               <span class="table-bet">Min: {table.min_bet}</span>

@@ -550,6 +550,17 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       }
 
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Degenerate Gambler badge: 100+ casino games
+      for (const [id, player] of this.players) {
+        if (player.isGuest || id.startsWith('guest_')) continue;
+        try {
+          const profile = await db.prepare('SELECT games_played FROM player_profiles WHERE id = ?').bind(id).first<{ games_played: number }>();
+          if (profile && profile.games_played >= 100) {
+            await db.prepare('INSERT OR IGNORE INTO player_badges (player_id, badge_id, awarded_at) VALUES (?, ?, ?)').bind(id, 'b_degen_gambler', now).run();
+          }
+        } catch {}
+      }
     } catch {}
   }
 

@@ -9,6 +9,7 @@ export interface Env {
   SNAP_ROOM: DurableObjectNamespace;
   BLACKJACK_ROOM: DurableObjectNamespace;
   ROULETTE_ROOM: DurableObjectNamespace;
+  BACCARAT_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
 }

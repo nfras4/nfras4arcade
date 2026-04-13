@@ -23,21 +23,27 @@
 
   // Card deal SFX via Web Audio API
   let audioCtx: AudioContext | null = null;
-  function playDealSound() {
+  function playCardSound() {
     try {
       if (!audioCtx) audioCtx = new AudioContext();
-      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.08, audioCtx.sampleRate);
+      const duration = 0.15;
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
       const data = buf.getChannelData(0);
       for (let i = 0; i < data.length; i++) {
         const t = i / audioCtx.sampleRate;
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-t * 60) * 0.3;
+        // Swoosh: filtered noise with fast attack, medium decay
+        const noise = Math.random() * 2 - 1;
+        const envelope = Math.exp(-t * 20) * Math.min(1, t * 200);
+        data[i] = noise * envelope * 0.25;
       }
       const src = audioCtx.createBufferSource();
       src.buffer = buf;
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = 'highpass';
-      filter.frequency.value = 2000;
-      src.connect(filter).connect(audioCtx.destination);
+      // Bandpass filter for a swooshy character
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1200;
+      bp.Q.value = 0.8;
+      src.connect(bp).connect(audioCtx.destination);
       src.start();
     } catch {}
   }
@@ -154,11 +160,11 @@
   $effect(() => {
     const phase = state?.phase;
     if (phase === 'playing' && prevPhase === 'betting') {
-      // Stagger deal sounds for each card
+      // Stagger swoosh sounds for each card dealt
       const playerCount = state?.players?.length ?? 1;
       const totalCards = (playerCount + 1) * 2;
       for (let i = 0; i < totalCards; i++) {
-        setTimeout(() => playDealSound(), i * 120);
+        setTimeout(() => playCardSound(), i * 120);
       }
     }
     prevPhase = phase ?? null;
@@ -439,14 +445,14 @@
           <!-- Action buttons for my turn -->
           {#if isMyTurn && activeHand && !activeHand.stood && !activeHand.busted}
             <div class="action-buttons">
-              <button class="btn-action btn-hit" onclick={() => { playDealSound(); socket.send({ type: 'hit' }); }}>
+              <button class="btn-action btn-hit" onclick={() => { playCardSound(); socket.send({ type: 'hit' }); }}>
                 Hit
               </button>
               <button class="btn-action btn-stand" onclick={() => socket.send({ type: 'stand' })}>
                 Stand
               </button>
               {#if canDoubleDown}
-                <button class="btn-action btn-double" onclick={() => { playDealSound(); socket.send({ type: 'double_down' }); }}>
+                <button class="btn-action btn-double" onclick={() => { playCardSound(); socket.send({ type: 'double_down' }); }}>
                   Double
                 </button>
               {/if}

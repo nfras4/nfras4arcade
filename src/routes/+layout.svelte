@@ -13,6 +13,7 @@
   let theme = $state<'dark' | 'light'>('dark');
 
   let showCopied = $state(false);
+  let chipFlash = $state('');
 
   let userLevel = $derived(xpToLevel($userStats?.xp ?? 0));
 
@@ -104,7 +105,9 @@
       if (data.success) {
         canClaim.set(false);
         nextClaimAt.set(data.nextClaimAt);
-        await fetchUser();
+        userStats.update(s => s ? { ...s, chips: data.chips } : s);
+        chipFlash = '+500';
+        setTimeout(() => chipFlash = '', 1500);
       }
     } catch {}
     claiming = false;
@@ -118,7 +121,9 @@
       if (data.success) {
         canHourlyClaim.set(false);
         nextHourlyClaimAt.set(data.nextHourlyClaimAt);
-        await fetchUser();
+        userStats.update(s => s ? { ...s, chips: data.chips } : s);
+        chipFlash = '+50';
+        setTimeout(() => chipFlash = '', 1500);
       }
     } catch {}
     claimingHourly = false;
@@ -169,6 +174,7 @@
               <line x1="19" y1="12" x2="22" y2="12" />
             </svg>
             {$userStats.chips}
+            {#if chipFlash}<span class="chip-flash">{chipFlash}</span>{/if}
           </span>
           {#if $canClaim}
             <button class="nav-claim-btn" onclick={claimChips} disabled={claiming} title="Claim daily 500 chips">
@@ -188,7 +194,7 @@
       {/if}
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
-        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>
+        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
       </a>
       <button class="nav-logout-btn" onclick={handleLogout} title="Log out">
         Log Out
@@ -319,6 +325,25 @@
     color: var(--accent);
   }
 
+  .owner-crown { font-size: 0.7rem; margin-left: 0.1rem; }
+
+  .chip-flash {
+    position: absolute;
+    top: -0.5rem;
+    right: -0.25rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #3dd68c;
+    animation: chipFlashUp 1.5s ease-out forwards;
+    pointer-events: none;
+  }
+
+  @keyframes chipFlashUp {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-12px); }
+  }
+
   .nav-logout-btn {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.65rem;
@@ -357,6 +382,7 @@
   }
 
   .nav-chips {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 0.25rem;

@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-14** - Deployed to nfras4arcade. Summary: Blackjack auto-deal timer, poker hand display, chip sync across nav. Branch: `main`, commit: `e6ebba0`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Fix poker betting round skipping all players when checking. Branch: `main`, commit: `c6a5695`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Increase wavelength max rounds from 10 to 30. Branch: `main`, commit: `cd39786`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Wavelength round insights and 5 new end-of-game awards. Branch: `main`, commit: `b823020`.

@@ -6,7 +6,7 @@
     type AuthBadge,
   } from '$lib/auth';
   import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
-  import { xpProgress } from '$lib/xp';
+  import { xpProgress, levelXpThreshold } from '$lib/xp';
 
   let editingName = $state(false);
   let editName = $state('');
@@ -50,6 +50,7 @@
     { slug: 'b_high_roller',   label: 'High Roller',       description: 'Win 1000+ chips in a single casino round',           emoji: '\u{1F4B5}', secret: true },
     { slug: 'b_roulette_win',  label: 'Lucky Number',      description: 'Win a straight-up roulette bet',                     emoji: '\u{1F3B0}', secret: true },
     { slug: 'b_lucky_streak',  label: 'Lucky Streak',      description: 'Win 5 casino rounds in a row',                       emoji: '\u{1F340}', secret: true },
+    { slug: 'degen_gambler',   label: 'Degenerate Gambler', description: 'Gamble more than 100 times',                          emoji: '\u{1F911}', secret: true },
   ];
 
   const gameTypeLabels: Record<string, string> = {
@@ -64,6 +65,7 @@
     'wavelength': 'Wavelength',
     'blackjack': 'Blackjack',
     'roulette': 'Roulette',
+    'baccarat': 'Baccarat',
   };
 
   $effect(() => {
@@ -104,7 +106,7 @@
       if (data.success) {
         canClaim.set(false);
         nextClaimAt.set(data.nextClaimAt);
-        await fetchUser();
+        userStats.update(s => s ? { ...s, chips: data.chips } : s);
       }
     } catch {}
     claiming = false;
@@ -137,7 +139,7 @@
       if (data.success) {
         canHourlyClaim.set(false);
         nextHourlyClaimAt.set(data.nextHourlyClaimAt);
-        await fetchUser();
+        userStats.update(s => s ? { ...s, chips: data.chips } : s);
       }
     } catch {}
     claimingHourly = false;
@@ -168,6 +170,25 @@
   );
 
   let xp = $derived(xpProgress($userStats?.xp ?? 0));
+
+  interface Milestone {
+    level: number;
+    label: string;
+    emoji: string;
+  }
+
+  const milestones: Milestone[] = [
+    { level: 2,  label: 'Newcomer',     emoji: '\u{1F331}' },
+    { level: 5,  label: 'Regular',      emoji: '\u{2B50}' },
+    { level: 10, label: 'Veteran',      emoji: '\u{1F396}' },
+    { level: 15, label: 'Expert',       emoji: '\u{1F4AA}' },
+    { level: 20, label: 'Master',       emoji: '\u{1F451}' },
+    { level: 30, label: 'Legend',       emoji: '\u{1F525}' },
+    { level: 50, label: 'Mythic',       emoji: '\u{1F48E}' },
+  ];
+
+  let nextMilestone = $derived(milestones.find(m => m.level > xp.level));
+  let completedMilestones = $derived(milestones.filter(m => m.level <= xp.level));
 
   let earnedCount = $derived($userBadges.length);
   let totalCount = $derived(allBadges.length);
@@ -244,7 +265,7 @@
                 </div>
               </div>
             {:else}
-              <h2 class="display-name" style:color={$currentUser.nameColour || undefined}>{$currentUser.displayName}</h2>
+              <h2 class="display-name" style:color={$currentUser.nameColour || undefined}>{$currentUser.displayName}{#if $currentUser.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner"> &#x1F451;</span>{/if}</h2>
               <p class="email">{$currentUser.email}</p>
               <button class="btn-secondary btn-small edit-btn" onclick={() => { editingName = true; }}>
                 Edit Profile
@@ -299,6 +320,38 @@
             <div class="xp-fill" style="width: {xp.percent}%"></div>
           </div>
         </div>
+      </div>
+
+      <!-- Milestones -->
+      <div class="card milestones-card">
+        <h3 class="card-heading geo-title">Milestones</h3>
+        <div class="milestone-track">
+          {#each milestones as ms}
+            {@const reached = xp.level >= ms.level}
+            <div class="milestone-item" class:reached>
+              <div class="milestone-marker" class:reached>
+                <span class="milestone-emoji">{ms.emoji}</span>
+              </div>
+              <div class="milestone-info">
+                <span class="milestone-label">{ms.label}</span>
+                <span class="milestone-level">Level {ms.level}</span>
+              </div>
+              {#if reached}
+                <span class="milestone-check">{'\u2713'}</span>
+              {:else if nextMilestone?.level === ms.level}
+                <span class="milestone-next">NEXT</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
+        {#if nextMilestone}
+          <p class="milestone-hint">
+            {nextMilestone.emoji} {nextMilestone.label} unlocks at Level {nextMilestone.level}
+            ({levelXpThreshold(nextMilestone.level) - ($userStats?.xp ?? 0)} XP to go)
+          </p>
+        {:else}
+          <p class="milestone-hint">All milestones reached! You're a legend.</p>
+        {/if}
       </div>
 
       <!-- Per-game stats -->
@@ -914,6 +967,96 @@
     line-height: 1.6;
     text-align: center;
     padding: 1rem 0;
+  }
+
+  /* Milestones */
+  .milestones-card {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  }
+
+  .milestone-track {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .milestone-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    opacity: 0.4;
+    transition: opacity 0.15s ease;
+  }
+
+  .milestone-item:last-child { border-bottom: none; }
+  .milestone-item.reached { opacity: 1; }
+
+  .milestone-marker {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .milestone-marker.reached {
+    border-color: var(--accent-border);
+    background: var(--accent-faint);
+  }
+
+  .milestone-emoji { font-size: 0.9rem; line-height: 1; }
+
+  .milestone-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .milestone-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+
+  .milestone-level {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+  }
+
+  .milestone-check {
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .milestone-next {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    padding: 0.1rem 0.4rem;
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    background: var(--accent-faint);
+  }
+
+  .milestone-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.75rem;
+    line-height: 1.5;
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }

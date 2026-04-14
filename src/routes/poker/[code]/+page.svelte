@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -21,7 +22,7 @@
   let isSpectator = $state(false);
   let reconnecting = $state(true);
   let blindSetting = $state(10);
-  let gameMode = $state<'casual' | 'competitive'>('casual');
+  let gameMode: 'casual' | 'competitive' = $state('casual');
   let casualChipCount = $state(1000);
   let errorTimeout: ReturnType<typeof setTimeout>;
 

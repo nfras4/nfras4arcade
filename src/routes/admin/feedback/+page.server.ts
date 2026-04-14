@@ -26,6 +26,6 @@ export const load: PageServerLoad = async ({ platform }) => {
     }>();
 
   return {
-    feedback: rows.results || [],
+    feedback: rows.results??[],
   };
 };

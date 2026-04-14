@@ -328,7 +328,7 @@ export class ImpostorRoom extends DurableObject<Env> {
         playerId,
         state: this.getStateForPlayer(playerId),
         isSpectator: true,
-      } as any);
+      });
       this.broadcastState();
       await this.saveState();
       return;
@@ -342,8 +342,8 @@ export class ImpostorRoom extends DurableObject<Env> {
     // The name comes from the join message for backwards compat,
     // but in the authenticated flow it comes from X-Display-Name header
     let name = '';
-    if ('name' in msg && typeof (msg as any).name === 'string') {
-      name = sanitizeText((msg as any).name, MAX_NAME_LENGTH);
+    if ('name' in msg && typeof msg.name === 'string') {
+      name = sanitizeText(msg.name, MAX_NAME_LENGTH);
     }
     if (!name) {
       // Try to get from the WS attachment - we stored it during upgrade
@@ -1178,12 +1178,12 @@ export class ImpostorRoom extends DurableObject<Env> {
       const playerId = tags[0];
       if (!playerId) continue;
       const state = this.getStateForPlayer(playerId);
-      if (spectatorList) (state as any).spectators = spectatorList;
+      if (spectatorList) state.spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
         state,
         isSpectator: this.spectators.has(playerId),
-      } as any);
+      });
     }
   }
 

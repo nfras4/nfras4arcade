@@ -2,11 +2,11 @@
   let { roomCode, gameType }: { roomCode?: string; gameType?: string } = $props();
 
   let open = $state(false);
-  let category = $state<'bug' | 'suggestion' | 'other'>('other');
+  let category: 'bug' | 'suggestion' | 'other' = $state('other');
   let message = $state('');
   let submitting = $state(false);
   let toast = $state('');
-  let toastType = $state<'success' | 'error'>('success');
+  let toastType: 'success' | 'error' = $state('success');
 
   function close() {
     open = false;

@@ -22,7 +22,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       .bind(locals.user.id)
       .all<{ slug: string; label: string; description: string; icon: string; awarded_at: number }>();
 
-    badges = (rows.results || []).map((r) => ({
+    badges = (rows.results??[]).map((r: { slug: string; label: string; description: string; icon: string; awarded_at: number }) => ({
       slug: r.slug,
       label: r.label,
       description: r.description,
@@ -93,7 +93,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       .bind(locals.user.id, locals.user.id)
       .all<{ game_type: string; played: number; won: number }>();
 
-    const gameHistory = (historyRows.results || []).map((r) => ({
+    const gameHistory = (historyRows.results??[]).map((r: { id: string; game_type: string; room_code: string; player_count: number; started_at: number; ended_at: number | null; won: number }) => ({
       id: r.id,
       gameType: r.game_type,
       roomCode: r.room_code,
@@ -103,7 +103,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       won: r.won === 1,
     }));
 
-    const perGameStats = (gameTypeStats.results || []).map((r) => ({
+    const perGameStats = (gameTypeStats.results??[]).map((r: { game_type: string; played: number; won: number }) => ({
       gameType: r.game_type,
       played: r.played,
       won: r.won,

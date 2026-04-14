@@ -4,8 +4,8 @@
   import { getGuestDisplayName } from '$lib/guest';
 
   let displayName = $derived($isLoggedIn ? $currentUser?.displayName : getGuestDisplayName());
-  let chipBalance = $state<number | null>(null);
-  let tables = $state<any[]>([]);
+  let chipBalance: number | null = $state(null);
+  let tables: any[] = $state([]);
 
   $effect(() => {
     if ($isLoggedIn) {

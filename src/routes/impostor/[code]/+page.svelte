@@ -22,10 +22,10 @@
   let unreadChat = $state(0);
 
   // Category list (fetched once)
-  let categories = $state<string[]>([]);
+  let categories: string[] = $state([]);
 
   // Onboarding tips (dismissed tips persist in localStorage)
-  let dismissedTips = $state<Set<string>>(new Set());
+  let dismissedTips: Set<string> = $state(new Set());
 
   $effect(() => {
     try {
@@ -442,7 +442,7 @@
             {#if $gameState.mode === 'text'}
               <div class="hint-input">
                 <input
-                  bind:value={hintInput}
+                  value={hintInput} oninput={(e) => hintInput = e.currentTarget.value}
                   placeholder="Type your hint..."
                   maxlength="200"
                   autofocus
@@ -741,7 +741,7 @@
         </div>
         <div class="chat-input-row">
           <input
-            bind:value={chatInput}
+            value={chatInput} oninput={(e) => chatInput = e.currentTarget.value}
             placeholder="Type a message..."
             onkeydown={handleChatKey}
           />

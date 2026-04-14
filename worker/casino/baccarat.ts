@@ -45,7 +45,7 @@ export class BaccaratRoom extends CasinoRoom {
 
   private getTable(): BaccaratTableState {
     if (!this.tableState) return this.defaultTable();
-    const ts = this.tableState as any;
+    const ts = this.tableState as Partial<BaccaratTableState>;
     if (ts.bettingEndsAt === undefined) ts.bettingEndsAt = 0;
     if (ts.displayEndsAt === undefined) ts.displayEndsAt = 0;
     if (ts.deck === undefined) ts.deck = shuffle(createDeck());

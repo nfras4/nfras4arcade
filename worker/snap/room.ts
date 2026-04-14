@@ -155,7 +155,11 @@ export class SnapRoom extends DurableObject<Env> {
       consecutiveSnaps: Array.from(this.consecutiveSnaps.entries()),
       spectators: Array.from(this.spectators.entries()),
     };
-    await this.ctx.storage.put('room', state);
+    try {
+      await this.ctx.storage.put('room', state);
+    } catch {
+      // Don't block game on storage failure
+    }
   }
 
   private touch(): void {
@@ -195,14 +199,18 @@ export class SnapRoom extends DurableObject<Env> {
     }
 
     // Store display name and guest status for use during join
-    await this.ctx.storage.put(`name:${userId}`, displayName);
-    await this.ctx.storage.put(`guest:${userId}`, isGuest);
+    try {
+      await this.ctx.storage.put(`name:${userId}`, displayName);
+      await this.ctx.storage.put(`guest:${userId}`, isGuest);
 
-    // Store requested role for use during join
-    if (role === 'center') {
-      await this.ctx.storage.put(`role:${userId}`, 'center');
-    } else {
-      await this.ctx.storage.put(`role:${userId}`, 'player');
+      // Store requested role for use during join
+      if (role === 'center') {
+        await this.ctx.storage.put(`role:${userId}`, 'center');
+      } else {
+        await this.ctx.storage.put(`role:${userId}`, 'player');
+      }
+    } catch {
+      // Don't block WebSocket upgrade on storage failure
     }
 
     const pair = new WebSocketPair();
@@ -1041,7 +1049,7 @@ export class SnapRoom extends DurableObject<Env> {
       const pid = tags[0];
       if (!pid) continue;
       const state = this.getClientState();
-      if (spectatorList) (state as any).spectators = spectatorList;
+      if (spectatorList) state.spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
         state,

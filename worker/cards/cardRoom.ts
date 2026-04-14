@@ -103,7 +103,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
 
       // Restore bot turn pending flag
-      this.botTurnPending = (stored as any).botTurnPending ?? false;
+      this.botTurnPending = stored.botTurnPending ?? false;
 
       // Mark all non-bot players disconnected on wake; bots stay connected
       for (const p of this.players.values()) {

@@ -23,20 +23,20 @@
 
   type TabId = 'cosmetic' | 'consumable' | 'boost';
 
-  let items = $state<ShopItem[]>([]);
-  let owned = $state<Record<string, number>>({});
-  let equipped = $state<EquippedState>({
+  let items: ShopItem[] = $state([]);
+  let owned: Record<string, number> = $state({});
+  let equipped: EquippedState = $state({
     avatar_id: null,
     name_colour_id: null,
     card_back_id: null,
     table_felt_id: null,
   });
-  let chipBalance = $state<number | null>(null);
-  let activeTab = $state<TabId>('cosmetic');
+  let chipBalance: number | null = $state(null);
+  let activeTab: TabId = $state('cosmetic');
   let loading = $state(true);
-  let purchasing = $state<string | null>(null);
-  let equipping = $state<string | null>(null);
-  let confirmItem = $state<ShopItem | null>(null);
+  let purchasing: string | null = $state(null);
+  let equipping: string | null = $state(null);
+  let confirmItem: ShopItem | null = $state(null);
   let errorMsg = $state('');
   let successMsg = $state('');
 

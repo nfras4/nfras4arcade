@@ -14,7 +14,7 @@
 
   let roomCode = $state('');
   let joining = $state(false);
-  let mode = $state<'menu' | 'join'>('menu');
+  let mode: 'menu' | 'join' = $state('menu');
   let showRules = $state(false);
 
   let errorTimeout: ReturnType<typeof setTimeout>;
@@ -117,7 +117,7 @@
           <label class="field-label" for="room-code-input">Room code</label>
           <input
             id="room-code-input"
-            bind:value={roomCode}
+            value={roomCode} oninput={(e) => roomCode = e.currentTarget.value}
             placeholder="ABCD"
             maxlength="4"
             class="code-input"

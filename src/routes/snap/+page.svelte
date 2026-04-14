@@ -7,10 +7,10 @@
 
   let roomCode = $state('');
   let joining = $state(false);
-  let mode = $state<'menu' | 'role' | 'join'>('menu');
+  let mode: 'menu' | 'role' | 'join' = $state('menu');
   let showRules = $state(false);
   let createdCode = $state('');
-  let error = $state<string | null>(null);
+  let error: string | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   function showError(msg: string) {
@@ -113,7 +113,7 @@
           <label class="field-label" for="room-code-input">Room code</label>
           <input
             id="room-code-input"
-            bind:value={roomCode}
+            value={roomCode} oninput={(e) => roomCode = e.currentTarget.value}
             placeholder="ABCD"
             maxlength="4"
             class="code-input"

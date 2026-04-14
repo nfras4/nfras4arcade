@@ -10,7 +10,7 @@
 
   let { children }: { children: Snippet } = $props();
 
-  let theme = $state<'dark' | 'light'>('dark');
+  let theme: 'dark' | 'light' = $state('dark');
 
   let showCopied = $state(false);
   let chipFlash = $state('');

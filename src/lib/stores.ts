@@ -41,7 +41,7 @@ export function initSocketListeners(): () => void {
         playerId.set(msg.playerId);
         gameState.set(msg.state);
         connected.set(true);
-        isSpectator.set((msg as any).isSpectator === true);
+        isSpectator.set(msg.isSpectator === true);
         break;
 
       case 'state_update':
@@ -51,8 +51,8 @@ export function initSocketListeners(): () => void {
           }
           return msg.state;
         });
-        if ('isSpectator' in (msg as any)) {
-          isSpectator.set((msg as any).isSpectator === true);
+        if ('isSpectator' in msg) {
+          isSpectator.set(msg.isSpectator === true);
         }
         break;
 

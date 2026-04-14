@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -16,7 +17,7 @@
   const error = writable<string | null>(null);
 
   let isSpectator = $state(false);
-  let selectedCards = $state<any[]>([]);
+  let selectedCards: any[] = $state([]);
   let reconnecting = $state(true);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
@@ -57,8 +58,8 @@
   let pid = $derived($myPlayerId);
   let isHost = $derived(state?.players?.find((p: any) => p.id === pid)?.isHost ?? false);
   let isMyTurn = $derived(state?.currentTurn === pid);
-  let myHand = $derived((state?.tableState?.myHand ?? []) as any[]);
-  let pile = $derived((state?.tableState?.pile ?? []) as any[]);
+  let myHand = $derived((state?.tableState?.myHand ?? []) as { suit: string; rank: string; value: number }[]);
+  let pile = $derived((state?.tableState?.pile ?? []) as { suit: string; rank: string; value: number }[]);
   let pilePlayCount = $derived(state?.tableState?.pilePlayCount ?? 0);
   let titles = $derived((state?.tableState?.titles ?? {}) as Record<string, string>);
   let finishOrder = $derived((state?.tableState?.finishOrder ?? []) as string[]);

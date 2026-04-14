@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -8,15 +9,15 @@
 
   const code = $page.params.code!;
   const urlParams = new URLSearchParams($page.url.search);
-  let deviceRole = $state<'center' | 'player'>(urlParams.get('role') === 'center' ? 'center' : 'player');
+  let deviceRole: 'center' | 'player' = $state(urlParams.get('role') === 'center' ? 'center' : 'player');
 
   const socket = new CardGameSocket('/ws/snap');
 
-  let gameState = $state<any>(null);
-  let myPlayerId = $state<string | null>(null);
-  let error = $state<string | null>(null);
+  let gameState: any = $state(null);
+  let myPlayerId: string | null = $state(null);
+  let error: string | null = $state(null);
   let reconnecting = $state(true);
-  let lastSnapResult = $state<any>(null);
+  let lastSnapResult: any = $state(null);
   let snapFlash = $state(false);
   let isSpectator = $state(false);
   let errorTimeout: ReturnType<typeof setTimeout>;

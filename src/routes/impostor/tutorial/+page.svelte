@@ -21,18 +21,18 @@
     ['Available everywhere', 'Many varieties', 'A classic choice'],
   ];
 
-  let phase = $state<TutorialPhase>('intro');
-  let playerRole = $state<'player' | 'impostor'>('player');
+  let phase: TutorialPhase = $state('intro');
+  let playerRole: 'player' | 'impostor' = $state('player');
   let hintRound = $state(0);
   let currentBotHintIndex = $state(0);
-  let botHints = $state<{ name: string; text: string }[]>([]);
+  let botHints: { name: string; text: string }[] = $state([]);
   let playerHint = $state('');
   let playerHasHinted = $state(false);
-  let allHints = $state<{ name: string; text: string }[][]>([]);
-  let botVotes = $state<{ voter: string; target: string }[]>([]);
-  let playerVote = $state<string | null>(null);
+  let allHints: { name: string; text: string }[][] = $state([]);
+  let botVotes: { voter: string; target: string }[] = $state([]);
+  let playerVote: string | null = $state(null);
   let revealExplanation = $state('');
-  let animatingBot = $state<string | null>(null);
+  let animatingBot: string | null = $state(null);
 
   function startTutorial() {
     // 50/50 random role

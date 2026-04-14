@@ -40,7 +40,7 @@
 
   // ─── Drag state ───────────────────────────────────────────────────────────
   let dragging = $state(false);
-  let svgEl = $state<SVGSVGElement | null>(null);
+  let svgEl: SVGSVGElement | null = $state(null);
 
   // ─── Angle math helpers ───────────────────────────────────────────────────
   // Game angle: 0 = left end, 180 = right end

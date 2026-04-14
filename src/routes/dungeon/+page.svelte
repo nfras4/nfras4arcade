@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack, onMount } from 'svelte'
+  import { untrack } from 'svelte'
   import {
     player, loadPlayer, savePlayer, upgradeStats,
     travelToZone, equipFromLootQueue, discardFromLootQueue,
@@ -69,6 +69,14 @@
   // Reroll confirmation
   let rerollConfirmItem: Item | null = $state(null)
   let rerollConfirmTimeout: ReturnType<typeof setTimeout> | null = null
+
+  // Zone lock feedback
+  let zoneLockMsg = $state('')
+  let zoneLockTimeout: ReturnType<typeof setTimeout> | null = null
+
+  // Discard confirmation
+  let discardConfirmItem: Item | null = $state(null)
+  let discardConfirmTimeout: ReturnType<typeof setTimeout> | null = null
 
   // Tutorial
   let showTutorial   = $state(false)
@@ -193,6 +201,19 @@
     return Math.round(Math.min(luck * 0.008, 0.4) * 100)
   }
 
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return
+    if (showOfflineModal) { showOfflineModal = false; clearOfflineEarnings(); playSound('gold') }
+    else if (showPrestigeModal) showPrestigeModal = false
+    else if (showUpgradeModal) showUpgradeModal = false
+    else if (equipModalSlot) equipModalSlot = null
+    else if (showCraftResult) dismissCraftOverlay()
+    else if (showAchModal) showAchModal = false
+    else if (showStatsModal) showStatsModal = false
+    else if (showLeaderboard) showLeaderboard = false
+    else if (showStoryModal) showStoryModal = false
+  }
+
   const QUALITY_COLOR: Record<string, string> = {
     normal: '#888', good: '#40a040', great: '#4080ff', perfect: '#f0c030'
   }
@@ -279,7 +300,15 @@
   }
 
   function doTravelToZone(i: number): void {
-    if (!zoneAccessible(i)) return
+    if (!zoneAccessible(i)) {
+      if (zoneLockTimeout) clearTimeout(zoneLockTimeout)
+      const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0
+      zoneLockMsg = player.level < lvlReq ? `Requires Level ${lvlReq}` : 'Defeat the boss first'
+      zoneLockTimeout = setTimeout(() => { zoneLockMsg = '' }, 2000)
+      return
+    }
+    zoneLockMsg = ''
+    if (zoneLockTimeout) { clearTimeout(zoneLockTimeout); zoneLockTimeout = null }
     travelToZone(i)
     spawnEnemy()
   }
@@ -338,14 +367,15 @@
   const isPlayerStunned = $derived(combatState.activeStuns.some(s => s.until > now))
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  function td(id: string, _tick: number) {
-    return { prog: timerProgress(id)*100, rem: timerRemaining(id), run: isRunning(id), rdy: isReady(id) }
+  function td(id: string, tick: number) {
+    return { prog: timerProgress(id, tick)*100, rem: timerRemaining(id, tick), run: isRunning(id, tick), rdy: isReady(id, tick) }
   }
   function onTimerClick(id: string) {
     const act = ACTIVITIES.find(a => a.id === id)
     if (!act) return
-    if (isReady(id)) collectActivity(id)
-    else if (!isRunning(id) && canStart(act)) startActivity(id)
+    const t = Date.now()
+    if (isReady(id, t)) collectActivity(id)
+    else if (!isRunning(id, t) && canStart(act)) startActivity(id)
   }
 
   function drawCanvas(zi: number) {
@@ -362,13 +392,18 @@
   // massive player.$state write-storm from firing inside the effect queue and
   // inflating the update-depth counter. playerLoaded gates the zone-story effect
   // so it won't show stale firstVisit data before loadPlayer() has run.
-  onMount(() => {
+  let _initDone = false
+  $effect(() => {
+    if (_initDone) return
+    _initDone = true
     const isFirstTime = typeof localStorage !== 'undefined' && !localStorage.getItem('wolton-dungeon-player')
-    loadPlayer(); loadTimers(); spawnEnemy()
-    soundMuted = isMuted()
-    if (getOfflineEarnings()) showOfflineModal = true
-    if (isFirstTime) showTutorial = true
-    playerLoaded = true
+    untrack(() => {
+      loadPlayer(); loadTimers(); spawnEnemy()
+      soundMuted = isMuted()
+      if (getOfflineEarnings()) showOfflineModal = true
+      if (isFirstTime) showTutorial = true
+      playerLoaded = true
+    })
   })
 
   $effect(() => {
@@ -396,7 +431,7 @@
     if (ctx) ZONES[zi].drawBg(ctx, canvas.width, canvas.height)
   })
 
-  onMount(() => {
+  $effect(() => {
     const onResize = () => drawCanvas(untrack(() => player.currentZone))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -419,12 +454,12 @@
     return () => clearInterval(id)
   })
 
-  onMount(() => {
+  $effect(() => {
     const id = setInterval(() => { now = Date.now() }, 500)
     return () => clearInterval(id)
   })
 
-  onMount(() => {
+  $effect(() => {
     const save = () => {
       savePlayer()
       saveTimers()
@@ -506,9 +541,10 @@
   $effect(() => {
     if (!autoCollect) return
     const id = setInterval(() => {
+      const t = Date.now()
       for (const act of ACTIVITIES) {
-        if (isReady(act.id)) collectActivity(act.id)
-        if (!isReady(act.id) && !isRunning(act.id) && canStart(act)) {
+        if (isReady(act.id, t)) collectActivity(act.id)
+        if (!isReady(act.id, t) && !isRunning(act.id, t) && canStart(act)) {
           startActivity(act.id)
         }
       }
@@ -556,7 +592,10 @@
 
   // Guard: don't play sounds during initial load
   let soundsReady = false
-  onMount(() => { setTimeout(() => { soundsReady = true }, 800) })
+  $effect(() => {
+    const t = setTimeout(() => { soundsReady = true }, 800)
+    return () => clearTimeout(t)
+  })
 
   // Kill session counter + death sound
   let prevEnemyHp = combatState.enemyHp
@@ -616,7 +655,7 @@
   })
 
   // First-click audio context init
-  onMount(() => {
+  $effect(() => {
     const handler = () => { initAudio(); document.removeEventListener('click', handler) }
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
@@ -630,6 +669,8 @@
   <meta property="og:title" content="Wolton Dungeon">
   <meta property="og:description" content="A pixel art idle RPG. Fight through Brisbane. Take down Fraser. Ascend.">
 </svelte:head>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="droot">
 
@@ -819,6 +860,9 @@
             {/if}
           {/each}
         </div>
+        {#if zoneLockMsg}
+          <div class="zone-lock-msg">{zoneLockMsg}</div>
+        {/if}
       </div>
     </div>
 
@@ -958,7 +1002,17 @@
               </div>
               <div class="lq-btns">
                 <button class="lq-btn eq" onclick={() => equipFromLootQueue(item)}>EQUIP</button>
-                <button class="lq-btn dc" onclick={() => discardFromLootQueue(item)}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                {#if ['rare', 'epic'].includes(item.rarity) && discardConfirmItem === item}
+                  <button class="lq-btn dc confirm" onclick={() => { discardFromLootQueue(item); discardConfirmItem = null }}>CONFIRM?</button>
+                {:else if ['rare', 'epic'].includes(item.rarity)}
+                  <button class="lq-btn dc" onclick={() => {
+                    discardConfirmItem = item
+                    if (discardConfirmTimeout) clearTimeout(discardConfirmTimeout)
+                    discardConfirmTimeout = setTimeout(() => { discardConfirmItem = null }, 2000)
+                  }}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                {:else}
+                  <button class="lq-btn dc" onclick={() => discardFromLootQueue(item)}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                {/if}
               </div>
             </div>
           {/each}
@@ -1166,7 +1220,7 @@
 {#if showOfflineModal}
   {@const offEarn = getOfflineEarnings()}
   {#if offEarn}
-    <div class="moverlay" role="dialog" aria-modal="true">
+    <div class="moverlay" onclick={() => { showOfflineModal = false; clearOfflineEarnings(); playSound('gold') }} role="dialog" aria-modal="true">
       <div class="mbox" onclick={(e) => e.stopPropagation()}>
         <div class="mhdr">
           <span class="mtitle">WELCOME BACK</span>
@@ -2117,6 +2171,15 @@
     font-size: 12px; padding: 3px 6px; cursor: pointer; line-height: 1;
   }
   .mute-btn:hover { border-color: var(--z-accent); }
+
+  /* zone lock feedback */
+  .zone-lock-msg {
+    font-size: 5px; color: #c04040; text-align: center;
+    padding: 2px 0; margin-top: 2px;
+  }
+
+  /* discard confirm flash */
+  .lq-btn.dc.confirm { border-color: #c04040; color: #c04040; animation: bb 0.4s ease-in-out infinite alternate; }
 
   /* ── REROLL CONFIRM ───────────────────────────────────────────────── */
   .confirm-reroll { color: #f0c030 !important; border-color: #f0c030 !important; animation: boss-pulse 0.3s ease-in-out infinite; }

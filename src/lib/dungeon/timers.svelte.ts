@@ -168,30 +168,30 @@ export function collectActivity(activityId: string): void {
 }
 
 /** Returns 0–1 progress for a running timer, 1 if done. */
-export function timerProgress(activityId: string): number {
+export function timerProgress(activityId: string, now: number = Date.now()): number {
   const entry = timerState.active[activityId]
   if (!entry) return 0
   const activity = ACTIVITIES.find(a => a.id === activityId)
   if (!activity) return 0
   if (entry.collected) return 0
-  const elapsed = Date.now() - entry.startedAt
+  const elapsed = now - entry.startedAt
   return Math.min(1, elapsed / activity.durationMs)
 }
 
-export function timerRemaining(activityId: string): number {
+export function timerRemaining(activityId: string, now: number = Date.now()): number {
   const entry = timerState.active[activityId]
   if (!entry || entry.collected) return 0
-  return Math.max(0, entry.endsAt - Date.now())
+  return Math.max(0, entry.endsAt - now)
 }
 
-export function isRunning(activityId: string): boolean {
+export function isRunning(activityId: string, now: number = Date.now()): boolean {
   const entry = timerState.active[activityId]
-  return !!entry && !entry.collected && Date.now() < entry.endsAt
+  return !!entry && !entry.collected && now < entry.endsAt
 }
 
-export function isReady(activityId: string): boolean {
+export function isReady(activityId: string, now: number = Date.now()): boolean {
   const entry = timerState.active[activityId]
-  return !!entry && !entry.collected && Date.now() >= entry.endsAt
+  return !!entry && !entry.collected && now >= entry.endsAt
 }
 
 export function formatMs(ms: number): string {

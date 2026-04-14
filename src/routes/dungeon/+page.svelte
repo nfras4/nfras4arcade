@@ -1422,7 +1422,7 @@
 <style>
   /* ── BASE ─────────────────────────────────────────────────────────── */
   .droot {
-    position: fixed; inset: 0; overflow: hidden;
+    position: fixed; top: 3.25rem; left: 0; right: 0; bottom: 0; overflow: hidden;
     background: var(--z-bg, #060a06);
     color: #d0d0d0;
     font-family: 'Press Start 2P', monospace;
@@ -1521,7 +1521,7 @@
 
   /* ── COMBAT PANEL ─────────────────────────────────────────────────── */
   .cpanel { display: flex; flex-direction: column; }
-  .scene  { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+  .scene  { flex: 1; position: relative; overflow: hidden; min-height: 0; max-height: 200px; }
   canvas.scene-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .particles { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
   .particle  { position: absolute; border-radius: 50%; animation: drift linear infinite; }

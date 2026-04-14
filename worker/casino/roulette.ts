@@ -44,7 +44,7 @@ export class RouletteRoom extends CasinoRoom {
 
   private getTable(): RouletteTableState {
     if (!this.tableState) return this.defaultTable();
-    const ts = this.tableState as any;
+    const ts = this.tableState as Partial<RouletteTableState>;
     // Ensure new fields have defaults for backward compatibility
     if (ts.bettingEndsAt === undefined) ts.bettingEndsAt = 0;
     if (ts.displayEndsAt === undefined) ts.displayEndsAt = 0;

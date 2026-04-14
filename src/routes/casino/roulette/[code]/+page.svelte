@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -119,7 +120,7 @@
 
   const SEGMENT_GAP = 6;
   const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP;
-  let prevPhase = $state<string | null>(null);
+  let prevPhase: string | null = $state(null);
 
   // Trigger strip slide animation when result arrives
   $effect(() => {

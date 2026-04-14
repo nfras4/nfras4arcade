@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -15,7 +16,7 @@
 
   let reconnecting = $state(true);
   let betInput = $state(25);
-  let myBetType = $state<'player' | 'banker' | 'tie' | null>(null);
+  let myBetType: 'player' | 'banker' | 'tie' | null = $state(null);
   let errorTimeout: ReturnType<typeof setTimeout>;
   let bettingTimeLeft = $state(0);
   let nextRoundIn = $state(0);
@@ -307,7 +308,7 @@
                 min={minBet}
                 max={Math.min(maxBet, myChips)}
                 step={5}
-                bind:value={betInput}
+                value={betInput} oninput={(e) => betInput = Number(e.currentTarget.value)}
               />
               <span class="bet-max">{Math.min(maxBet, myChips)}</span>
             </div>

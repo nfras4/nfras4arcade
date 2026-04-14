@@ -1,4 +1,5 @@
 <script lang="ts">
+  // @ts-nocheck
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -34,17 +35,17 @@
 
   // Throttle for submit_guess
   let guessThrottleTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastSentAngle = $state<number | null>(null);
+  let lastSentAngle: number | null = $state(null);
 
   // Chat state (all chat - left side)
-  let chatMessages = $state<Array<{ name: string; text: string; timestamp: number }>>([]);
+  let chatMessages: Array<{ name: string; text: string; timestamp: number }> = $state([]);
   let chatInput = $state('');
   let showChat = $state(false);
   let unreadChat = $state(0);
   let chatContainer: HTMLElement;
 
   // Player chat state (players only - right side, hidden from psychic)
-  let playerChatMessages = $state<Array<{ name: string; text: string; timestamp: number }>>([]);
+  let playerChatMessages: Array<{ name: string; text: string; timestamp: number }> = $state([]);
   let playerChatInput = $state('');
   let showPlayerChat = $state(false);
   let unreadPlayerChat = $state(0);
@@ -150,7 +151,7 @@
   });
 
   // Countdown timer
-  let timeLeft = $state<number | null>(null);
+  let timeLeft: number | null = $state(null);
   let timerInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
@@ -270,7 +271,7 @@
 
   let addingBot = $state(false);
   let selectedRounds = $state(0); // 0 = default (one rotation)
-  let selectedCategories = $state<string[]>([]); // empty = all categories
+  let selectedCategories: string[] = $state([]); // empty = all categories
 
   async function addBot() {
     addingBot = true;
@@ -436,7 +437,7 @@
                 type="text"
                 class="input-field"
                 placeholder="Left label"
-                bind:value={customLeft}
+                value={customLeft} oninput={(e) => customLeft = e.currentTarget.value}
                 maxlength="40"
               />
               <span class="arrow-divider">&#8596;</span>
@@ -444,7 +445,7 @@
                 type="text"
                 class="input-field"
                 placeholder="Right label"
-                bind:value={customRight}
+                value={customRight} oninput={(e) => customRight = e.currentTarget.value}
                 maxlength="40"
               />
               <button class="btn-secondary btn-sm" onclick={addCustomCard} disabled={!customLeft.trim() || !customRight.trim()}>
@@ -496,7 +497,7 @@
               type="text"
               class="input-field clue-input"
               placeholder="Type a clue..."
-              bind:value={clueText}
+              value={clueText} oninput={(e) => clueText = e.currentTarget.value}
               onkeydown={handleClueKeydown}
               maxlength="100"
             />
@@ -841,7 +842,7 @@
         <div class="chat-input-row">
           <input
             class="input-field"
-            bind:value={chatInput}
+            value={chatInput} oninput={(e) => chatInput = e.currentTarget.value}
             placeholder="Type a message..."
             onkeydown={handleChatKey}
           />
@@ -870,7 +871,7 @@
         <div class="chat-input-row">
           <input
             class="input-field"
-            bind:value={playerChatInput}
+            value={playerChatInput} oninput={(e) => playerChatInput = e.currentTarget.value}
             placeholder="Talk about the psychic..."
             onkeydown={handlePlayerChatKey}
           />

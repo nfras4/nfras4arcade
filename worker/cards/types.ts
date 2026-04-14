@@ -51,4 +51,5 @@ export interface CardRoomStoredState {
   lastActivity: number;
   disconnectTimestamps?: [string, number][];
   spectators?: [string, string][];
+  botTurnPending?: boolean;
 }

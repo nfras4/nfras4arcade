@@ -1,8 +1,8 @@
 <script lang="ts">
   let { data } = $props();
 
-  let sortField = $state<'created_at' | 'category'>('created_at');
-  let sortDir = $state<'asc' | 'desc'>('desc');
+  let sortField: 'created_at' | 'category' = $state('created_at');
+  let sortDir: 'asc' | 'desc' = $state('desc');
 
   let sorted = $derived(() => {
     const items = [...data.feedback];

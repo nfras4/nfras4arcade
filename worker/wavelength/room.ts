@@ -1382,7 +1382,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       const playerId = tags[0];
       if (!playerId) continue;
       const state = this.getStateForPlayer(playerId);
-      if (spectatorList) (state as any).spectators = spectatorList;
+      if (spectatorList) state.spectators = spectatorList;
       this.sendToWs(ws, {
         type: 'state_update',
         state,

@@ -30,10 +30,10 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 			.bind(locals.user.id)
 			.all<{ item_id: string; quantity: number }>();
 
-		for (const row of inventory.results) {
+		for (const row of (inventory.results??[])) {
 			owned[row.item_id] = row.quantity;
 		}
 	}
 
-	return json({ items: items.results, owned });
+	return json({ items: items.results??[], owned });
 };

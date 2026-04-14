@@ -56,7 +56,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 			}>(),
 	]);
 
-	const inventory = inventoryResult.results.map((row) => ({
+	const inventory = (inventoryResult.results??[]).map((row) => ({
 		item: {
 			id: row.id,
 			category: row.category,

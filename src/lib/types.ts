@@ -59,6 +59,7 @@ export interface GameState {
   hasVoted: boolean;
   // Results
   roundResult?: RoundResult;
+  spectators?: { id: string; name: string }[];
 }
 
 // Client → Server messages
@@ -80,8 +81,8 @@ export type ClientMessage =
 
 // Server → Client messages
 export type ServerMessage =
-  | { type: 'joined'; playerId: string; state: GameState }
-  | { type: 'state_update'; state: GameState }
+  | { type: 'joined'; playerId: string; state: GameState; isSpectator?: boolean }
+  | { type: 'state_update'; state: GameState; isSpectator?: boolean }
   | { type: 'hint_given'; hint: HintEntry }
   | { type: 'player_done'; playerId: string }
   | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number }

@@ -77,7 +77,7 @@
     },
   ];
 
-  let creatingSolo = $state<string | null>(null);
+  let creatingSolo: string | null = $state(null);
 
   async function playSolo(game: typeof games[0]) {
     if (game.soloAction === 'tutorial') {

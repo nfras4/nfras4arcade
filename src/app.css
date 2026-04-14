@@ -16,8 +16,8 @@
   --blue: #4da8e6;
   --red: #e94560;
   --text: #d8dce8;
-  --text-muted: #8a9aaa;
-  --text-subtle: #6a7a8a;
+  --text-muted: #a8b8c4;
+  --text-subtle: #7a8c9c;
   --border: rgba(120, 140, 130, 0.1);
   --border-bright: rgba(120, 140, 130, 0.2);
   --radius: 4px;
@@ -51,7 +51,7 @@
   --red: #b91c1c;
   --text: #0f172a;
   --text-muted: #475569;
-  --text-subtle: #94a3b8;
+  --text-subtle: #5a6f84;
   --border: rgba(15, 23, 42, 0.1);
   --border-bright: rgba(15, 23, 42, 0.18);
 

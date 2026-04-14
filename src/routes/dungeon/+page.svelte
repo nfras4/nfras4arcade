@@ -386,9 +386,13 @@
     return () => window.removeEventListener('resize', onResize)
   })
 
+  // Combat tick: interval rate uses speed but must not create a reactive dep on player.stats
+  // so that kills (which write player state) don't re-trigger this effect and recreate intervals.
+  // combatSpeed is the only tracked dep (user-toggled UI state).
   $effect(() => {
     const spd = combatSpeed
-    const ms = Math.max(200, Math.floor(calcAttackInterval(player.stats.speed) / spd))
+    const speed = untrack(() => player.stats.speed)
+    const ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
     const id = setInterval(playerAttack, ms)
     return () => clearInterval(id)
   })
@@ -415,18 +419,10 @@
     return () => { clearInterval(id); window.removeEventListener('beforeunload', save) }
   })
 
-  // Submit leaderboard on boss kill
-  $effect(() => {
-    const bossCount = player.lifetimeStats.bossesDefeated
-    if (bossCount > 0) {
-      untrack(() => submitLeaderboard(player))
-    }
-  })
-
   $effect(() => {
     const zi = player.currentZone
     const zoneKey = `zone-${zi}`
-    if (player.firstVisit.includes(zoneKey)) return
+    if (untrack(() => player.firstVisit.includes(zoneKey))) return
     const lines = ZONES[zi].storyText
     if (lines && lines.length > 0) {
       untrack(() => {

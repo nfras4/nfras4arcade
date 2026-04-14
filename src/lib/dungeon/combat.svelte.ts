@@ -1,7 +1,7 @@
 import { untrack } from 'svelte'
 import {
   player, damagePlayer, healPlayer, gainGold, gainXp, respawnPlayer, advanceToZone,
-  addToLootQueue, setOnLevelUp, checkAchievements, savePlayer,
+  addToLootQueue, setOnLevelUp, checkAchievements, savePlayer, submitLeaderboard,
   type Stats, type PlayerState,
 } from './player.svelte'
 import { ENEMIES } from './enemies'
@@ -740,6 +740,7 @@ function handleEnemyDeath(): void {
 
   if (enemy.isBoss) {
     // Boss defeated -- advance to next zone
+    submitLeaderboard(player)
     const nextZone = zoneIdx + 1
     if (nextZone < ZONES.length) {
       combatState.bossDefeated = true

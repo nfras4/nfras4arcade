@@ -4,17 +4,11 @@ type SoundId =
   | 'stun' | 'prestige' | 'craft' | 'craft-perfect'
 
 let ctx: AudioContext | null = null
+let audioDisabled = false
 let muted = typeof localStorage !== 'undefined' ? localStorage.getItem('wdMuted') === '1' : true
 
-function getCtx(): AudioContext | null {
-  if (!ctx && typeof AudioContext !== 'undefined') {
-    ctx = new AudioContext()
-  }
-  return ctx
-}
-
 export function initAudio(): void {
-  getCtx()
+  // no-op: AudioContext is created lazily on first playSound() call
 }
 
 export function setMuted(m: boolean): void {
@@ -25,9 +19,19 @@ export function setMuted(m: boolean): void {
 export function isMuted(): boolean { return muted }
 
 export function playSound(id: SoundId, volume = 0.3): void {
-  if (muted) return
-  const ac = getCtx()
-  if (!ac) return
+  if (muted || audioDisabled) return
+
+  if (!ctx) {
+    try {
+      ctx = new AudioContext()
+      ctx.resume()
+    } catch {
+      audioDisabled = true
+      return
+    }
+  }
+
+  const ac = ctx
   if (ac.state === 'suspended') ac.resume()
 
   switch (id) {

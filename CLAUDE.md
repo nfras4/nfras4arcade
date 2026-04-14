@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon init timing - restore $effect+untrack for init so loadPlayer runs before zone-story effect, fixing story modal blocking clicks and enemies not appearing. Branch: `main`, commit: `cdc2430`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Switch baccarat to Super 6 (commission-free) - banker wins with 6 pay 0.5:1, all other banker wins pay 1:1. Branch: `main`, commit: `78d2aa4`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix effect_update_depth_exceeded - convert 6 no-dep $effects to onMount, wrap $state writes with untrack, fix impure isPlayerStunned $derived. Branch: `main`, commit: `1a5b6cc`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon loot overlay undismissable - add COLLECT button, queue drain, backdrop click, filter to good+ quality only. Branch: `main`, commit: `e0ae4b2`.
@@ -211,6 +212,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Add slot machine to casino with server-side RNG, expanding wilds, SVG symbols, payline overlay. Branch: `main`, commit: `129d1e3`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Blackjack auto-deal timer, poker hand display, chip sync across nav. Branch: `main`, commit: `e6ebba0`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Fix poker betting round skipping all players when checking. Branch: `main`, commit: `c6a5695`.
-- **2026-04-13** - Deployed to nfras4arcade. Summary: Increase wavelength max rounds from 10 to 30. Branch: `main`, commit: `cd39786`.
-- **2026-04-13** - Deployed to nfras4arcade. Summary: Wavelength round insights and 5 new end-of-game awards. Branch: `main`, commit: `b823020`.
-- **2026-04-13** - Deployed to nfras4arcade. Summary: Casino visual polish, roulette CS2-style redesign with auto-spin timer, wavelength 275 cards. Branch: `main`, commit: `a20324a`.

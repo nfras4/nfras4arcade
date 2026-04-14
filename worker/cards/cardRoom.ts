@@ -802,7 +802,11 @@ export abstract class CardRoom extends DurableObject<Env> {
   // --- Messaging ---
 
   protected sendToWs(ws: WebSocket, msg: object): void {
-    try { ws.send(JSON.stringify(msg)); } catch {}
+    try {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    } catch {}
   }
 
   protected sendTo(playerId: string, msg: object): void {

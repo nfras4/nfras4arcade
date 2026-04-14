@@ -794,6 +794,9 @@ export class WavelengthRoom extends DurableObject<Env> {
         } as ServerMessage, this.psychicId);
         break;
       }
+
+      default:
+        break;
     }
 
     await this.saveState();
@@ -1349,7 +1352,9 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   private sendToWs(ws: WebSocket, msg: ServerMessage): void {
     try {
-      ws.send(JSON.stringify(msg));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
     } catch {}
   }
 

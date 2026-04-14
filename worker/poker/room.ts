@@ -555,6 +555,8 @@ export class PokerRoom extends CardRoom {
         ts.bettingRound = 'showdown';
         await this.resolveShowdown(ts);
         return;
+      default:
+        break;
     }
 
     // Check if we need to go straight to showdown (all active players are all-in)
@@ -779,6 +781,14 @@ export class PokerRoom extends CardRoom {
   }
 
   // ─── Game state for player ─────────────────────────────────────
+
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    await super.webSocketClose(ws, code, reason);
+  }
+
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    await super.webSocketError(ws, error);
+  }
 
   protected getGameStateForPlayer(playerId: string): CardGameState {
     const ts = this.getTable();

@@ -449,23 +449,25 @@
   let pendingDropResults = $state<CraftResult[]>([])
   $effect(() => {
     const queue = player.lootQueue
-    for (const item of queue) {
-      if (!item.instanceId || seenDropIds.has(item.instanceId)) continue
-      seenDropIds.add(item.instanceId)
-      if (item.rolledBonuses && item.rolledBonuses.length > 0) {
-        pendingDropResults = [...pendingDropResults, {
-          item,
-          bonusRolls: item.rolledBonuses,
-          rollQuality: item.rolledBonuses.length >= 3 ? 'great' : item.rolledBonuses.length >= 2 ? 'good' : 'normal',
-        }]
+    untrack(() => {
+      for (const item of queue) {
+        if (!item.instanceId || seenDropIds.has(item.instanceId)) continue
+        seenDropIds.add(item.instanceId)
+        if (item.rolledBonuses && item.rolledBonuses.length > 0) {
+          pendingDropResults = [...pendingDropResults, {
+            item,
+            bonusRolls: item.rolledBonuses,
+            rollQuality: item.rolledBonuses.length >= 3 ? 'great' : item.rolledBonuses.length >= 2 ? 'good' : 'normal',
+          }]
+        }
       }
-    }
-    // Show first pending if no overlay active
-    if (!showCraftResult && pendingDropResults.length > 0) {
-      craftResult = pendingDropResults[0]
-      pendingDropResults = pendingDropResults.slice(1)
-      showCraftResult = true
-    }
+      // Show first pending if no overlay active
+      if (!showCraftResult && pendingDropResults.length > 0) {
+        craftResult = pendingDropResults[0]
+        pendingDropResults = pendingDropResults.slice(1)
+        showCraftResult = true
+      }
+    })
   })
 
   // Watch for victory states
@@ -538,6 +540,10 @@
     }
   })
 
+  // Guard: don't play sounds during initial load
+  let soundsReady = false
+  $effect(() => { untrack(() => { setTimeout(() => { soundsReady = true }, 800) }) })
+
   // Kill session counter + death sound
   let prevEnemyHp = combatState.enemyHp
   $effect(() => {
@@ -545,7 +551,7 @@
     const eid = combatState.enemyId
     if (hp === 0 && prevEnemyHp > 0) {
       untrack(() => {
-        playSound('death')
+        if (soundsReady) playSound('death')
         if (eid) killSessionCounts[eid] = (killSessionCounts[eid] ?? 0) + 1
       })
     }
@@ -560,11 +566,13 @@
       const newOnes = floaters.slice(prevFloaterCount)
       untrack(() => {
         prevFloaterCount = floaters.length
-        for (const f of newOnes) {
-          if (f.side === 'enemy') {
-            playSound(f.kind === 'crit' ? 'crit' : 'hit')
-          } else if (f.side === 'player' && f.kind === 'hit') {
-            playSound('player-hit')
+        if (soundsReady) {
+          for (const f of newOnes) {
+            if (f.side === 'enemy') {
+              playSound(f.kind === 'crit' ? 'crit' : 'hit')
+            } else if (f.side === 'player' && f.kind === 'hit') {
+              playSound('player-hit')
+            }
           }
         }
       })
@@ -574,19 +582,23 @@
   })
 
   // Stun sound
+  let prevStunCount = 0
   $effect(() => {
     const stunCount = combatState.activeStuns.length
-    if (stunCount > 0) {
+    if (stunCount > prevStunCount && soundsReady) {
       untrack(() => playSound('stun'))
     }
+    prevStunCount = stunCount
   })
 
-  // Item drop sound
+  // Item drop sound — only for new items added after init
+  let prevLootLen = player.lootQueue.length
   $effect(() => {
-    const queue = player.lootQueue
-    if (queue.length > 0) {
+    const len = player.lootQueue.length
+    if (len > prevLootLen && soundsReady) {
       untrack(() => playSound('item-drop'))
     }
+    prevLootLen = len
   })
 
   // First-click audio context init
@@ -1228,7 +1240,7 @@
     role="dialog"
     aria-modal="true"
   >
-    <div class="craft-result-box" onclick={(e) => e.stopPropagation()}>
+    <div class="craft-result-box">
       <div class="cr-sprite">{cr.item.sprite}</div>
       <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">{cr.item.name}</div>
       <div class="cr-quality-badge" style="color:{QUALITY_COLOR[cr.rollQuality]}">{cr.rollQuality.toUpperCase()}</div>

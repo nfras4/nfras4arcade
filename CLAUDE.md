@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix effect_update_depth_exceeded - convert 6 no-dep $effects to onMount, wrap $state writes with untrack, fix impure isPlayerStunned $derived. Branch: `main`, commit: `1a5b6cc`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon loot overlay undismissable - add COLLECT button, queue drain, backdrop click, filter to good+ quality only. Branch: `main`, commit: `e0ae4b2`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix AudioContext autoplay error and effect_update_depth_exceeded in dungeon. Branch: `main`, commit: `c797f8a`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix WCAG AA text contrast - boost --text-muted and --text-subtle in dark mode, darken --text-subtle in light mode. Branch: `main`, commit: `9a6be03`.

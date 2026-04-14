@@ -303,8 +303,8 @@ export class BaccaratRoom extends CasinoRoom {
         } else {
           if (bet.type === result) {
             if (bet.type === 'banker') {
-              // Banker pays 0.95:1 (5% commission)
-              totalPayout += bet.amount + Math.floor(bet.amount * 0.95);
+              // Super 6: banker wins with 6 pays 0.5:1, otherwise 1:1
+              totalPayout += bet.amount + (finalBankerTotal === 6 ? Math.floor(bet.amount * 0.5) : bet.amount);
             } else {
               // Player pays 1:1
               totalPayout += bet.amount + bet.amount;

@@ -146,7 +146,7 @@
           <li><span class="step-num" aria-hidden="true">4</span><span>Hand value is the <strong>last digit</strong> of the card total (e.g. 15 = 5)</span></li>
           <li><span class="step-num" aria-hidden="true">5</span><span><strong>Natural</strong>: 8 or 9 on first two cards wins immediately</span></li>
           <li><span class="step-num" aria-hidden="true">6</span><span>Third card drawn automatically by standard baccarat rules</span></li>
-          <li><span class="step-num" aria-hidden="true">7</span><span><strong>Payouts</strong>: Player 1:1, Banker 0.95:1 (5% commission), Tie 8:1</span></li>
+          <li><span class="step-num" aria-hidden="true">7</span><span><strong>Payouts</strong>: Player 1:1, Banker 1:1 (½:1 if Banker wins with 6), Tie 8:1</span></li>
         </ol>
       {/if}
     </section>

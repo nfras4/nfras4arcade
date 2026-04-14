@@ -283,7 +283,7 @@
                 onclick={() => placeBet('banker')}
               >
                 <span class="bet-type-name">Banker</span>
-                <span class="bet-type-payout">0.95:1</span>
+                <span class="bet-type-payout">1:1 (½ on 6)</span>
               </button>
             </div>
 

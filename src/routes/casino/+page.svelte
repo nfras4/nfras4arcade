@@ -49,6 +49,13 @@
       maxPlayers: 50,
       route: '/casino/baccarat',
     },
+    {
+      id: 'slots',
+      name: 'Slots',
+      description: 'Spin the reels, match symbols',
+      maxPlayers: 1,
+      route: '/casino/slots',
+    },
   ];
 </script>
 

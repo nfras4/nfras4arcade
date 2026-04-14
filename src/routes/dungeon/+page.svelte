@@ -172,6 +172,16 @@
     savePlayer()
   }
 
+  function dismissCraftOverlay(): void {
+    if (pendingDropResults.length > 0) {
+      craftResult = pendingDropResults[0]
+      pendingDropResults = pendingDropResults.slice(1)
+    } else {
+      showCraftResult = false
+      craftResult = null
+    }
+  }
+
   function formatRolledBonuses(item: Item): string {
     if (!item.rolledBonuses || item.rolledBonuses.length === 0) return ''
     return item.rolledBonuses.map(r => r.label).join(' ')
@@ -449,11 +459,11 @@
       for (const item of queue) {
         if (!item.instanceId || seenDropIds.has(item.instanceId)) continue
         seenDropIds.add(item.instanceId)
-        if (item.rolledBonuses && item.rolledBonuses.length > 0) {
+        if (item.rolledBonuses && item.rolledBonuses.length >= 2) {
           pendingDropResults = [...pendingDropResults, {
             item,
             bonusRolls: item.rolledBonuses,
-            rollQuality: item.rolledBonuses.length >= 3 ? 'great' : item.rolledBonuses.length >= 2 ? 'good' : 'normal',
+            rollQuality: item.rolledBonuses.length >= 3 ? 'great' : 'good',
           }]
         }
       }
@@ -1232,11 +1242,11 @@
   {@const cr = craftResult}
   <div
     class="craft-overlay {cr.rollQuality === 'perfect' ? 'perfect-flash' : ''}"
-    onclick={() => { showCraftResult = false; craftResult = null; pendingDropResults = [] }}
+    onclick={dismissCraftOverlay}
     role="dialog"
     aria-modal="true"
   >
-    <div class="craft-result-box">
+    <div class="craft-result-box" onclick={(e) => e.stopPropagation()}>
       <div class="cr-sprite">{cr.item.sprite}</div>
       <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">{cr.item.name}</div>
       <div class="cr-quality-badge" style="color:{QUALITY_COLOR[cr.rollQuality]}">{cr.rollQuality.toUpperCase()}</div>
@@ -1253,7 +1263,10 @@
       {:else}
         <div class="cr-no-rolls">No bonus rolls this time.</div>
       {/if}
-      <div class="cr-hint">[ CLICK TO DISMISS ]</div>
+      {#if pendingDropResults.length > 0}
+        <div class="cr-queue-hint">{pendingDropResults.length} more pending</div>
+      {/if}
+      <button class="cr-collect-btn" onclick={dismissCraftOverlay}>COLLECT</button>
     </div>
   </div>
 {/if}
@@ -1958,7 +1971,14 @@
   .rolled-stat { color: #f0c030; }
   .cr-rolls-label { font-size: 6px; color: #888; margin: 6px 0 2px; }
   .cr-no-rolls { font-size: 6px; color: #555; margin: 6px 0; }
-  .cr-hint { font-size: 5px; color: #444; margin-top: 14px; }
+  .cr-queue-hint { font-size: 5px; color: #666; margin-top: 10px; }
+  .cr-collect-btn {
+    display: block; width: 100%; margin-top: 10px;
+    background: #1a3a1a; border: 2px solid var(--z-accent, #40a040);
+    color: var(--z-accent, #40a040); font-family: inherit; font-size: 8px;
+    letter-spacing: 2px; padding: 7px 0; cursor: pointer;
+  }
+  .cr-collect-btn:hover { background: #243a24; }
   @keyframes perfect-flash { 0%,100%{opacity:1} 50%{opacity:0.7;background:rgba(240,192,48,0.12)} }
   .perfect-flash { animation: perfect-flash 0.6s ease 2; }
 

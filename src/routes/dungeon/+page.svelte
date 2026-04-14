@@ -357,12 +357,17 @@
   }
 
   // ── Effects ───────────────────────────────────────────────────────────────
-  onMount(() => {
-    const isFirstTime = typeof localStorage !== 'undefined' && !localStorage.getItem('wolton-dungeon-player')
-    loadPlayer(); loadTimers(); spawnEnemy()
-    soundMuted = isMuted()
-    if (getOfflineEarnings()) showOfflineModal = true
-    if (isFirstTime) showTutorial = true
+  // Init runs as the FIRST $effect (in declaration order) so it executes before
+  // the zone-story / combat-interval effects see any $state. Everything is inside
+  // untrack so there are zero reactive dependencies and the block runs exactly once.
+  $effect(() => {
+    untrack(() => {
+      const isFirstTime = typeof localStorage !== 'undefined' && !localStorage.getItem('wolton-dungeon-player')
+      loadPlayer(); loadTimers(); spawnEnemy()
+      soundMuted = isMuted()
+      if (getOfflineEarnings()) showOfflineModal = true
+      if (isFirstTime) showTutorial = true
+    })
   })
 
   $effect(() => {

@@ -601,6 +601,9 @@ export class ImpostorRoom extends DurableObject<Env> {
         await this.handlePlayerLeave(playerId);
         break;
       }
+
+      default:
+        break;
     }
 
     await this.saveState();
@@ -1145,7 +1148,9 @@ export class ImpostorRoom extends DurableObject<Env> {
 
   private sendToWs(ws: WebSocket, msg: ServerMessage): void {
     try {
-      ws.send(JSON.stringify(msg));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
     } catch {}
   }
 

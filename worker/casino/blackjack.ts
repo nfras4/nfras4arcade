@@ -380,6 +380,8 @@ export class BlackjackRoom extends CasinoRoom {
           case 'lose':
             payout = 0;
             break;
+          default:
+            break;
         }
 
         ts.payouts[playerId] += payout;
@@ -563,6 +565,14 @@ export class BlackjackRoom extends CasinoRoom {
     }
 
     await this.ctx.storage.setAlarm(Math.max(soonest, now + 100));
+  }
+
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    await super.webSocketClose(ws, code, reason);
+  }
+
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    await super.webSocketError(ws, error);
   }
 
   protected getGameStateForPlayer(playerId: string): CasinoGameState {

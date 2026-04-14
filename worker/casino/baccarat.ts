@@ -480,6 +480,14 @@ export class BaccaratRoom extends CasinoRoom {
     await this.ctx.storage.setAlarm(Math.max(soonest, now + 100));
   }
 
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    await super.webSocketClose(ws, code, reason);
+  }
+
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    await super.webSocketError(ws, error);
+  }
+
   protected getGameStateForPlayer(playerId: string): CasinoGameState {
     const ts = this.getTable();
     const players = Array.from(this.players.values()).map(p => ({

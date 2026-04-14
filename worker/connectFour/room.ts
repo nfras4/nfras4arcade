@@ -251,6 +251,14 @@ export class ConnectFourRoom extends CardRoom {
     } catch {}
   }
 
+  async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    await super.webSocketClose(ws, code, reason);
+  }
+
+  async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
+    await super.webSocketError(ws, error);
+  }
+
   protected getGameStateForPlayer(playerId: string): CardGameState {
     const table = this.getTable();
 

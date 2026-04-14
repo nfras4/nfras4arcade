@@ -575,6 +575,9 @@ export class SnapRoom extends DurableObject<Env> {
         this.broadcastState();
         break;
       }
+
+      default:
+        break;
     }
 
     await this.saveState();
@@ -1008,7 +1011,9 @@ export class SnapRoom extends DurableObject<Env> {
 
   private sendToWs(ws: WebSocket, msg: ServerMessage): void {
     try {
-      ws.send(JSON.stringify(msg));
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
     } catch {}
   }
 

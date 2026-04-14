@@ -36,6 +36,7 @@
   let showOfflineModal   = $state(false)
   let showCraftResult    = $state(false)
   let craftResult        = $state<CraftResult | null>(null)
+  let playerLoaded       = $state(false)   // set true by onMount after loadPlayer()
   let showLeaderboard    = $state(false)
   let storyText          = $state<string[]>([])
   let activeTab          = $state<'upgrades' | 'gear' | 'items'>('upgrades')
@@ -357,17 +358,17 @@
   }
 
   // ── Effects ───────────────────────────────────────────────────────────────
-  // Init runs as the FIRST $effect (in declaration order) so it executes before
-  // the zone-story / combat-interval effects see any $state. Everything is inside
-  // untrack so there are zero reactive dependencies and the block runs exactly once.
-  $effect(() => {
-    untrack(() => {
-      const isFirstTime = typeof localStorage !== 'undefined' && !localStorage.getItem('wolton-dungeon-player')
-      loadPlayer(); loadTimers(); spawnEnemy()
-      soundMuted = isMuted()
-      if (getOfflineEarnings()) showOfflineModal = true
-      if (isFirstTime) showTutorial = true
-    })
+  // Init: onMount so it runs AFTER the first Svelte flush. This prevents the
+  // massive player.$state write-storm from firing inside the effect queue and
+  // inflating the update-depth counter. playerLoaded gates the zone-story effect
+  // so it won't show stale firstVisit data before loadPlayer() has run.
+  onMount(() => {
+    const isFirstTime = typeof localStorage !== 'undefined' && !localStorage.getItem('wolton-dungeon-player')
+    loadPlayer(); loadTimers(); spawnEnemy()
+    soundMuted = isMuted()
+    if (getOfflineEarnings()) showOfflineModal = true
+    if (isFirstTime) showTutorial = true
+    playerLoaded = true
   })
 
   $effect(() => {
@@ -435,6 +436,9 @@
   })
 
   $effect(() => {
+    // Gate on playerLoaded: don't evaluate before loadPlayer() has run,
+    // otherwise firstVisit is empty and every zone shows its story on load.
+    if (!playerLoaded) return
     const zi = player.currentZone
     const zoneKey = `zone-${zi}`
     if (untrack(() => player.firstVisit.includes(zoneKey))) return

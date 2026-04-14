@@ -609,6 +609,7 @@
 
   <!-- TOP BAR -->
   <div class="topbar">
+    <a href="/" class="back-btn" title="Back to Arcade">← HUB</a>
     <div class="logo">⚔ WOLTON <span>DUNGEON</span></div>
     <div class="res-bar">
       <div class="res"><span>🪙</span><span class="rv">{fmtNum(player.gold)}</span></div>
@@ -1223,7 +1224,7 @@
   {@const cr = craftResult}
   <div
     class="craft-overlay {cr.rollQuality === 'perfect' ? 'perfect-flash' : ''}"
-    onclick={() => { showCraftResult = false; craftResult = null }}
+    onclick={() => { showCraftResult = false; craftResult = null; pendingDropResults = [] }}
     role="dialog"
     aria-modal="true"
   >
@@ -1346,6 +1347,12 @@
     padding: 6px 10px; display: flex; align-items: center; justify-content: space-between;
     gap: 8px; transition: background 0.4s, border-color 0.4s;
   }
+  .back-btn {
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    color: #555; font-family: 'Press Start 2P', monospace; font-size: 6px;
+    padding: 4px 8px; text-decoration: none; white-space: nowrap; flex-shrink: 0;
+  }
+  .back-btn:hover { color: #fff; border-color: var(--z-border-hi); }
   .logo { color: var(--z-accent); font-size: 9px; text-shadow: 2px 2px 0 #000; white-space: nowrap; }
   .logo span { color: #fff; }
   .res-bar { display: flex; gap: 6px; }

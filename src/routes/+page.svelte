@@ -88,8 +88,12 @@
         <div class="card-shine" aria-hidden="true"></div>
       </button>
 
-      <!-- RPG – Coming Soon -->
-      <div class="category-card rpg-card" aria-disabled="true">
+      <!-- RPG – Wolton Dungeon -->
+      <button
+        class="category-card rpg-card"
+        onclick={() => goto('/dungeon')}
+        aria-label="RPG – Wolton Dungeon"
+      >
         <div class="cat-glyph rpg-glyph" aria-hidden="true">
           <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="8" y1="32" x2="28" y2="12"/>
@@ -102,9 +106,11 @@
         <div class="cat-text">
           <h2 class="cat-title geo-title">RPG</h2>
           <p class="cat-desc">Quests, dungeons, and adventure</p>
-          <span class="coming-badge geo-title">Coming Soon</span>
+          <p class="cat-count geo-title">Wolton Dungeon</p>
         </div>
-      </div>
+        <span class="cat-arrow rpg-arrow" aria-hidden="true">→</span>
+        <div class="card-shine" aria-hidden="true"></div>
+      </button>
 
     </nav>
 
@@ -280,19 +286,17 @@
     box-shadow: 0 0 20px rgba(243,156,18,0.12);
   }
 
-  /* ── RPG card (coming soon) ──────────────────────────── */
-  .rpg-card {
-    cursor: default;
-    opacity: 0.45;
-    pointer-events: none;
-  }
-
+  /* ── RPG card ────────────────────────────────────────── */
   .rpg-card::before {
-    background: linear-gradient(135deg, var(--border), var(--border));
+    background: linear-gradient(135deg, #1a3a1a, #0a1a0a);
   }
 
   .rpg-card::after {
-    background: linear-gradient(90deg, var(--text-subtle) 0%, transparent 70%);
+    background: linear-gradient(90deg, rgba(64,192,64,0.08) 0%, transparent 70%);
+  }
+
+  .rpg-card:hover {
+    box-shadow: 0 0 20px rgba(64,192,64,0.12);
   }
 
   /* ── Glyph / icon area ───────────────────────────────── */
@@ -319,10 +323,12 @@
   }
 
   .rpg-glyph {
-    color: var(--text-subtle);
-    background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border);
+    color: #40c060;
+    background: rgba(64,192,64,0.08);
+    border: 1px solid rgba(64,192,64,0.25);
   }
+
+  .rpg-arrow { color: #40c060; }
 
   .suit-cluster {
     font-size: 2rem;

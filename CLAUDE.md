@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-14** - Deployed to nfras4arcade. Summary: Add slot machine to casino with server-side RNG, expanding wilds, SVG symbols, payline overlay. Branch: `main`, commit: `129d1e3`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Blackjack auto-deal timer, poker hand display, chip sync across nav. Branch: `main`, commit: `e6ebba0`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Fix poker betting round skipping all players when checking. Branch: `main`, commit: `c6a5695`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Increase wavelength max rounds from 10 to 30. Branch: `main`, commit: `cd39786`.
@@ -211,5 +212,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Add casino section with Blackjack, Roulette, chip shop, and multiplayer table lobby. Branch: `main`, commit: `23a385b`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Increase shop prices 3-4x, add hourly 50-chip claim, casino badges, game labels. Branch: `main`, commit: `7509f33`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Nav chip claim buttons, registration security note. Branch: `main`, commit: `c2b5f77`.
-- **2026-04-13** - Deployed to nfras4arcade. Summary: 50% discount on all shop items. Branch: `main`, commit: `16f07c0`.
-- **2026-04-13** - Deployed to nfras4arcade. Summary: Chip rewards for all games, poker moved to casino, table cleanup fixes. Branch: `main`, commit: `821afb1`.

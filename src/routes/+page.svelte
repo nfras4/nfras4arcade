@@ -1,181 +1,83 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { currentUser, isLoggedIn, fetchUser } from '$lib/auth';
-  import { getGuestDisplayName } from '$lib/guest';
-  import { fade, fly } from 'svelte/transition';
-
-  const games = [
-    {
-      id: 'impostor',
-      name: 'Impostor',
-      description: "Who doesn't know the word?",
-      minPlayers: 3,
-      maxPlayers: 8,
-      type: 'social deduction',
-      route: '/impostor',
-      soloAction: 'tutorial' as const,
-    },
-    {
-      id: 'president',
-      name: 'President',
-      description: 'Get rid of your cards first',
-      minPlayers: 3,
-      maxPlayers: 6,
-      type: 'card game',
-      route: '/president',
-      soloAction: 'solo' as const,
-    },
-    {
-      id: 'chase-the-queen',
-      name: 'Chase the Queen',
-      description: 'Avoid the Queen of Spades',
-      minPlayers: 3,
-      maxPlayers: 6,
-      type: 'card game',
-      route: '/chase-the-queen',
-      soloAction: 'solo' as const,
-    },
-    {
-      id: 'connect-four',
-      name: 'Connect 4',
-      description: 'Get four in a row to win',
-      minPlayers: 2,
-      maxPlayers: 2,
-      type: 'strategy',
-      route: '/connect-four',
-      soloAction: 'solo' as const,
-    },
-    {
-      id: 'wavelength',
-      name: 'Wavelength',
-      description: 'Read the psychic\'s mind',
-      minPlayers: 2,
-      maxPlayers: 16,
-      type: 'party',
-      route: '/wavelength',
-      soloAction: 'tutorial' as const,
-    },
-    {
-      id: 'snap',
-      name: 'Snap',
-      description: 'Race to slap matching cards',
-      minPlayers: 2,
-      maxPlayers: 6,
-      type: 'party',
-      route: '/snap',
-      soloAction: 'tutorial' as const,
-    },
-    {
-      id: 'casino',
-      name: 'Casino',
-      description: 'Poker, Blackjack, Roulette & more',
-      minPlayers: 1,
-      maxPlayers: 20,
-      type: 'casino',
-      route: '/casino',
-      soloAction: 'tutorial' as const,
-    },
-  ];
-
-  let creatingSolo: string | null = $state(null);
-
-  async function playSolo(game: typeof games[0]) {
-    if (game.soloAction === 'tutorial') {
-      goto(`${game.route}/tutorial`);
-      return;
-    }
-    creatingSolo = game.id;
-    try {
-      const res = await fetch(`/api/create-solo?game=${game.id}`, { method: 'POST' });
-      const data: { code?: string; error?: string } = await res.json();
-      if (data.error || !data.code) {
-        creatingSolo = null;
-        return;
-      }
-      goto(`${game.route}/${data.code}`);
-    } catch {
-      creatingSolo = null;
-    }
-  }
-
 </script>
 
 <div class="hub">
   <div class="hub-content">
 
-    <!-- Hero -->
     <header class="hub-hero">
       <div class="title-frame">
         <span class="diamond-accent" aria-hidden="true"></span>
         <h1 class="wordmark geo-title">nfras4arcade</h1>
         <span class="diamond-accent" aria-hidden="true"></span>
       </div>
-      <p class="tagline">Party games for friends</p>
+      <p class="tagline">Choose your arena</p>
     </header>
 
-    {#if !$isLoggedIn}
-      <!-- Soft login encouragement for guests -->
-      <div class="guest-banner" transition:fade={{ duration: 200 }}>
-        <div class="panel">
-          <div class="panel-border" aria-hidden="true"></div>
-          <div class="panel-inner">
-            <p class="guest-identity">Playing as <strong>{getGuestDisplayName()}</strong></p>
-            <p class="guest-hint">Login is optional, but signing in lets us save your stats and helps us improve the game during development.</p>
-            <div class="action-row gap-2">
-              <button class="btn-secondary btn-full btn-small-text" onclick={() => goto('/login')}>
-                Log In
-              </button>
-              <button class="btn-secondary btn-full btn-small-text" onclick={() => goto('/register')}>
-                Create Account
-              </button>
-            </div>
-          </div>
+    <nav class="category-grid" aria-label="Game categories">
+
+      <!-- Party Games -->
+      <button
+        class="category-card"
+        onclick={() => goto('/games')}
+        aria-label="Party Games – 6 games"
+      >
+        <div class="cat-glyph party-glyph" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <circle cx="12" cy="13" r="5"/>
+            <circle cx="28" cy="13" r="5"/>
+            <circle cx="20" cy="28" r="5"/>
+            <line x1="17" y1="13" x2="23" y2="13"/>
+            <line x1="14.5" y1="17.5" x2="17" y2="24"/>
+            <line x1="25.5" y1="17.5" x2="23" y2="24"/>
+          </svg>
+        </div>
+        <div class="cat-text">
+          <h2 class="cat-title geo-title">Party Games</h2>
+          <p class="cat-desc">Impostor, Wavelength, Snap & more</p>
+          <p class="cat-count geo-title">6 Games</p>
+        </div>
+        <span class="cat-arrow party-arrow" aria-hidden="true">→</span>
+        <div class="card-shine" aria-hidden="true"></div>
+      </button>
+
+      <!-- Casino -->
+      <button
+        class="category-card casino-card"
+        onclick={() => goto('/casino')}
+        aria-label="Casino – 5 games"
+      >
+        <div class="cat-glyph casino-glyph" aria-hidden="true">
+          <span class="suit-cluster" aria-hidden="true">♠</span>
+        </div>
+        <div class="cat-text">
+          <h2 class="cat-title geo-title">Casino</h2>
+          <p class="cat-desc">Poker, Blackjack, Roulette & more</p>
+          <p class="cat-count geo-title casino-count">5 Games</p>
+        </div>
+        <span class="cat-arrow casino-arrow" aria-hidden="true">→</span>
+        <div class="card-shine" aria-hidden="true"></div>
+      </button>
+
+      <!-- RPG – Coming Soon -->
+      <div class="category-card rpg-card" aria-disabled="true">
+        <div class="cat-glyph rpg-glyph" aria-hidden="true">
+          <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="32" x2="28" y2="12"/>
+            <line x1="24" y1="8" x2="32" y2="16"/>
+            <line x1="24" y1="8" x2="26" y2="6"/>
+            <line x1="32" y1="16" x2="34" y2="14"/>
+            <line x1="6" y1="34" x2="10" y2="30"/>
+          </svg>
+        </div>
+        <div class="cat-text">
+          <h2 class="cat-title geo-title">RPG</h2>
+          <p class="cat-desc">Quests, dungeons, and adventure</p>
+          <span class="coming-badge geo-title">Coming Soon</span>
         </div>
       </div>
-    {/if}
 
-    <!-- Game grid (visible to all users) -->
-    <section class="games-section">
-      <h2 class="section-heading geo-title">Games</h2>
-      <div class="game-grid gap-4">
-        {#each games as game}
-          <div class="game-card card" class:casino-featured={game.id === 'casino'} role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
-            <div class="game-card-inner">
-              <h3 class="game-name geo-title">
-                {game.name}
-                {#if game.id === 'casino'}<svg class="chips-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2"/><line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2"/><line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2"/></svg>{/if}
-              </h3>
-              <p class="game-desc">{game.description}</p>
-              <div class="game-meta">
-                <span class="game-players">{game.minPlayers}-{game.maxPlayers} players</span>
-                <span class="game-type">{game.type}</span>
-              </div>
-            </div>
-            <div class="game-card-footer">
-              <button
-                class="solo-btn"
-                onclick={(e) => { e.stopPropagation(); playSolo(game); }}
-                disabled={creatingSolo === game.id}
-              >
-                {#if game.soloAction === 'tutorial'}
-                  How to Play
-                {:else}
-                  {creatingSolo === game.id ? 'Starting...' : 'Play Solo'}
-                {/if}
-              </button>
-            </div>
-          </div>
-        {/each}
-
-        <!-- Coming soon placeholder -->
-        <div class="game-card card coming-soon">
-          <div class="game-card-inner">
-            <h3 class="game-name geo-title">More Games</h3>
-            <p class="game-desc">Coming soon...</p>
-          </div>
-        </div>
-      </div>
-    </section>
+    </nav>
 
   </div>
 </div>
@@ -188,23 +90,19 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     padding: 5rem 1.25rem 4rem;
   }
 
   .hub-content {
     width: 100%;
-    max-width: 560px;
+    max-width: 520px;
     display: flex;
     flex-direction: column;
-    gap: 2.5rem;
+    gap: 3rem;
   }
 
-  .gap-2 { gap: 0.5rem; }
-  .gap-4 { gap: 1rem; }
-  .gap-6 { gap: 1.5rem; }
-
-  /* Hero */
+  /* ── Hero ────────────────────────────────────────────── */
   .hub-hero {
     text-align: center;
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -222,7 +120,6 @@
     font-weight: 700;
     letter-spacing: 0.14em;
     line-height: 1;
-    color: var(--accent);
     background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent) 60%, var(--accent-dim) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -239,215 +136,199 @@
     text-transform: uppercase;
   }
 
-  /* Games section */
-  .section-heading {
-    font-size: 0.65rem;
-    letter-spacing: 0.16em;
-    color: var(--text-subtle);
-    margin-bottom: 1rem;
-  }
-
-  .games-section {
+  /* ── Category grid ───────────────────────────────────── */
+  .category-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
   }
 
-  .game-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 1rem;
-  }
-
-  .game-card {
+  /* ── Base card ───────────────────────────────────────── */
+  .category-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.75rem 2rem;
+    min-height: 130px;
+    width: 100%;
     text-align: left;
     background: var(--bg-card);
     border: none;
     font-family: inherit;
     cursor: pointer;
-    transition: background 0.15s ease, transform 0.15s ease;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .game-card:hover:not(.coming-soon) {
-    background: var(--bg-hover);
-    transform: translateY(-2px);
-  }
-
-  .game-card-inner {
-    padding: 0 0 0.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .game-card-footer {
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border);
-  }
-
-  .solo-btn {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--accent);
-    background: var(--accent-faint);
-    border: 1px solid var(--accent-border);
-    border-radius: 2px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-    clip-path: none;
-  }
-
-  .solo-btn:hover:not(:disabled) {
-    background: var(--accent-border);
-  }
-
-  .solo-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  .game-name {
-    font-size: 1.125rem;
-    letter-spacing: 0.08em;
-    color: var(--accent);
-  }
-
-  .game-desc {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-
-  .game-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.25rem;
-  }
-
-  .game-players {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-subtle);
-  }
-
-  .game-type {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-    padding: 0.15rem 0.5rem;
-    border: 1px solid var(--accent-border);
-    border-radius: 2px;
-  }
-
-  .coming-soon {
-    opacity: 0.4;
-    cursor: default;
-  }
-
-  .panel {
-    background: var(--bg-card);
     clip-path: var(--clip-card);
-    overflow: visible;
-    position: relative;
+    transition: background 0.15s ease, transform 0.15s ease;
+    overflow: hidden;
   }
 
-  .panel-border {
+  /* Border effect – green accent */
+  .category-card::before {
+    content: '';
     position: absolute;
     inset: -1px;
     clip-path: var(--clip-card);
     background: linear-gradient(135deg, var(--accent-border), var(--border));
     z-index: -1;
+  }
+
+  .category-card:hover {
+    background: var(--bg-hover);
+    transform: translateY(-3px);
+  }
+
+  /* Subtle top accent stripe */
+  .category-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent) 0%, transparent 70%);
+    opacity: 0.6;
+  }
+
+  /* ── Casino card overrides ───────────────────────────── */
+  .casino-card::before {
+    background: linear-gradient(135deg, rgba(243,156,18,0.35), var(--border));
+  }
+
+  .casino-card::after {
+    background: linear-gradient(90deg, #f39c12 0%, transparent 70%);
+  }
+
+  .casino-card:hover {
+    box-shadow: 0 0 20px rgba(243,156,18,0.12);
+  }
+
+  /* ── RPG card (coming soon) ──────────────────────────── */
+  .rpg-card {
+    cursor: default;
+    opacity: 0.45;
     pointer-events: none;
   }
 
-  .panel-inner {
-    display: flex;
-    flex-direction: column;
-    gap: 0.875rem;
-    padding: 1.5rem;
+  .rpg-card::before {
+    background: linear-gradient(135deg, var(--border), var(--border));
   }
 
-  .action-row {
+  .rpg-card::after {
+    background: linear-gradient(90deg, var(--text-subtle) 0%, transparent 70%);
+  }
+
+  /* ── Glyph / icon area ───────────────────────────────── */
+  .cat-glyph {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+  }
+
+  .party-glyph {
+    color: var(--accent);
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+  }
+
+  .casino-glyph {
+    color: #f39c12;
+    background: rgba(243,156,18,0.08);
+    border: 1px solid rgba(243,156,18,0.25);
+  }
+
+  .rpg-glyph {
+    color: var(--text-subtle);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+  }
+
+  .suit-cluster {
+    font-size: 2rem;
+    line-height: 1;
+    display: block;
+  }
+
+  /* ── Text block ──────────────────────────────────────── */
+  .cat-text {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.3rem;
+  }
+
+  .cat-title {
+    font-size: 1.5rem;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .casino-card .cat-title {
+    color: var(--text);
+  }
+
+  .cat-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .cat-count {
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    color: var(--accent);
     margin-top: 0.25rem;
   }
 
-  .btn-full {
-    width: 100%;
-    padding: 0.875rem 1.25rem;
-    font-size: 0.9375rem;
-  }
-
-  /* Guest banner */
-  .guest-banner {
-    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
-  }
-
-  .guest-identity {
-    font-size: 0.9rem;
-    color: var(--text);
-    text-align: center;
-  }
-
-  .guest-identity strong {
-    color: var(--accent);
-  }
-
-  .guest-hint {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    line-height: 1.6;
-    text-align: center;
-  }
-
-  .btn-small-text {
-    font-size: 0.8rem;
-    padding: 0.6rem 1rem;
-  }
-
-  @media (min-width: 480px) {
-    .panel-inner {
-      padding: 1.875rem;
-    }
-  }
-
-  /* Poker featured card */
-  .poker-featured {
-    border: 1.5px solid #f39c12 !important;
-    box-shadow: 0 0 12px rgba(243, 156, 18, 0.25), inset 0 0 8px rgba(243, 156, 18, 0.05);
-  }
-
-  .poker-featured:hover, .casino-featured:hover {
-    box-shadow: 0 0 18px rgba(243, 156, 18, 0.35), inset 0 0 10px rgba(243, 156, 18, 0.08);
-  }
-
-  .casino-featured {
-    border: 1.5px solid #f39c12 !important;
-    box-shadow: 0 0 12px rgba(243, 156, 18, 0.25), inset 0 0 8px rgba(243, 156, 18, 0.05);
-  }
-
-  .chips-icon {
-    display: inline-block;
-    vertical-align: middle;
-    margin-left: 0.35rem;
+  .casino-count {
     color: #f39c12;
-    filter: drop-shadow(0 0 3px rgba(243, 156, 18, 0.5));
   }
 
-  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
-  button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+  /* ── Arrow ───────────────────────────────────────────── */
+  .cat-arrow {
+    flex-shrink: 0;
+    font-size: 1.25rem;
+    color: var(--accent);
+    opacity: 0.6;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .casino-arrow {
+    color: #f39c12;
+  }
+
+  .category-card:hover .cat-arrow {
+    opacity: 1;
+    transform: translateX(4px);
+  }
+
+  /* ── Coming soon badge ───────────────────────────────── */
+  .coming-badge {
+    display: inline-block;
+    margin-top: 0.25rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.14em;
+    color: var(--text-subtle);
+    border: 1px solid var(--border-bright);
+    border-radius: 2px;
+    padding: 0.15rem 0.5rem;
+    width: fit-content;
+  }
+
+  /* ── Subtle inner shine overlay ──────────────────────── */
+  .card-shine {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.025) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  button:active:not(:disabled) { transform: scale(0.99) translateY(-1px); transition: transform 0.1s; }
 </style>

@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix effect_update_depth_exceeded blocking item collect popup - revert init to onMount, add playerLoaded gate on zone-story effect. Branch: `main`, commit: `4cbd480`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Harden impostor hints - all 14 categories rewritten with lateral associations, cultural references, meme callbacks instead of direct descriptors. Branch: `main`, commit: `8107634`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon init timing - restore $effect+untrack for init so loadPlayer runs before zone-story effect, fixing story modal blocking clicks and enemies not appearing. Branch: `main`, commit: `cdc2430`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Switch baccarat to Super 6 (commission-free) - banker wins with 6 pay 0.5:1, all other banker wins pay 1:1. Branch: `main`, commit: `78d2aa4`.

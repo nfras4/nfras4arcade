@@ -124,6 +124,14 @@
 
   const DISCARD_GOLD: Record<string, number> = { common: 10, uncommon: 30, rare: 80, epic: 200 }
 
+  function itemPower(item: Item): number {
+    const base = Object.values(item.statBonuses).reduce((s, v) => s + (v as number), 0)
+    const rolled = (item.rolledBonuses ?? []).reduce((s, r) => s + r.value, 0)
+    return base + rolled
+  }
+
+  const sortedLootQueue = $derived([...player.lootQueue].sort((a, b) => itemPower(b) - itemPower(a)))
+
   function canAffordCraft(recipe: CraftEntry): boolean {
     for (const [mat, amt] of Object.entries(recipe.materials)) {
       if ((player.materials[mat] ?? 0) < amt) return false
@@ -988,7 +996,7 @@
         {#if player.lootQueue.length === 0}
           <div class="stub">NO PENDING LOOT</div>
         {:else}
-          {#each player.lootQueue as item, idx (item.instanceId ?? idx)}
+          {#each sortedLootQueue as item, idx (item.instanceId ?? idx)}
             <div class="lq-card">
               <div class="lq-top">
                 <span class="lq-spr">{item.sprite}</span>
@@ -1116,7 +1124,7 @@
       {/if}
 
       <div class="eslbl" style="margin-top:8px">FROM LOOT QUEUE</div>
-      {#each player.lootQueue.filter(i => i.slot === equipModalSlot) as item, idx (idx)}
+      {#each sortedLootQueue.filter(i => i.slot === equipModalSlot) as item, idx (idx)}
         <div class="eloot-item clickable" onclick={() => { equipFromLootQueue(item); equipModalSlot = null }}>
           <span class="lq-spr">{item.sprite}</span>
           <div class="lq-inf">
@@ -1490,7 +1498,7 @@
   .gear-row { display: flex; gap: 3px; }
   .gslot {
     background: var(--z-panel2); border: 1px solid var(--z-border);
-    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    flex: 1; height: 28px; min-width: 0; display: flex; align-items: center; justify-content: center;
     font-size: 14px; cursor: pointer;
   }
   .gslot:hover { border-color: var(--z-accent); }

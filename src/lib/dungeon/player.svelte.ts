@@ -48,7 +48,7 @@ function freshState(): PlayerState {
     xpToNext: 100,
     hp: 100,
     maxHp: 100,
-    gold: 0,
+    gold: 5000,
     stats:      { attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10 },
     statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0 },
     gear: { weapon: null, armour: null, helmet: null, ring: null, amulet: null },

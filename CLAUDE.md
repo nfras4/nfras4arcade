@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon loot overlay undismissable - add COLLECT button, queue drain, backdrop click, filter to good+ quality only. Branch: `main`, commit: `e0ae4b2`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix AudioContext autoplay error and effect_update_depth_exceeded in dungeon. Branch: `main`, commit: `c797f8a`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix WCAG AA text contrast - boost --text-muted and --text-subtle in dark mode, darken --text-subtle in light mode. Branch: `main`, commit: `9a6be03`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Restructure hub into 3 category cards (Party Games, Casino, RPG coming soon), party games moved to /games, light mode overhaul with cool-gray theme. Branch: `main`, commit: `27e0d97`.
@@ -211,4 +212,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Increase wavelength max rounds from 10 to 30. Branch: `main`, commit: `cd39786`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Wavelength round insights and 5 new end-of-game awards. Branch: `main`, commit: `b823020`.
 - **2026-04-13** - Deployed to nfras4arcade. Summary: Casino visual polish, roulette CS2-style redesign with auto-spin timer, wavelength 275 cards. Branch: `main`, commit: `a20324a`.
-- **2026-04-13** - Deployed to nfras4arcade. Summary: Fix coloured name cosmetics rendering, daily claim sync across nav/profile, blackjack lobby redirect race. Branch: `main`, commit: `b5ea06e`.

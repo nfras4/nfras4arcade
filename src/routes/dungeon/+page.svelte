@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { untrack, onMount } from 'svelte'
   import {
     player, loadPlayer, savePlayer, upgradeStats,
     travelToZone, equipFromLootQueue, discardFromLootQueue,
@@ -334,7 +334,7 @@
   const isBossFight   = $derived(!!currentEnemy?.isBoss)
   const isMinibosFight = $derived(!!currentEnemy?.isMiniboss)
   const isAnyBoss     = $derived(isBossFight || isMinibosFight)
-  const isPlayerStunned = $derived(combatState.activeStuns.some(s => s.until > Date.now()))
+  const isPlayerStunned = $derived(combatState.activeStuns.some(s => s.until > now))
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function td(id: string, _tick: number) {
@@ -357,13 +357,13 @@
   }
 
   // ── Effects ───────────────────────────────────────────────────────────────
-  $effect(() => { untrack(() => {
+  onMount(() => {
     const isFirstTime = typeof localStorage !== 'undefined' && !localStorage.getItem('wolton-dungeon-player')
     loadPlayer(); loadTimers(); spawnEnemy()
     soundMuted = isMuted()
     if (getOfflineEarnings()) showOfflineModal = true
     if (isFirstTime) showTutorial = true
-  }) })
+  })
 
   $effect(() => {
     const zi = player.currentZone
@@ -390,7 +390,7 @@
     if (ctx) ZONES[zi].drawBg(ctx, canvas.width, canvas.height)
   })
 
-  $effect(() => {
+  onMount(() => {
     const onResize = () => drawCanvas(untrack(() => player.currentZone))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -413,17 +413,17 @@
     return () => clearInterval(id)
   })
 
-  $effect(() => {
+  onMount(() => {
     const id = setInterval(() => { now = Date.now() }, 500)
     return () => clearInterval(id)
   })
 
-  $effect(() => {
-    const save = () => untrack(() => {
+  onMount(() => {
+    const save = () => {
       savePlayer()
       saveTimers()
       submitLeaderboard(player)
-    })
+    }
     const id = setInterval(save, AUTOSAVE_INTERVAL_MS)
     window.addEventListener('beforeunload', save)
     return () => { clearInterval(id); window.removeEventListener('beforeunload', save) }
@@ -445,9 +445,8 @@
 
   // Watch for boss death overlay
   $effect(() => {
-    if (combatState.bossDeathText) {
-      showBossDeathOverlay = true
-    }
+    const hasBossText = !!combatState.bossDeathText
+    untrack(() => { if (hasBossText) showBossDeathOverlay = true })
   })
 
   // Show craft result overlay for notable loot drops (skip normal-quality 0-roll drops)
@@ -477,8 +476,8 @@
   })
 
   // Watch for victory states
-  $effect(() => { if (combatState.isVictory) showVictoryScreen = true })
-  $effect(() => { if (combatState.nickVictory) showNickVictory = true })
+  $effect(() => { const v = combatState.isVictory;    untrack(() => { if (v) showVictoryScreen = true }) })
+  $effect(() => { const v = combatState.nickVictory;  untrack(() => { if (v) showNickVictory  = true }) })
 
   // Save combatSpeed to localStorage
   $effect(() => {
@@ -512,7 +511,7 @@
   $effect(() => {
     const zi = player.currentZone
     void zi
-    zoneTransitioning = true
+    untrack(() => { zoneTransitioning = true })
     const t = setTimeout(() => { zoneTransitioning = false }, 600)
     return () => clearTimeout(t)
   })
@@ -548,7 +547,7 @@
 
   // Guard: don't play sounds during initial load
   let soundsReady = false
-  $effect(() => { untrack(() => { setTimeout(() => { soundsReady = true }, 800) }) })
+  onMount(() => { setTimeout(() => { soundsReady = true }, 800) })
 
   // Kill session counter + death sound
   let prevEnemyHp = combatState.enemyHp
@@ -608,7 +607,7 @@
   })
 
   // First-click audio context init
-  $effect(() => {
+  onMount(() => {
     const handler = () => { initAudio(); document.removeEventListener('click', handler) }
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)

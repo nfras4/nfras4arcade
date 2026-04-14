@@ -5,7 +5,6 @@
   import { currentUser, userStats, isLoggedIn, logout, fetchUser } from '$lib/auth';
   import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
   import { xpToLevel } from '$lib/xp';
-  import FeedbackWidget from '$lib/components/FeedbackWidget.svelte';
   import type { Snippet } from 'svelte';
 
   let { children }: { children: Snippet } = $props();
@@ -207,7 +206,6 @@
 
 {@render children()}
 
-<FeedbackWidget />
 
 <style>
   .top-nav {

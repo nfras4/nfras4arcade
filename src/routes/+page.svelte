@@ -1,5 +1,34 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { goto } from '$app/navigation'
+
+  type Props = { data: { leaderboard: null | {
+    zone:    { player_name: string; highest_zone: number; highest_stage: number }[]
+    prestige: { player_name: string; prestige_tokens: number }[]
+    fraser:  { player_name: string; fraser_kills: number }[]
+  }}}
+
+  let { data }: Props = $props()
+
+  let lbData = $state(data.leaderboard)
+
+  // Refresh leaderboard every 2 minutes
+  $effect(() => {
+    const id = setInterval(async () => {
+      try {
+        const [zone, prestige, fraser] = await Promise.all([
+          fetch('/api/dungeon/leaderboard?sort=zone&limit=5').then(r => r.json()),
+          fetch('/api/dungeon/leaderboard?sort=prestige&limit=5').then(r => r.json()),
+          fetch('/api/dungeon/leaderboard?sort=fraser&limit=5').then(r => r.json()),
+        ])
+        lbData = {
+          zone:    zone.entries?.slice(0, 5)    ?? [],
+          prestige: prestige.entries?.slice(0, 5) ?? [],
+          fraser:  fraser.entries?.slice(0, 5)  ?? [],
+        }
+      } catch { /* keep showing existing data */ }
+    }, 120_000)
+    return () => clearInterval(id)
+  })
 </script>
 
 <div class="hub">
@@ -78,6 +107,54 @@
       </div>
 
     </nav>
+
+    <!-- Dungeon Leaderboard Widget -->
+    {#if lbData}
+      <section class="lb-widget" aria-label="Wolton Dungeon leaderboard">
+        <div class="lb-widget-hdr">
+          <span class="lb-widget-title">WOLTON DUNGEON — TOP PLAYERS</span>
+          <a href="/dungeon" class="lb-play-link">PLAY NOW →</a>
+        </div>
+        <div class="lb-cols">
+          <div class="lb-col">
+            <div class="lb-col-title">DEEPEST ZONE</div>
+            {#each lbData.zone as row, i}
+              <div class="lb-row">
+                <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
+                <span class="lb-pname">{row.player_name}</span>
+                <span class="lb-val">Z{row.highest_zone + 1}-S{row.highest_stage}</span>
+              </div>
+            {:else}
+              <div class="lb-empty">No entries yet</div>
+            {/each}
+          </div>
+          <div class="lb-col">
+            <div class="lb-col-title">MOST PRESTIGE</div>
+            {#each lbData.prestige as row, i}
+              <div class="lb-row">
+                <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
+                <span class="lb-pname">{row.player_name}</span>
+                <span class="lb-val">⚡{row.prestige_tokens}</span>
+              </div>
+            {:else}
+              <div class="lb-empty">No entries yet</div>
+            {/each}
+          </div>
+          <div class="lb-col">
+            <div class="lb-col-title">FRASER KILLS</div>
+            {#each lbData.fraser as row, i}
+              <div class="lb-row">
+                <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
+                <span class="lb-pname">{row.player_name}</span>
+                <span class="lb-val">{row.fraser_kills}x</span>
+              </div>
+            {:else}
+              <div class="lb-empty">No entries yet</div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {/if}
 
   </div>
 </div>
@@ -331,4 +408,67 @@
 
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   button:active:not(:disabled) { transform: scale(0.99) translateY(-1px); transition: transform 0.1s; }
+
+  /* ── Dungeon Leaderboard Widget ──────────────────────── */
+  .lb-widget {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    padding: 1.25rem 1.5rem;
+  }
+  .lb-widget-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .lb-widget-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .lb-play-link {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .lb-play-link:hover { color: var(--accent-hover); }
+  .lb-cols {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  .lb-col-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.25rem;
+  }
+  .lb-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+  }
+  .lb-pos { width: 14px; text-align: right; color: var(--text-subtle); font-weight: 600; }
+  .lb-pos-1 { color: #f0c030; }
+  .lb-pos-2 { color: #aaa; }
+  .lb-pos-3 { color: #c87432; }
+  .lb-pname { flex: 1; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-val { color: var(--accent); font-weight: 600; }
+  .lb-empty { font-size: 0.6rem; color: var(--text-subtle); font-family: 'Rajdhani', system-ui, sans-serif; }
 </style>

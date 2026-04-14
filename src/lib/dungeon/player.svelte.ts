@@ -1,0 +1,278 @@
+import { statValue, calcMaxHp, upgradeCost, xpToNextLevel, type StatKey, ACHIEVEMENTS, ZONE_LEVEL_REQUIREMENTS } from './constants'
+import type { ItemSlot, Item } from './items'
+
+export type Stats = Record<StatKey, number>
+
+export type LifetimeStats = {
+  enemiesKilled: number
+  goldEarned: number
+  bossesDefeated: number
+  itemsLooted: number
+  timesPrestiged: number
+  totalPlaytime: number    // ms, increment on save
+  fraserKills: number
+}
+
+export type PlayerState = {
+  name: string
+  level: number
+  xp: number
+  xpToNext: number
+  hp: number
+  maxHp: number
+  gold: number
+  stats: Stats
+  statLevels: Stats
+  gear: Record<ItemSlot, Item | null>
+  currentZone: number
+  currentStage: number
+  materials: Record<string, number>
+  prestigeTokens: number
+  unlockedZones: number   // highest zone index unlocked
+  lootQueue: Item[]       // items waiting to be reviewed
+  fraserDefeated: boolean
+  firstVisit: string[]
+  nickDefeated: boolean
+  achievements: string[]
+  lifetimeStats: LifetimeStats
+  lastSaveTimestamp: number
+}
+
+const SAVE_KEY = 'wolton-dungeon-player'
+
+function freshState(): PlayerState {
+  return {
+    name: 'NICK',
+    level: 1,
+    xp: 0,
+    xpToNext: 100,
+    hp: 100,
+    maxHp: 100,
+    gold: 0,
+    stats:      { attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10 },
+    statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0 },
+    gear: { weapon: null, armour: null, helmet: null, ring: null, amulet: null },
+    currentZone: 0,
+    currentStage: 1,
+    materials: { wood: 0, iron: 0, potion: 0, herbs: 0 },
+    prestigeTokens: 0,
+    unlockedZones: 0,
+    lootQueue: [],
+    fraserDefeated: false,
+    firstVisit: [],
+    nickDefeated: false,
+    achievements: [],
+    lifetimeStats: {
+      enemiesKilled: 0,
+      goldEarned: 0,
+      bossesDefeated: 0,
+      itemsLooted: 0,
+      timesPrestiged: 0,
+      totalPlaytime: 0,
+      fraserKills: 0,
+    },
+    lastSaveTimestamp: Date.now(),
+  }
+}
+
+export const player: PlayerState = $state(freshState())
+
+export function savePlayer(): void {
+  if (typeof localStorage === 'undefined') return
+  const now = Date.now()
+  if (player.lastSaveTimestamp > 0) {
+    player.lifetimeStats.totalPlaytime += now - player.lastSaveTimestamp
+  }
+  player.lastSaveTimestamp = now
+  localStorage.setItem(SAVE_KEY, JSON.stringify(player))
+}
+
+export function loadPlayer(): void {
+  if (typeof localStorage === 'undefined') return
+  const raw = localStorage.getItem(SAVE_KEY)
+  if (!raw) return
+  try {
+    const saved = JSON.parse(raw) as Partial<PlayerState>
+    // Merge with defaults so new fields are always present
+    const defaults = freshState()
+    Object.assign(player, defaults, saved)
+    // Ensure nested objects have all keys
+    player.lifetimeStats = { ...defaults.lifetimeStats, ...(saved.lifetimeStats ?? {}) }
+    if (!player.achievements) player.achievements = []
+    if (player.fraserDefeated === undefined) player.fraserDefeated = false
+    if (!player.firstVisit) player.firstVisit = []
+    if (player.nickDefeated === undefined) player.nickDefeated = false
+    if (!player.lastSaveTimestamp) player.lastSaveTimestamp = Date.now()
+  } catch {
+    // corrupt save -- start fresh
+  }
+}
+
+export function upgradeStats(stat: StatKey): boolean {
+  const cost = upgradeCost(stat, player.statLevels[stat])
+  if (player.gold < cost) return false
+  player.gold -= cost
+  player.statLevels[stat]++
+  player.stats[stat] = statValue(stat, player.statLevels[stat])
+  if (stat === 'vitality') {
+    // Preserve level-up HP bonus (each level above 1 grants +10 maxHp)
+    const levelBonus = (player.level - 1) * 10
+    const newMax = calcMaxHp(player.statLevels.vitality) + levelBonus
+    player.maxHp = newMax
+    player.hp = Math.min(player.hp, newMax)
+  }
+  savePlayer()
+  return true
+}
+
+/** Level-up callback — set from combat.svelte.ts to inject log entries */
+export let onLevelUp: ((level: number) => void) | null = null
+export function setOnLevelUp(cb: ((level: number) => void) | null): void { onLevelUp = cb }
+
+export function gainXp(amount: number): void {
+  player.xp += amount
+  while (player.xp >= player.xpToNext) {
+    player.xp -= player.xpToNext
+    player.level++
+    player.xpToNext = xpToNextLevel(player.level)
+    player.maxHp += 10
+    player.hp = player.maxHp
+    if (onLevelUp) onLevelUp(player.level)
+  }
+}
+
+export function gainGold(amount: number): void {
+  player.gold += amount
+}
+
+export function gainMaterial(material: string, amount: number): void {
+  player.materials[material] = (player.materials[material] ?? 0) + amount
+}
+
+export function healPlayer(amount: number): void {
+  player.hp = Math.min(player.maxHp, player.hp + amount)
+}
+
+export function damagePlayer(amount: number): void {
+  player.hp = Math.max(0, player.hp - amount)
+}
+
+export function respawnPlayer(): void {
+  player.hp = player.maxHp
+  player.currentStage = 1
+}
+
+export function advanceToZone(zoneIndex: number): void {
+  player.currentZone = zoneIndex
+  player.currentStage = 1
+  if (zoneIndex > player.unlockedZones) {
+    player.unlockedZones = zoneIndex
+  }
+  savePlayer()
+}
+
+export function travelToZone(zoneIndex: number): void {
+  if (zoneIndex > player.unlockedZones) return
+  player.currentZone = zoneIndex
+  player.currentStage = 1
+  savePlayer()
+}
+
+export function addToLootQueue(item: Item): void {
+  player.lootQueue = [...player.lootQueue, item]
+}
+
+export function equipFromLootQueue(item: Item): void {
+  const slot = item.slot
+  const current = player.gear[slot]
+  const idx = player.lootQueue.indexOf(item)
+  if (idx === -1) return
+  const newQueue = [...player.lootQueue]
+  newQueue.splice(idx, 1)
+  if (current) newQueue.push(current)
+  player.lootQueue = newQueue
+  player.gear[slot] = item
+  checkAchievements()
+  savePlayer()
+}
+
+export function discardFromLootQueue(item: Item): void {
+  const goldRefund: Record<string, number> = { common: 10, uncommon: 30, rare: 80, epic: 200 }
+  const idx = player.lootQueue.indexOf(item)
+  if (idx === -1) return
+  const newQueue = [...player.lootQueue]
+  newQueue.splice(idx, 1)
+  player.lootQueue = newQueue
+  player.gold += goldRefund[item.rarity] ?? 10
+  savePlayer()
+}
+
+export function canPrestige(): boolean {
+  return player.fraserDefeated
+}
+
+export function prestige(): void {
+  if (!canPrestige()) return
+  const tokens = player.prestigeTokens + 1
+  const name = player.name
+  const achievements = [...player.achievements]
+  const lifetimeStats = { ...player.lifetimeStats, timesPrestiged: player.lifetimeStats.timesPrestiged + 1 }
+  const fresh = freshState()
+  Object.assign(player, fresh)
+  player.name = name
+  player.prestigeTokens = tokens
+  player.fraserDefeated = false
+  player.unlockedZones = 0
+  player.achievements = achievements
+  player.lifetimeStats = lifetimeStats
+  player.lastSaveTimestamp = Date.now()
+  savePlayer()
+}
+
+export async function submitLeaderboard(p: PlayerState): Promise<void> {
+  const payload = {
+    playerName:    p.name,
+    highestZone:   p.currentZone,
+    highestStage:  p.currentStage,
+    playerLevel:   p.level,
+    prestigeTokens: p.prestigeTokens,
+    fraserKills:   p.lifetimeStats.fraserKills,
+    nickDefeated:  p.nickDefeated,
+    totalPlaytime: p.lifetimeStats.totalPlaytime,
+  }
+  try {
+    await fetch('/api/dungeon/leaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch { /* silent fail — leaderboard is not critical */ }
+}
+
+/** Achievement toast callback -- set from +page.svelte */
+export let onAchievement: ((id: string) => void) | null = null
+export function setOnAchievement(cb: ((id: string) => void) | null): void { onAchievement = cb }
+
+export function checkAchievements(): void {
+  const checks: [string, boolean][] = [
+    ['first-blood',  player.lifetimeStats.enemiesKilled >= 1],
+    ['zone-2',       player.unlockedZones >= 1],
+    ['loot-drop',    player.lifetimeStats.itemsLooted >= 1],
+    ['level-10',     player.level >= 10],
+    ['level-25',     player.level >= 25],
+    ['level-50',     player.level >= 50],
+    ['full-gear',    Object.values(player.gear).every(g => g !== null)],
+    ['prestige-1',   player.lifetimeStats.timesPrestiged >= 1],
+    ['prestige-3',   player.lifetimeStats.timesPrestiged >= 3],
+    ['fraser-1',     player.lifetimeStats.fraserKills >= 1],
+    ['fraser-3',     player.lifetimeStats.fraserKills >= 3],
+    ['zone-9',       player.unlockedZones >= 8],
+    ['secret',       player.nickDefeated],
+  ]
+  for (const [id, met] of checks) {
+    if (met && !player.achievements.includes(id)) {
+      player.achievements = [...player.achievements, id]
+      if (onAchievement) onAchievement(id)
+    }
+  }
+}

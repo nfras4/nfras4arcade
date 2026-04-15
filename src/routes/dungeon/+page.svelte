@@ -1753,7 +1753,7 @@
   .tabs { display: flex; gap: 2px; border-bottom: 2px solid var(--z-border); padding-bottom: 5px; margin-bottom: 2px; }
   .tab {
     flex: 1; background: var(--z-panel2); border: 1px solid var(--z-border);
-    color: #555; font-family: 'Press Start 2P', monospace; font-size: 5px;
+    color: #999; font-family: 'Press Start 2P', monospace; font-size: 5px;
     padding: 4px 2px; cursor: pointer; text-align: center;
   }
   .tab.active { background: var(--z-border-hi); color: var(--z-accent); border-color: var(--z-accent); }
@@ -2225,7 +2225,7 @@
   }
   .mob-tab {
     flex: 1; background: var(--z-panel2); border: none;
-    color: #555; font-family: 'Press Start 2P', monospace; font-size: 6px;
+    color: #999; font-family: 'Press Start 2P', monospace; font-size: 6px;
     padding: 8px 4px; cursor: pointer; text-align: center;
     border-right: 1px solid var(--z-border);
   }

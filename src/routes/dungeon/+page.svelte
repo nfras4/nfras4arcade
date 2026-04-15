@@ -11,7 +11,7 @@
   import {
     loadTimers, saveTimers, startActivity, collectActivity,
     timerProgress, timerRemaining, isRunning, isReady, formatMs, formatDuration,
-    canStart, ACTIVITIES, getOfflineEarnings, clearOfflineEarnings,
+    canStart, ACTIVITIES, getOfflineEarnings, clearOfflineEarnings, resetTimers,
   } from '$lib/dungeon/timers.svelte'
   import { ZONES } from '$lib/dungeon/zones'
   import {
@@ -51,6 +51,7 @@
   type SyncStatus = 'synced' | 'saving' | 'offline' | 'guest'
   let syncStatus      = $state<SyncStatus>('guest')
   let showGuestBanner = $state(false)
+  let authDisplayName = $state<string | null>(null)
 
   // Reset save flow
   let resetConfirmText = $state('')
@@ -584,7 +585,7 @@
 
   async function syncFromCloud(): Promise<void> {
     const localVersion = player.saveVersion ?? -1
-    const { save, loggedIn } = await loadFromCloud()
+    const { save, loggedIn, displayName } = await loadFromCloud()
     if (!loggedIn) {
       syncStatus = 'guest'
       if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('dungeon-guest-dismissed')) {
@@ -592,10 +593,12 @@
       }
       return
     }
+    authDisplayName = displayName
     syncStatus = 'synced'
     if (save && save.saveVersion > localVersion) {
       untrack(() => { applyPlayerData(save); savePlayer() })
     }
+    if (displayName) player.name = displayName
   }
 
   // ── Effects ───────────────────────────────────────────────────────────────
@@ -1660,7 +1663,16 @@
                   await deleteCloudSave()
                   localStorage.removeItem('wolton-dungeon-player')
                   localStorage.removeItem('wolton-dungeon-timers')
-                  location.reload()
+                  untrack(() => {
+                    applyPlayerData({})
+                    resetTimers()
+                    savePlayer()
+                    saveTimers()
+                    spawnEnemy()
+                  })
+                  if (authDisplayName) player.name = authDisplayName
+                  showResetConfirm = false
+                  resetConfirmText = ''
                 }}
               >CONFIRM RESET</button>
             </div>

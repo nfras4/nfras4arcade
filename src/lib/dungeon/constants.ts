@@ -3,7 +3,7 @@ export type StatKey =
   | 'critDmg' | 'hpRegen' | 'goldFind' | 'xpBoost' | 'lifesteal'
 
 export const STAT_BASE_COSTS: Record<StatKey, number> = {
-  attack: 50, defence: 40, speed: 80, luck: 30, vitality: 35,
+  attack: 50, defence: 50, speed: 80, luck: 50, vitality: 50,
   critDmg: 90, hpRegen: 60, goldFind: 70, xpBoost: 65, lifesteal: 85,
 }
 
@@ -62,9 +62,9 @@ export function calcUpgradeGain(stat: StatKey, level: number): number {
   return STAT_BASE_GAINS[stat] * (1 / (1 + 0.15 * (level - 1)))
 }
 
-/** Upgrade cost: baseCost * 1.4^currentLevel, rounded to nearest 5. */
+/** Upgrade cost: baseCost * 1.18^currentLevel, rounded to nearest 5. */
 export function calcUpgradeCost(stat: StatKey, currentLevel: number): number {
-  return Math.round(STAT_BASE_COSTS[stat] * Math.pow(1.4, currentLevel) / 5) * 5
+  return Math.round(STAT_BASE_COSTS[stat] * Math.pow(1.18, currentLevel) / 5) * 5
 }
 
 /** Alias kept for UI imports — delegates to calcUpgradeCost. */
@@ -72,11 +72,25 @@ export function upgradeCost(stat: StatKey, currentLevel: number): number {
   return calcUpgradeCost(stat, currentLevel)
 }
 
-/** Cumulative stat value at a given upgrade level. */
+/** Hard caps to guard against runaway stat inflation. */
+const STAT_SANITY_CAPS: Partial<Record<StatKey, number>> = {
+  attack:   2000,
+  defence:   800,
+  vitality: 50000,
+  critDmg:  1500,
+  speed:       5,
+}
+
+/** Cumulative stat value at a given upgrade level, derived fresh from base each call. */
 export function statValue(stat: StatKey, level: number): number {
   let value = STAT_BASE_VALUES[stat]
   for (let i = 1; i <= level; i++) {
     value += calcUpgradeGain(stat, i)
+  }
+  const cap = STAT_SANITY_CAPS[stat]
+  if (cap !== undefined && value > cap) {
+    console.warn(`[dungeon] ${stat} hit sanity cap (${value.toFixed(2)} > ${cap})`)
+    return cap
   }
   return value
 }

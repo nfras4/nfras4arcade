@@ -57,14 +57,17 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     .bind(user.id)
     .first<{ save_data: string; saved_at: number; save_version: number }>()
 
-  if (!row) return json({ save: null })
+  const displayName = user.displayName
+
+  if (!row) return json({ save: null, displayName })
 
   return json({
     save: {
       saveData:    row.save_data,
       savedAt:     row.saved_at,
       saveVersion: row.save_version,
-    }
+    },
+    displayName,
   })
 }
 

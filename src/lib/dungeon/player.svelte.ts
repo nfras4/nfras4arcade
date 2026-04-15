@@ -44,7 +44,7 @@ const SAVE_KEY = 'wolton-dungeon-player'
 
 function freshState(): PlayerState {
   return {
-    name: 'NICK',
+    name: 'PLAYER',
     level: 1,
     xp: 0,
     xpToNext: 100,
@@ -273,16 +273,17 @@ export function prestige(): void {
 
 // ── CLOUD SAVE ───────────────────────────────────────────────────────────────
 
-export async function loadFromCloud(): Promise<{ save: PlayerState | null; loggedIn: boolean }> {
+export async function loadFromCloud(): Promise<{ save: PlayerState | null; loggedIn: boolean; displayName: string | null }> {
   try {
     const res = await fetch('/api/dungeon/save')
-    if (res.status === 401) return { save: null, loggedIn: false }
-    if (!res.ok) return { save: null, loggedIn: false }
-    const data = await res.json() as { save: { saveData: string } | null }
-    if (!data.save) return { save: null, loggedIn: true }
-    return { save: mergeWithDefaults(JSON.parse(data.save.saveData) as Partial<PlayerState>), loggedIn: true }
+    if (res.status === 401) return { save: null, loggedIn: false, displayName: null }
+    if (!res.ok) return { save: null, loggedIn: false, displayName: null }
+    const data = await res.json() as { save: { saveData: string } | null; displayName?: string }
+    const displayName = data.displayName ?? null
+    if (!data.save) return { save: null, loggedIn: true, displayName }
+    return { save: mergeWithDefaults(JSON.parse(data.save.saveData) as Partial<PlayerState>), loggedIn: true, displayName }
   } catch {
-    return { save: null, loggedIn: false }
+    return { save: null, loggedIn: false, displayName: null }
   }
 }
 

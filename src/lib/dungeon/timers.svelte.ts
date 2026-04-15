@@ -123,6 +123,10 @@ export function saveTimers(): void {
   localStorage.setItem(TIMER_KEY, JSON.stringify(timerState))
 }
 
+export function resetTimers(): void {
+  timerState.active = {}
+}
+
 function applyReward(activity: Activity): void {
   if (activity.reward.material === 'gold') {
     const gold = Math.floor(activity.reward.amount * goldFindMultiplier())

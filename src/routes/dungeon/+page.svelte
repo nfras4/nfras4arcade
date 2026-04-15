@@ -6,7 +6,9 @@
     prestige, canPrestige, setOnAchievement, checkAchievements,
     submitLeaderboard, itemXpToNext,
   } from '$lib/dungeon/player.svelte'
-  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats } from '$lib/dungeon/combat.svelte'
+  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound, type HitType } from '$lib/dungeon/combat.svelte'
+  import DodgeArena from '$lib/dungeon/DodgeArena.svelte'
+  import { BOSS_DODGE_PATTERNS, DODGE_TRIGGER_TEXT, type DodgeState, type DodgeResult } from '$lib/dungeon/dodge'
   import { ENEMIES } from '$lib/dungeon/enemies'
   import {
     loadTimers, saveTimers, startActivity, collectActivity,
@@ -25,6 +27,20 @@
   import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS, FORGE_CHAINS } from '$lib/dungeon/items'
   import { craftRoll, rerollCost, reforgeCost, rollModifier, type CraftResult } from '$lib/dungeon/crafting'
   import { playSound, setMuted, isMuted, initAudio } from '$lib/dungeon/audio'
+
+  // ── Dodge state ───────────────────────────────────────────────────────────
+  const dodgeState: DodgeState = $state({
+    active:              false,
+    pattern:             null,
+    heartX:              50,
+    heartY:              75,
+    hitsThisSequence:    0,
+    result:              null,
+    elapsedMs:           0,
+    triggerType:         'special',
+    pendingDamage:       0,
+    pendingHitType:      'boss_special',
+  })
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   let canvasEl = $state<HTMLCanvasElement | undefined>()
@@ -686,6 +702,48 @@
     spawnEnemy()
   }
 
+  function handleDodgeComplete(result: DodgeResult): void {
+    dodgeState.active = false
+    dodgeState.result = result
+
+    const hitType: HitType = result === 'perfect' ? 'dodge_perfect'
+      : result === 'partial' ? 'dodge_partial'
+      : 'dodge_failed'
+
+    applyWound(player, dodgeState.pendingDamage, hitType)
+
+    if (result === 'perfect') {
+      const recovery = Math.floor(player.woundedHp * 0.30)
+      player.woundedHp = Math.max(0, player.woundedHp - recovery)
+      combatState.log = [{ type: 'heal', message: '▶ Perfect dodge! Recovered some wounds.' }, ...combatState.log].slice(0, 6)
+      playSound('dodge-perfect', 0.4)
+    }
+
+    // Track dodge stats for achievements
+    const ls = player.lifetimeStats
+    ls.dodgesCompleted++
+    if (result === 'perfect') ls.perfectDodges++
+    if (combatState.enemyId === 'the-ceo') {
+      ls.fraserDodgeAttempts++
+      if (result === 'perfect') ls.fraserPerfectDodges++
+    }
+    checkAchievements()
+
+    // Resume combat
+    combatState.combatPaused = false
+    combatState.dodgePending = null
+  }
+
+  function usePotion(): void {
+    if ((player.materials.potion ?? 0) <= 0) return
+    if (player.hp >= player.maxHp && player.woundedHp === 0) return
+    player.materials.potion -= 1
+    const healAmount = Math.floor(player.maxHp * 0.30)
+    player.hp = Math.min(player.maxHp, player.hp + healAmount)
+    player.woundedHp = 0
+    combatState.log = [{ type: 'heal', message: `▶ Used a Potion: +${healAmount} HP, wounds cleared.` }, ...combatState.log].slice(0, 6)
+  }
+
   async function doPrestige(): Promise<void> {
     submitLeaderboard(player)
     playSound('prestige')
@@ -752,7 +810,8 @@
   ]
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const hpPct      = $derived(player.maxHp > 0 ? (player.hp / player.maxHp) * 100 : 0)
+  const hpPct        = $derived(player.maxHp > 0 ? (player.hp / player.maxHp) * 100 : 0)
+  const woundedHpPct = $derived(player.maxHp > 0 ? (player.woundedHp / player.maxHp) * 100 : 0)
   const xpPct      = $derived(player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0)
   const stagePct   = $derived(((player.currentStage - 1) / STAGES_PER_ZONE) * 100)
   const enmHpPct   = $derived(combatState.enemyMaxHp > 0 ? (combatState.enemyHp / combatState.enemyMaxHp) * 100 : 0)
@@ -894,6 +953,7 @@
   // so that kills (which write player state) don't re-trigger this effect and recreate intervals.
   // combatSpeed is the only tracked dep (user-toggled UI state).
   $effect(() => {
+    if (combatState.combatPaused) return
     const spd = combatSpeed
     const speed = untrack(() => getEffectiveStats(player).speed)
     const ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
@@ -902,6 +962,7 @@
   })
 
   $effect(() => {
+    if (combatState.combatPaused) return
     const spd = combatSpeed
     const id = setInterval(enemyAttack, Math.floor(ENEMY_ATTACK_INTERVAL / spd))
     return () => clearInterval(id)
@@ -910,8 +971,15 @@
   $effect(() => {
     const id = setInterval(() => {
       const regen = untrack(() => getEffectiveStats(player).hpRegen)
-      if (regen > 0 && player.hp < player.maxHp) {
-        player.hp = Math.min(player.maxHp, player.hp + regen)
+      const hpCap = player.maxHp - player.woundedHp
+      if (regen > 0 && player.hp < hpCap) {
+        player.hp = Math.min(hpCap, player.hp + regen)
+      }
+      // Wound recovery — only if no hit taken in 8 seconds
+      const timeSinceHit = Date.now() - player.lastHitTimestamp
+      if (timeSinceHit >= 8000 && player.woundedHp > 0) {
+        const recovery = Math.ceil(player.woundedHp * 0.05)
+        player.woundedHp = Math.max(0, player.woundedHp - recovery)
       }
     }, 1000)
     return () => clearInterval(id)
@@ -920,6 +988,36 @@
   $effect(() => {
     const id = setInterval(() => { now = Date.now() }, 500)
     return () => clearInterval(id)
+  })
+
+  // Watch for dodge triggers from combat engine
+  $effect(() => {
+    const pending = combatState.dodgePending
+    if (!pending) return
+    untrack(() => {
+      const enemyId = combatState.enemyId
+      const patterns = BOSS_DODGE_PATTERNS[enemyId]
+      if (!patterns || patterns.length === 0) {
+        // No pattern defined — apply damage directly and resume
+        applyWound(player, pending.damage, 'boss_special')
+        combatState.combatPaused = false
+        combatState.dodgePending = null
+        return
+      }
+      // Pick pattern (phase 2 for the-ceo on phase trigger, else pattern[0])
+      const patternIdx = (pending.triggerType === 'phase' && patterns.length > 1) ? 1 : 0
+      const pattern = patterns[patternIdx]
+      const enemy = ENEMIES[enemyId]
+      dodgeState.pattern          = pattern
+      dodgeState.pendingDamage    = pending.damage
+      dodgeState.triggerType      = pending.triggerType
+      dodgeState.pendingHitType   = 'boss_special'
+      dodgeState.hitsThisSequence = 0
+      dodgeState.result           = null
+      dodgeState.bossName         = enemy ? `${enemy.name} ATTACKS!` : 'BOSS ATTACKS!'
+      dodgeState.flavourText      = DODGE_TRIGGER_TEXT[enemyId] ?? ''
+      dodgeState.active           = true
+    })
   })
 
   $effect(() => {
@@ -1225,9 +1323,23 @@
       <div class="pclass">CONSULTANT LVL {player.level}</div>
 
       <div class="bgrp">
-        <div class="blbl"><span class="blbl-key">HP</span><span class="blbl-vals" style="color:#40c060">{player.hp.toLocaleString()} / {player.maxHp.toLocaleString()}</span></div>
-        <div class="btrack"><div class="bfill hpf" style="width:{hpPct}%"></div></div>
+        <div class="blbl">
+          <span class="blbl-key">HP</span>
+          <span class="blbl-vals" style="color:#40c060">
+            {player.hp.toLocaleString()} / {player.maxHp.toLocaleString()}
+            {#if player.woundedHp > 0}<span class="wounded-label"> ({player.woundedHp.toLocaleString()} wounded)</span>{/if}
+          </span>
+        </div>
+        <div class="hp-bar-track" style="--green-width:{hpPct}%">
+          <div class="hp-green" style="width:{hpPct}%"></div>
+          <div class="hp-grey" style="width:{woundedHpPct}%; left:{hpPct}%"></div>
+        </div>
       </div>
+      {#if (player.materials.potion ?? 0) > 0}
+        <button class="use-potion-btn" onclick={usePotion} title="Restore 30% HP and clear wounds">
+          🧪 USE POTION ({player.materials.potion})
+        </button>
+      {/if}
       <div class="bgrp">
         <div class="blbl"><span class="blbl-key">XP</span><span class="blbl-vals" style="color:var(--z-accent2)">{player.xp.toLocaleString()} / {player.xpToNext.toLocaleString()}</span></div>
         <div class="btrack"><div class="bfill xpf" style="width:{xpPct}%"></div></div>
@@ -2313,6 +2425,11 @@
   </div>
 {/if}
 
+<!-- DODGE ARENA -->
+{#if dodgeState.active && dodgeState.pattern}
+  <DodgeArena {dodgeState} onComplete={handleDodgeComplete} />
+{/if}
+
 <!-- VICTORY SCREEN -->
 {#if showVictoryScreen}
   <div class="victory-overlay" onclick={() => showVictoryScreen = false}>
@@ -2458,6 +2575,46 @@
   .bfill  { height: 100%; transition: width 0.3s; }
   .bfill::after { content: ''; display: block; height: 3px; background: rgba(255,255,255,0.15); }
   .hpf { background: #40c060; }
+  /* Three-layer wound HP bar */
+  .hp-bar-track {
+    position: relative;
+    background: #0a0a0a;
+    height: 10px;
+    border: 1px solid var(--z-border);
+    overflow: hidden;
+  }
+  .hp-green {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: #40c060;
+    transition: width 0.2s;
+  }
+  .hp-grey {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: #606060;
+    transition: width 0.2s, left 0.2s;
+    animation: wound-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes wound-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%       { opacity: 1.0; }
+  }
+  .wounded-label { color: #808080; font-size: 9px; }
+  .use-potion-btn {
+    margin-top: 4px;
+    width: 100%;
+    padding: 3px 6px;
+    background: #1a2a1a;
+    border: 1px solid #30603030;
+    color: #60c060;
+    font-size: 9px;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .use-potion-btn:hover { border-color: #40c060; background: #1f3a1f; }
   .xpf { background: var(--z-accent2); }
   .gear-row { display: flex; gap: 5px; }
   .gslot {

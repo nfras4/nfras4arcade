@@ -15,6 +15,10 @@ export type LifetimeStats = {
   timesPrestiged: number
   totalPlaytime: number    // ms, increment on save
   fraserKills: number
+  dodgesCompleted: number
+  perfectDodges: number
+  fraserDodgeAttempts: number
+  fraserPerfectDodges: number
 }
 
 export type PlayerState = {
@@ -24,6 +28,8 @@ export type PlayerState = {
   xpToNext: number
   hp: number
   maxHp: number
+  woundedHp: number
+  lastHitTimestamp: number
   gold: number
   stats: Stats
   statLevels: Stats
@@ -56,6 +62,8 @@ function freshState(): PlayerState {
     xpToNext: 100,
     hp: 100,
     maxHp: 100,
+    woundedHp: 0,
+    lastHitTimestamp: 0,
     gold: 3500,
     stats:      { attack: 5, defence: 3, speed: 0, luck: 2, vitality: 10, critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
     statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0, critDmg: 0, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
@@ -79,6 +87,10 @@ function freshState(): PlayerState {
       timesPrestiged: 0,
       totalPlaytime: 0,
       fraserKills: 0,
+      dodgesCompleted: 0,
+      perfectDodges: 0,
+      fraserDodgeAttempts: 0,
+      fraserPerfectDodges: 0,
     },
     lastSaveTimestamp: Date.now(),
     saveVersion: 0,
@@ -257,6 +269,8 @@ export function damagePlayer(amount: number): void {
 
 export function respawnPlayer(): void {
   player.hp = player.maxHp
+  player.woundedHp = 0
+  player.lastHitTimestamp = 0
   player.currentStage = 1
 }
 
@@ -405,6 +419,10 @@ export function checkAchievements(): void {
     ['fraser-3',     player.lifetimeStats.fraserKills >= 3],
     ['zone-9',       player.unlockedZones >= 8],
     ['secret',       player.nickDefeated],
+    ['first-dodge',  player.lifetimeStats.dodgesCompleted >= 1],
+    ['perfect-dodge', player.lifetimeStats.perfectDodges >= 1],
+    ['perfect-fraser', player.lifetimeStats.fraserDodgeAttempts >= 2
+                       && player.lifetimeStats.fraserPerfectDodges >= player.lifetimeStats.fraserDodgeAttempts],
   ]
   for (const [id, met] of checks) {
     if (met && !player.achievements.includes(id)) {

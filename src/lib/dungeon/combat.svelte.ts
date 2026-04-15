@@ -22,6 +22,26 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
+export type HitType = 'normal' | 'boss_special' | 'dodge_partial' | 'dodge_failed' | 'dodge_perfect'
+
+export function applyWound(p: PlayerState, damage: number, hitType: HitType): void {
+  const woundRates: Record<HitType, number> = {
+    normal:        0.40,
+    boss_special:  0.70,
+    dodge_partial: 0.40,
+    dodge_failed:  1.00,
+    dodge_perfect: 0.00,
+  }
+  const woundAmount = Math.floor(damage * woundRates[hitType])
+  if (woundAmount > 0) {
+    p.woundedHp = Math.min(
+      p.woundedHp + woundAmount,
+      p.maxHp - p.hp
+    )
+    p.lastHitTimestamp = Date.now()
+  }
+}
+
 export type LogType = 'dmg' | 'crit' | 'heal' | 'gold' | 'sys'
 
 export type LogEntry = {
@@ -54,6 +74,9 @@ export type CombatState = {
   inNickFight: boolean
   nickVictory: boolean
   isVictory: boolean
+  dodgeEventsThisBoss: number
+  dodgePending: { damage: number; triggerType: 'special' | 'phase' } | null
+  combatPaused: boolean
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -76,6 +99,9 @@ export const combatState: CombatState = $state({
   inNickFight: false,
   nickVictory: false,
   isVictory: false,
+  dodgeEventsThisBoss: 0,
+  dodgePending: null,
+  combatPaused: false,
 })
 
 let floaterSeq = 0
@@ -275,6 +301,9 @@ function clearBossState(): void {
   combatState.activeBossBuffs = []
   combatState.currentPhase = null
   combatState.bossStatusIcons = []
+  combatState.dodgeEventsThisBoss = 0
+  combatState.dodgePending = null
+  combatState.combatPaused = false
 }
 
 function getBossContext(): BossContext {
@@ -328,9 +357,12 @@ function processEvents(events: CombatEvent[]): void {
         } else {
           dmg = Math.max(1, Math.floor(baseDmg * ev.multiplier * zone9Mult - def * 0.5))
         }
-        // Boss special attack cap at 65% player maxHp
+        // Boss special attack cap at 65% player maxHp (90% for zone 6+)
         if (enemy?.isBoss && ev.multiplier < 9999) {
-          const maxSpecialHit = Math.floor(untrack(() => player.maxHp) * 0.65)
+          const specialCapPct = (enemy.isBoss && zoneIdx >= 6)
+            ? 0.90
+            : 0.65
+          const maxSpecialHit = Math.floor(untrack(() => player.maxHp) * specialCapPct)
           dmg = Math.min(dmg, maxSpecialHit)
         }
 
@@ -343,6 +375,7 @@ function processEvents(events: CombatEvent[]): void {
             if (player.hp > literalDmg) {
               // Rare survival: player has >9999 HP (extreme vitality investment)
               damagePlayer(literalDmg)
+              applyWound(player, literalDmg, 'boss_special')
               addLog('sys', "▶ You actually survived that. Respect.")
               nickMonkeyBarrelSurvived = true
             } else {
@@ -354,7 +387,15 @@ function processEvents(events: CombatEvent[]): void {
           bossDelayIds.push(tid)
           return
         }
+        // Intercept as dodge event for boss specials (up to 4 per fight)
+        if (enemy?.isBoss && combatState.dodgeEventsThisBoss < 4) {
+          combatState.dodgeEventsThisBoss++
+          combatState.dodgePending = { damage: dmg, triggerType: 'special' }
+          combatState.combatPaused = true
+          break
+        }
         damagePlayer(dmg)
+        applyWound(player, dmg, 'boss_special')
         addFloater(`-${dmg}`, 'hit', 'player')
         if (player.hp <= 0) handlePlayerDeath()
         break
@@ -403,6 +444,7 @@ function processEvents(events: CombatEvent[]): void {
           const def = untrack(() => getEffectiveStats(player).defence)
           const summonDmg = Math.max(1, Math.floor(summon.baseDmg * 0.5) - def)
           damagePlayer(summonDmg)
+          applyWound(player, summonDmg, 'normal')
           addLog('dmg', `▶ ${summon.name} attacks you for ${summonDmg}!`)
           addFloater(`-${summonDmg}`, 'hit', 'player')
           if (player.hp <= 0) handlePlayerDeath()
@@ -442,7 +484,7 @@ function startBossTimers(mechanic: BossMechanic): void {
     if (timer.id === 'back-injury') {
       const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
       const id = setInterval(() => {
-        if (combatState.enemyHp <= 0 || combatState.playerDead) return
+        if (combatState.enemyHp <= 0 || combatState.playerDead || combatState.combatPaused) return
         if (Math.random() < bossBackInjuryChance) {
           const lines = ["Burgo's back gives out.", "Modified duties activated.", "He's fine. He says he's fine. He's not fine."]
           processEvents([
@@ -460,7 +502,7 @@ function startBossTimers(mechanic: BossMechanic): void {
     if (timer.id === 'reads-you') {
       const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
       const id = setInterval(() => {
-        if (combatState.enemyHp <= 0) return
+        if (combatState.enemyHp <= 0 || combatState.combatPaused) return
         const chance = combatState.currentPhase === 'tilt' ? 0.15 : 0.30
         processEvents([{ type: 'set-player-miss', chance }])
       }, interval)
@@ -470,7 +512,7 @@ function startBossTimers(mechanic: BossMechanic): void {
 
     const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
     const id = setInterval(() => {
-      if (combatState.enemyHp <= 0 || combatState.playerDead) return
+      if (combatState.enemyHp <= 0 || combatState.playerDead || combatState.combatPaused) return
       const ctx = getBossContext()
       let events = timer.action(ctx)
       // Override nick invoice drain amount
@@ -557,6 +599,17 @@ function checkBossPhases(): void {
     if (shouldActivate) {
       enteredPhases.add(phase.id)
       combatState.currentPhase = phase.id
+
+      // Phase transitions trigger dodge (takes priority over any pending special dodge)
+      if (phase.hpThreshold < 1.0 && combatState.dodgeEventsThisBoss < 4) {
+        const e = ENEMIES[combatState.enemyId]
+        const zoneIdx = untrack(() => player.currentZone)
+        const stage = untrack(() => player.currentStage)
+        const phaseDmg = Math.floor(calcEnemyDmg(e?.baseDmg ?? 10, zoneIdx, stage - 1) * 2.5)
+        combatState.dodgeEventsThisBoss++
+        combatState.dodgePending = { damage: phaseDmg, triggerType: 'phase' }
+        combatState.combatPaused = true
+      }
 
       if (phase.onEnter) {
         processEvents(phase.onEnter(ctx))
@@ -674,14 +727,27 @@ export function playerAttack(): void {
   dmg = Math.max(1, dmg)
   combatState.enemyHp = Math.max(0, combatState.enemyHp - dmg)
 
-  // Lifesteal
-  const lifestealPct = Math.min(eff.lifesteal, 30)
+  // Lifesteal — capped by woundedHp (wounds block healing)
+  const currentZone = untrack(() => player.currentZone)
+  const baseLifestealCap = 30
+  const zonedLifestealCap = Math.max(15, baseLifestealCap - currentZone * 2)
+  const lifestealPct = Math.min(eff.lifesteal, zonedLifestealCap)
   if (lifestealPct > 0 && dmg > 0) {
-    const heal = Math.floor(dmg * lifestealPct / 100)
-    if (heal > 0) {
-      player.hp = Math.min(player.maxHp, player.hp + heal)
-      if (heal >= 5) addLog('heal', `Lifesteal: +${heal} HP`)
+    const lifeStealHeal = Math.floor(dmg * lifestealPct / 100)
+    if (lifeStealHeal > 0) {
+      const healCap = player.maxHp - player.woundedHp - player.hp
+      const actualHeal = Math.min(lifeStealHeal, Math.max(0, healCap))
+      if (actualHeal > 0) {
+        player.hp = Math.min(player.maxHp - player.woundedHp, player.hp + actualHeal)
+        if (actualHeal >= 5) addLog('heal', `Lifesteal: +${actualHeal} HP`)
+      }
     }
+  }
+
+  // wound recovery from attacking — 5% of damage dealt
+  const woundRecovery = Math.floor(dmg * 0.05)
+  if (woundRecovery > 0 && player.woundedHp > 0) {
+    player.woundedHp = Math.max(0, player.woundedHp - woundRecovery)
   }
 
   if (isCrit) {
@@ -745,13 +811,17 @@ export function enemyAttack(): void {
 
   dmg = Math.max(1, dmg)
 
-  // Boss regular hits capped at 35% player maxHp
+  // Boss regular hits capped at 35% player maxHp (zone-scaled up to 50%)
   if (enemy.isBoss) {
-    const maxBossHit = Math.floor(untrack(() => player.maxHp) * 0.35)
+    const bossCapPct = enemy.isBoss
+      ? Math.min(0.50, 0.35 + 0.025 * zoneIdx)
+      : 1.0
+    const maxBossHit = Math.floor(player.maxHp * bossCapPct)
     dmg = Math.min(dmg, maxBossHit)
   }
 
   damagePlayer(dmg)
+  applyWound(player, dmg, enemy.isBoss ? 'boss_special' : 'normal')
   addLog('dmg', `▶ ${combatState.enemyName} hit you for ${dmg}.`)
   addFloater(`-${dmg}`, 'hit', 'player')
 

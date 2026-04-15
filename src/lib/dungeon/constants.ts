@@ -210,4 +210,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'fraser-3',       name: 'HE KEEPS COMING BACK',  sprite: '😤',  desc: 'Defeat Fraser 3 times' },
   { id: 'zone-9',         name: 'TOP FLOOR',             sprite: '🏢',  desc: 'Reach the 32nd floor' },
   { id: 'secret',         name: '???',                   sprite: '❓',  desc: '???' },
+  { id: 'first-dodge',   name: 'DODGER',                sprite: '❤️',  desc: 'Complete your first dodge sequence' },
+  { id: 'perfect-dodge', name: 'UNTOUCHABLE',           sprite: '✨',  desc: 'Complete a dodge sequence without getting hit' },
+  { id: 'perfect-fraser',name: 'HUMILIATED HIM',        sprite: '👔',  desc: 'Perfect dodge every sequence against Fraser' },
 ]

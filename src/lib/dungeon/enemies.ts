@@ -495,7 +495,7 @@ export const ENEMIES: Record<string, Enemy> = {
     id: 'nick',
     name: "NICK",
     sprite: '😎',
-    baseHp: 9999,
+    baseHp: 55000,
     baseDmg: 50,
     drops: [
       { itemId: 'wolton-breaker', chance: 1.0 },

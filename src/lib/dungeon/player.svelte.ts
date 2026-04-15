@@ -15,10 +15,6 @@ export type LifetimeStats = {
   timesPrestiged: number
   totalPlaytime: number    // ms, increment on save
   fraserKills: number
-  dodgesCompleted: number
-  perfectDodges: number
-  fraserDodgeAttempts: number
-  fraserPerfectDodges: number
 }
 
 export type PlayerState = {
@@ -87,10 +83,6 @@ function freshState(): PlayerState {
       timesPrestiged: 0,
       totalPlaytime: 0,
       fraserKills: 0,
-      dodgesCompleted: 0,
-      perfectDodges: 0,
-      fraserDodgeAttempts: 0,
-      fraserPerfectDodges: 0,
     },
     lastSaveTimestamp: Date.now(),
     saveVersion: 0,
@@ -419,10 +411,6 @@ export function checkAchievements(): void {
     ['fraser-3',     player.lifetimeStats.fraserKills >= 3],
     ['zone-9',       player.unlockedZones >= 8],
     ['secret',       player.nickDefeated],
-    ['first-dodge',  player.lifetimeStats.dodgesCompleted >= 1],
-    ['perfect-dodge', player.lifetimeStats.perfectDodges >= 1],
-    ['perfect-fraser', player.lifetimeStats.fraserDodgeAttempts >= 2
-                       && player.lifetimeStats.fraserPerfectDodges >= player.lifetimeStats.fraserDodgeAttempts],
   ]
   for (const [id, met] of checks) {
     if (met && !player.achievements.includes(id)) {

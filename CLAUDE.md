@@ -202,7 +202,6 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Crit rework (sqrt luck formula, 200 base critDmg) + Seb boss fix (boss hit caps, dunk 1.8x no defence-ignore, phase 2 wired). Branch: `main`, commit: `784dfdb`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix NaN damage (Number.isFinite guards in getEffectiveStats) and boss_unique drop crash (craftRoll early-return). Branch: `main`, commit: `7ed8c14`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Add 5 new dungeon stats (critDmg, hpRegen, goldFind, xpBoost, lifesteal) - wired into combat engine, UI split into COMBAT/PASSIVE groups with units and UNLOCK buttons. Branch: `main`, commit: `7c99394`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon 3-stage RPG upgrade - hybrid flat+percent stats, MATERIAL_TIERS, 10 boss uniques, tiered mat drops, gear tab redesigned to 4 sub-tabs (LOADOUT/LOOT/CRAFTING/REROLL). Branch: `main`, commit: `0941f7b`.
@@ -212,3 +211,4 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Block default names (PLAYER, NICK) from leaderboard submissions to prevent test entries reappearing. Branch: `main`, commit: `5f55cb0`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix dungeon gear modal — boss_unique items now show stats, rolled bonuses shown for all items in equip slot modal. Branch: `main`, commit: `46ec5e9`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Gear UI restructure — left panel slots display-only with tooltip, right panel opens equip modal, 2x2 sub-tab grid, clear all loot queue with confirm. Branch: `main`, commit: `17fc325`.
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Balance fixes (zone-scaled boss caps, lifesteal cap, per-hit wound recovery, Nick HP 55k) + Dodge Arena minigame (Undertale-style canvas). Branch: `main`, commit: `16f20d2`.

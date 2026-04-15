@@ -22,15 +22,12 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-export type HitType = 'normal' | 'boss_special' | 'dodge_partial' | 'dodge_failed' | 'dodge_perfect'
+export type HitType = 'normal' | 'boss_special'
 
 export function applyWound(p: PlayerState, damage: number, hitType: HitType): void {
   const woundRates: Record<HitType, number> = {
-    normal:        0.40,
-    boss_special:  0.70,
-    dodge_partial: 0.40,
-    dodge_failed:  1.00,
-    dodge_perfect: 0.00,
+    normal:       0.40,
+    boss_special: 0.70,
   }
   const woundAmount = Math.floor(damage * woundRates[hitType])
   if (woundAmount > 0) {
@@ -74,9 +71,6 @@ export type CombatState = {
   inNickFight: boolean
   nickVictory: boolean
   isVictory: boolean
-  dodgeEventsThisBoss: number
-  dodgePending: { damage: number; triggerType: 'special' | 'phase' } | null
-  combatPaused: boolean
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -99,9 +93,6 @@ export const combatState: CombatState = $state({
   inNickFight: false,
   nickVictory: false,
   isVictory: false,
-  dodgeEventsThisBoss: 0,
-  dodgePending: null,
-  combatPaused: false,
 })
 
 let floaterSeq = 0
@@ -301,9 +292,6 @@ function clearBossState(): void {
   combatState.activeBossBuffs = []
   combatState.currentPhase = null
   combatState.bossStatusIcons = []
-  combatState.dodgeEventsThisBoss = 0
-  combatState.dodgePending = null
-  combatState.combatPaused = false
 }
 
 function getBossContext(): BossContext {
@@ -386,13 +374,6 @@ function processEvents(events: CombatEvent[]): void {
           }, 3000)
           bossDelayIds.push(tid)
           return
-        }
-        // Intercept as dodge event for boss specials (up to 4 per fight)
-        if (enemy?.isBoss && combatState.dodgeEventsThisBoss < 4) {
-          combatState.dodgeEventsThisBoss++
-          combatState.dodgePending = { damage: dmg, triggerType: 'special' }
-          combatState.combatPaused = true
-          break
         }
         damagePlayer(dmg)
         applyWound(player, dmg, 'boss_special')
@@ -484,7 +465,7 @@ function startBossTimers(mechanic: BossMechanic): void {
     if (timer.id === 'back-injury') {
       const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
       const id = setInterval(() => {
-        if (combatState.enemyHp <= 0 || combatState.playerDead || combatState.combatPaused) return
+        if (combatState.enemyHp <= 0 || combatState.playerDead) return
         if (Math.random() < bossBackInjuryChance) {
           const lines = ["Burgo's back gives out.", "Modified duties activated.", "He's fine. He says he's fine. He's not fine."]
           processEvents([
@@ -502,7 +483,7 @@ function startBossTimers(mechanic: BossMechanic): void {
     if (timer.id === 'reads-you') {
       const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
       const id = setInterval(() => {
-        if (combatState.enemyHp <= 0 || combatState.combatPaused) return
+        if (combatState.enemyHp <= 0) return
         const chance = combatState.currentPhase === 'tilt' ? 0.15 : 0.30
         processEvents([{ type: 'set-player-miss', chance }])
       }, interval)
@@ -512,7 +493,7 @@ function startBossTimers(mechanic: BossMechanic): void {
 
     const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
     const id = setInterval(() => {
-      if (combatState.enemyHp <= 0 || combatState.playerDead || combatState.combatPaused) return
+      if (combatState.enemyHp <= 0 || combatState.playerDead) return
       const ctx = getBossContext()
       let events = timer.action(ctx)
       // Override nick invoice drain amount
@@ -599,17 +580,6 @@ function checkBossPhases(): void {
     if (shouldActivate) {
       enteredPhases.add(phase.id)
       combatState.currentPhase = phase.id
-
-      // Phase transitions trigger dodge (takes priority over any pending special dodge)
-      if (phase.hpThreshold < 1.0 && combatState.dodgeEventsThisBoss < 4) {
-        const e = ENEMIES[combatState.enemyId]
-        const zoneIdx = untrack(() => player.currentZone)
-        const stage = untrack(() => player.currentStage)
-        const phaseDmg = Math.floor(calcEnemyDmg(e?.baseDmg ?? 10, zoneIdx, stage - 1) * 2.5)
-        combatState.dodgeEventsThisBoss++
-        combatState.dodgePending = { damage: phaseDmg, triggerType: 'phase' }
-        combatState.combatPaused = true
-      }
 
       if (phase.onEnter) {
         processEvents(phase.onEnter(ctx))

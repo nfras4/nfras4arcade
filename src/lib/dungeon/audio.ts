@@ -2,7 +2,6 @@ type SoundId =
   | 'hit' | 'crit' | 'player-hit' | 'death'
   | 'level-up' | 'gold' | 'item-drop' | 'boss-spawn'
   | 'stun' | 'prestige' | 'craft' | 'craft-perfect'
-  | 'dodge-hit' | 'dodge-perfect'
 
 let ctx: AudioContext | null = null
 let audioDisabled = false
@@ -48,8 +47,6 @@ export function playSound(id: SoundId, volume = 0.3): void {
     case 'prestige':      playPrestige(ac, volume); break
     case 'craft':         playCraft(ac, volume); break
     case 'craft-perfect': playCraftPerfect(ac, volume); break
-    case 'dodge-hit':     playDodgeHit(ac, volume); break
-    case 'dodge-perfect': playDodgePerfect(ac, volume); break
   }
 }
 
@@ -148,14 +145,3 @@ function playCraftPerfect(ac: AudioContext, v: number): void {
   osc(ac, 'sine', 1320, v * 0.4, 0.24, 0.38)
 }
 
-function playDodgeHit(ac: AudioContext, v: number): void {
-  noise(ac, v * 0.6, 0, 0.04)
-  osc(ac, 'sawtooth', 220, v * 0.8, 0, 0.06, 120)
-}
-
-function playDodgePerfect(ac: AudioContext, v: number): void {
-  osc(ac, 'sine', 440, v * 0.6, 0,    0.12)
-  osc(ac, 'sine', 660, v * 0.7, 0.10, 0.22)
-  osc(ac, 'sine', 880, v * 0.8, 0.18, 0.32)
-  osc(ac, 'sine', 1100, v * 0.6, 0.26, 0.42)
-}

@@ -6,9 +6,7 @@
     prestige, canPrestige, setOnAchievement, checkAchievements,
     submitLeaderboard, itemXpToNext,
   } from '$lib/dungeon/player.svelte'
-  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound, type HitType } from '$lib/dungeon/combat.svelte'
-  import DodgeArena from '$lib/dungeon/DodgeArena.svelte'
-  import { BOSS_DODGE_PATTERNS, DODGE_TRIGGER_TEXT, type DodgeState, type DodgeResult } from '$lib/dungeon/dodge'
+  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound } from '$lib/dungeon/combat.svelte'
   import { ENEMIES } from '$lib/dungeon/enemies'
   import {
     loadTimers, saveTimers, startActivity, collectActivity,
@@ -27,20 +25,6 @@
   import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS, FORGE_CHAINS } from '$lib/dungeon/items'
   import { craftRoll, rerollCost, reforgeCost, rollModifier, type CraftResult } from '$lib/dungeon/crafting'
   import { playSound, setMuted, isMuted, initAudio } from '$lib/dungeon/audio'
-
-  // ── Dodge state ───────────────────────────────────────────────────────────
-  const dodgeState: DodgeState = $state({
-    active:              false,
-    pattern:             null,
-    heartX:              50,
-    heartY:              75,
-    hitsThisSequence:    0,
-    result:              null,
-    elapsedMs:           0,
-    triggerType:         'special',
-    pendingDamage:       0,
-    pendingHitType:      'boss_special',
-  })
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   let canvasEl = $state<HTMLCanvasElement | undefined>()
@@ -702,38 +686,6 @@
     spawnEnemy()
   }
 
-  function handleDodgeComplete(result: DodgeResult): void {
-    dodgeState.active = false
-    dodgeState.result = result
-
-    const hitType: HitType = result === 'perfect' ? 'dodge_perfect'
-      : result === 'partial' ? 'dodge_partial'
-      : 'dodge_failed'
-
-    applyWound(player, dodgeState.pendingDamage, hitType)
-
-    if (result === 'perfect') {
-      const recovery = Math.floor(player.woundedHp * 0.30)
-      player.woundedHp = Math.max(0, player.woundedHp - recovery)
-      combatState.log = [{ type: 'heal', message: '▶ Perfect dodge! Recovered some wounds.' }, ...combatState.log].slice(0, 6)
-      playSound('dodge-perfect', 0.4)
-    }
-
-    // Track dodge stats for achievements
-    const ls = player.lifetimeStats
-    ls.dodgesCompleted++
-    if (result === 'perfect') ls.perfectDodges++
-    if (combatState.enemyId === 'the-ceo') {
-      ls.fraserDodgeAttempts++
-      if (result === 'perfect') ls.fraserPerfectDodges++
-    }
-    checkAchievements()
-
-    // Resume combat
-    combatState.combatPaused = false
-    combatState.dodgePending = null
-  }
-
   function usePotion(): void {
     if ((player.materials.potion ?? 0) <= 0) return
     if (player.hp >= player.maxHp && player.woundedHp === 0) return
@@ -953,7 +905,6 @@
   // so that kills (which write player state) don't re-trigger this effect and recreate intervals.
   // combatSpeed is the only tracked dep (user-toggled UI state).
   $effect(() => {
-    if (combatState.combatPaused) return
     const spd = combatSpeed
     const speed = untrack(() => getEffectiveStats(player).speed)
     const ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
@@ -962,7 +913,6 @@
   })
 
   $effect(() => {
-    if (combatState.combatPaused) return
     const spd = combatSpeed
     const id = setInterval(enemyAttack, Math.floor(ENEMY_ATTACK_INTERVAL / spd))
     return () => clearInterval(id)
@@ -988,36 +938,6 @@
   $effect(() => {
     const id = setInterval(() => { now = Date.now() }, 500)
     return () => clearInterval(id)
-  })
-
-  // Watch for dodge triggers from combat engine
-  $effect(() => {
-    const pending = combatState.dodgePending
-    if (!pending) return
-    untrack(() => {
-      const enemyId = combatState.enemyId
-      const patterns = BOSS_DODGE_PATTERNS[enemyId]
-      if (!patterns || patterns.length === 0) {
-        // No pattern defined — apply damage directly and resume
-        applyWound(player, pending.damage, 'boss_special')
-        combatState.combatPaused = false
-        combatState.dodgePending = null
-        return
-      }
-      // Pick pattern (phase 2 for the-ceo on phase trigger, else pattern[0])
-      const patternIdx = (pending.triggerType === 'phase' && patterns.length > 1) ? 1 : 0
-      const pattern = patterns[patternIdx]
-      const enemy = ENEMIES[enemyId]
-      dodgeState.pattern          = pattern
-      dodgeState.pendingDamage    = pending.damage
-      dodgeState.triggerType      = pending.triggerType
-      dodgeState.pendingHitType   = 'boss_special'
-      dodgeState.hitsThisSequence = 0
-      dodgeState.result           = null
-      dodgeState.bossName         = enemy ? `${enemy.name} ATTACKS!` : 'BOSS ATTACKS!'
-      dodgeState.flavourText      = DODGE_TRIGGER_TEXT[enemyId] ?? ''
-      dodgeState.active           = true
-    })
   })
 
   $effect(() => {
@@ -2423,11 +2343,6 @@
       <div class="bdo-hint">[ CLICK TO CONTINUE ]</div>
     </div>
   </div>
-{/if}
-
-<!-- DODGE ARENA -->
-{#if dodgeState.active && dodgeState.pattern}
-  <DodgeArena {dodgeState} onComplete={handleDodgeComplete} />
 {/if}
 
 <!-- VICTORY SCREEN -->

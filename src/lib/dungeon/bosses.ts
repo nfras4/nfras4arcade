@@ -33,6 +33,8 @@ export type BossPhase = {
 export type SpecialTimer = {
   id: string
   intervalMs: number
+  castBarName?: string    // max 4 words, ALL CAPS -- shown in the cast bar progress bar
+  description?: string   // 1 sentence: what it does, magnitude, duration
   action: (ctx: BossContext) => CombatEvent[]
 }
 
@@ -53,7 +55,7 @@ function fraserMechanic(enemyId: string): BossMechanic {
         id: 'engineering',
         hpThreshold: 1.0,
         onEnter: () => [
-          { type: 'log', message: "▶ Fraser activates his engineering degree.", logType: 'sys' },
+          { type: 'log', message: "▶ Fraser activates his engineering degree. [FRASER deploys a 3-hit barrier -- each hit reduced by 50% for 8s]", logType: 'sys' },
           { type: 'barrier', hits: 3, durationMs: 8000, reduction: 0.5 },
         ],
       },
@@ -61,14 +63,14 @@ function fraserMechanic(enemyId: string): BossMechanic {
         id: 'ceo-mode',
         hpThreshold: 0.66,
         onEnter: () => [
-          { type: 'log', message: "▶ Fraser has called an emergency board meeting.", logType: 'sys' },
+          { type: 'log', message: "▶ Fraser has called an emergency board meeting. [UNLINKED -- this phase has no mechanical change]", logType: 'sys' },
         ],
       },
       {
         id: 'villain',
         hpThreshold: 0.33,
         onEnter: () => [
-          { type: 'log', message: "▶ Fraser stops pretending to be reasonable.", logType: 'sys' },
+          { type: 'log', message: "▶ Fraser stops pretending to be reasonable. [FRASER drops all pretense -- attacks now deal 1.5x damage]", logType: 'sys' },
         ],
         attackModifier: (base) => Math.floor(base * 1.5),
       },
@@ -77,8 +79,10 @@ function fraserMechanic(enemyId: string): BossMechanic {
       {
         id: 'barrier',
         intervalMs: 12000,
+        castBarName: 'STRUCTURAL ANALYSIS',
+        description: 'Barrier: FRASER constructs a 3-hit damage barrier lasting 8 seconds, reducing each blocked hit by 50%.',
         action: () => [
-          { type: 'log', message: "▶ Fraser constructs a structural barrier. Classic.", logType: 'sys' },
+          { type: 'log', message: "▶ Fraser constructs a structural barrier. Classic. [FRASER deploys a 3-hit barrier -- each hit blocked is reduced by 50% for 8s]", logType: 'sys' },
           { type: 'barrier', hits: 3, durationMs: 8000, reduction: 0.5 },
           { type: 'set-status-icon', icon: '🛡️', durationMs: 8000 },
         ],
@@ -86,18 +90,22 @@ function fraserMechanic(enemyId: string): BossMechanic {
       {
         id: 'outsource',
         intervalMs: 8000,
+        castBarName: 'DELEGATING TASKS',
+        description: 'Outsource: FRASER delegates combat, summoning a corporate drone or executive enforcer to attack you.',
         action: () => [
-          { type: 'log', message: "▶ Delegation is a core leadership skill.", logType: 'sys' },
+          { type: 'log', message: "▶ Delegation is a core leadership skill. [FRASER is outsourcing -- a corporate minion joins the fight]", logType: 'sys' },
           { type: 'summon-attack', pool: ['corporate-drone', 'executive-enforcer'] },
         ],
       },
       {
         id: 'drain',
         intervalMs: 5000,
+        castBarName: 'INVOICING CLIENT',
+        description: 'Corporate Invoice: FRASER deducts 15-30 gold as a Wolton Industries service fee.',
         action: () => {
           const amount = Math.floor(15 + Math.random() * 16)
           return [
-            { type: 'log', message: "▶ Wolton Industries invoices you for the inconvenience.", logType: 'gold' },
+            { type: 'log', message: "▶ Wolton Industries invoices you for the inconvenience. [FRASER is draining gold -- 15-30 gold deducted as an invoice]", logType: 'gold' },
             { type: 'drain-gold', amount },
           ]
         },
@@ -115,10 +123,18 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
     enemyId: 'johno',
     phases: [
       {
+        id: 'intro',
+        hpThreshold: 1.0,
+        onEnter: () => [
+          { type: 'log', message: "▶ Let's see what you've got. Watch the bar under my name -- it fills before I do something. [First encounter -- JOHNO's cast bar fills before each ability fires]", logType: 'sys' },
+          // TODO: gate on firstBossKills to show only once
+        ],
+      },
+      {
         id: 'confused',
         hpThreshold: 0.5,
         onEnter: () => [
-          { type: 'log', message: "▶ I can explain the basement.", logType: 'sys' },
+          { type: 'log', message: "▶ I can explain the basement. [JOHNO loses focus -- attacks deal 80% damage]", logType: 'sys' },
         ],
         attackModifier: (base) => Math.floor(base * 0.8),
       },
@@ -126,7 +142,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'panic',
         hpThreshold: 0.2,
         onEnter: () => [
-          { type: 'log', message: "▶ OK I cannot explain the basement.", logType: 'sys' },
+          { type: 'log', message: "▶ OK I cannot explain the basement. [UNLINKED -- assign a mechanic to this phase or remove]", logType: 'sys' },
         ],
       },
     ],
@@ -134,8 +150,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'mystery-summon',
         intervalMs: 8000,
+        castBarName: 'CALLING THE BASEMENT',
+        description: 'Mystery Summon: JOHNO summons a random creature from the basement to join the fight.',
         action: () => [
-          { type: 'log', message: "▶ Johno gestures at the corner. Something emerges.", logType: 'sys' },
+          { type: 'log', message: "▶ Johno gestures at the corner. Something emerges. [JOHNO is summoning -- a basement creature joins the fight]", logType: 'sys' },
           { type: 'summon-attack', pool: ['mystery-slime', 'basement-rat', 'mystery-creature'] },
           { type: 'set-status-icon', icon: '❓', durationMs: 2000 },
         ],
@@ -164,7 +182,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'rage',
         hpThreshold: 0.4,
         onEnter: () => [
-          { type: 'log', message: "▶ BIG X IS ANGRY. HE IS VERY ANGRY.", logType: 'sys' },
+          { type: 'log', message: "▶ BIG X IS ANGRY. HE IS VERY ANGRY. [UNLINKED -- this phase has no mechanical change]", logType: 'sys' },
         ],
         attackModifier: (base, ctx) => {
           const now = Date.now()
@@ -178,8 +196,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'box-out',
         intervalMs: 20000,
+        castBarName: 'BOX OUT!!',
+        description: 'Box Out: BIG X erupts into a coaching tirade, stunning himself for 4 seconds and clearing all inferno attack stacks.',
         action: () => [
-          { type: 'log', message: "▶ BOX OUT!! EVERY TIME!! WHY ARE WE NOT BOXING OUT!!", logType: 'sys' },
+          { type: 'log', message: "▶ BOX OUT!! EVERY TIME!! WHY ARE WE NOT BOXING OUT!! [BIG X stuns himself for 4s -- all inferno stacks cleared]", logType: 'sys' },
           { type: 'stun-enemy', durationMs: 4000 },
           { type: 'clear-boss-buffs', id: 'inferno' },
           { type: 'set-status-icon', icon: '😡', durationMs: 4000 },
@@ -188,6 +208,8 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'inferno-lock',
         intervalMs: 3000,
+        castBarName: 'LOCKING IN',
+        description: 'Inferno Lock: BIG X adds +0.6 attack multiplier every 3 seconds (max 3.0x total, 30s duration per stack).',
         action: (ctx) => {
           const now = Date.now()
           const currentTotal = ctx.bossBuffs.filter(b => b.id === 'inferno' && b.until > now).reduce((s, b) => s + b.multiplier, 0)
@@ -196,7 +218,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
             { type: 'boss-buff', id: 'inferno', addMultiplier: 0.6, durationMs: 30000, capTotal: 3.0 },
           ]
           if (currentTotal === 0) {
-            events.push({ type: 'log', message: "▶ Big X locks onto you.", logType: 'sys' })
+            events.push({ type: 'log', message: "▶ Big X locks onto you. [BIG X starts building INFERNO -- +0.6 attack per stack, stacks to 3.0x total]", logType: 'sys' })
           }
           return events
         },
@@ -214,7 +236,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'frequent-teleport',
         hpThreshold: 0.5,
         onEnter: () => [
-          { type: 'log', message: "▶ He's not even meant to be here today.", logType: 'sys' },
+          { type: 'log', message: "▶ You've used up your reading time. [UNLINKED -- this phase has no mechanical effect on teleport frequency]", logType: 'sys' },
         ],
       },
     ],
@@ -222,8 +244,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'teleport',
         intervalMs: 6000,
+        castBarName: 'LEAVING THE BUILDING',
+        description: 'Academic Leave: THE EXAMINER teleports away, skipping 2 attacks and stunning you for 1.5 seconds before returning 3 seconds later.',
         action: () => [
-          { type: 'log', message: "▶ Connor has left the building.", logType: 'sys' },
+          { type: 'log', message: "▶ Connor has left the building. [THE EXAMINER is teleporting -- you are stunned 1.5s, Connor skips 2 attacks]", logType: 'sys' },
           { type: 'skip-enemy-attacks', count: 2 },
           { type: 'stun-player', durationMs: 1500 },
           { type: 'set-status-icon', icon: '🌀', durationMs: 1500 },
@@ -243,7 +267,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'identity-crisis',
         hpThreshold: 0.3,
         onEnter: () => [
-          { type: 'log', message: "▶ BOMBARDIRO CROCODILO", logType: 'sys' },
+          { type: 'log', message: "▶ BOMBARDIRO CROCODILO [UNLINKED -- this phase has no mechanical effect]", logType: 'sys' },
         ],
       },
     ],
@@ -251,11 +275,13 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'reels',
         intervalMs: 8000,
+        castBarName: 'WATCHING REELS',
+        description: 'Distracted: EDRIAN stops to watch a reel, skipping his next attack and granting you +40% damage for 3 seconds.',
         action: () => {
           const lines = ["hang on", "bro watch this", "have you seen this one", "one more then i swear"]
           const msg = lines[Math.floor(Math.random() * lines.length)]
           return [
-            { type: 'log', message: `▶ Edrian: "${msg}"`, logType: 'sys' },
+            { type: 'log', message: `▶ Edrian: "${msg}" [EDRIAN is distracted -- skips next attack, you deal +40% damage for 3s]`, logType: 'sys' },
             { type: 'skip-enemy-attacks', count: 1 },
             { type: 'player-dmg-bonus', multiplier: 1.4, durationMs: 3000 },
             { type: 'set-status-icon', icon: '📱', durationMs: 3000 },
@@ -265,8 +291,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'debate',
         intervalMs: 15000,
+        castBarName: 'AM I MEXICAN?',
+        description: 'Nationality Debate: EDRIAN stops to argue about his heritage, stunning himself for 3 seconds.',
         action: () => [
-          { type: 'log', message: "▶ Edrian stops to explain he is Mexican.", logType: 'sys' },
+          { type: 'log', message: "▶ Edrian stops to explain he is Mexican. [EDRIAN is stunned for 3s -- window to deal damage]", logType: 'sys' },
           { type: 'stun-enemy', durationMs: 3000 },
           { type: 'set-status-icon', icon: '🌮', durationMs: 3000 },
           { type: 'log', message: "▶ He is not Mexican.", logType: 'sys', delayMs: 3100 },
@@ -285,7 +313,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'focused',
         hpThreshold: 0.5,
         onEnter: () => [
-          { type: 'log', message: "▶ Seb stops vibing. This is bad.", logType: 'sys' },
+          { type: 'log', message: "▶ Seb stops vibing. This is bad. [UNLINKED -- assign a mechanic to this phase or remove]", logType: 'sys' },
         ],
       },
     ],
@@ -293,9 +321,15 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'clumsy',
         intervalMs: 4000,
+        castBarName: 'FOOTWORK FAILURE',
+        description: 'Clumsy: SEB trips over nothing, skipping his next attack (50% chance every 4 seconds).',
         action: () => {
           if (Math.random() < 0.5) {
-            const lines = ["Seb trips over nothing.", "Somehow both feet left the ground wrong.", "A professional athlete just did that."]
+            const lines = [
+              "Seb trips over nothing. [SEB stumbles -- skips his next attack]",
+              "Somehow both feet left the ground wrong. [SEB stumbles -- skips his next attack]",
+              "A professional athlete just did that. [SEB stumbles -- skips his next attack]",
+            ]
             const msg = lines[Math.floor(Math.random() * lines.length)]
             return [
               { type: 'log', message: `▶ ${msg}`, logType: 'sys' },
@@ -308,8 +342,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'dunk',
         intervalMs: 12000,
+        castBarName: 'CHARGING DOWN',
+        description: 'Charge Down: SEB charges through all defences, dealing 3x damage that ignores your defence stat.',
         action: () => [
-          { type: 'log', message: "▶ DUNK.", logType: 'dmg' },
+          { type: 'log', message: "▶ CHARGE DOWN. [SEB is charging -- 3x damage hit that bypasses your defence]", logType: 'dmg' },
           { type: 'damage-player', multiplier: 3.0, ignoreDefence: true },
           { type: 'set-status-icon', icon: '🏆', durationMs: 1000 },
         ],
@@ -339,7 +375,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'tilted',
         hpThreshold: 0.4,
         onEnter: () => [
-          { type: 'log', message: "▶ Hayden has opened a second betting app.", logType: 'sys' },
+          { type: 'log', message: "▶ Hayden has opened a second betting app. [UNLINKED -- this phase has no mechanical change]", logType: 'sys' },
         ],
         attackModifier: (base, ctx) => {
           const now = Date.now()
@@ -353,10 +389,12 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'phone-check',
         intervalMs: 8000,
+        castBarName: 'CHECKING PHONE',
+        description: 'Phone Check: HAYDEN glances at his betting app, skipping his next attack and granting you +40% damage for 2 seconds (25% chance).',
         action: () => {
           if (Math.random() < 0.25) {
             return [
-              { type: 'log', message: "▶ hang on", logType: 'sys' },
+              { type: 'log', message: "▶ hang on [HAYDEN is distracted -- he skips his next attack and you deal +40% damage for 2s]", logType: 'sys' },
               { type: 'skip-enemy-attacks', count: 1 },
               { type: 'player-dmg-bonus', multiplier: 1.4, durationMs: 2000 },
               { type: 'set-status-icon', icon: '📱', durationMs: 2000 },
@@ -368,16 +406,18 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'bet365',
         intervalMs: 15000,
+        castBarName: 'PLACING A BET',
+        description: 'Bet365: HAYDEN places a 50/50 bet -- win gives him 1.5x ATK for 4.5s; loss stuns him 5s and increases his incoming damage by 60%.',
         action: () => {
           if (Math.random() > 0.5) {
             return [
-              { type: 'log', message: "▶ knew it", logType: 'sys' },
+              { type: 'log', message: "▶ knew it [HAYDEN wins -- gains 1.5x attack multiplier for 4.5s]", logType: 'sys' },
               { type: 'boss-buff', id: 'bet-win', addMultiplier: 1.5, durationMs: 4500 },
               { type: 'set-status-icon', icon: '💰', durationMs: 4500 },
             ]
           } else {
             return [
-              { type: 'log', message: "▶ that was rigged", logType: 'sys' },
+              { type: 'log', message: "▶ that was rigged [HAYDEN loses -- stunned 5s, takes 60% more incoming damage]", logType: 'sys' },
               { type: 'stun-enemy', durationMs: 5000 },
               { type: 'boss-debuff-incoming', multiplier: 1.6, durationMs: 5000 },
               { type: 'set-status-icon', icon: '😤', durationMs: 5000 },
@@ -398,14 +438,14 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'warmed-up',
         hpThreshold: 0.5,
         onEnter: () => [
-          { type: 'log', message: "▶ Burgo says his back is actually fine now.", logType: 'sys' },
+          { type: 'log', message: "▶ Burgo says his back is actually fine now. [UNLINKED -- assign a mechanic to this phase or remove]", logType: 'sys' },
         ],
       },
       {
         id: 'pain',
         hpThreshold: 0.2,
         onEnter: () => [
-          { type: 'log', message: "▶ It is not fine.", logType: 'sys' },
+          { type: 'log', message: "▶ It is not fine. [UNLINKED -- assign a mechanic to this phase or remove]", logType: 'sys' },
         ],
       },
     ],
@@ -413,12 +453,14 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'back-injury',
         intervalMs: 10000,
+        castBarName: 'BACK GIVES OUT',
+        description: 'Back Injury: BURGO\'s back gives out, stunning him for 6 seconds (40% chance every 10 seconds).',
         action: () => {
           if (Math.random() < 0.4) {
             const lines = [
-              "Burgo's back gives out.",
-              "Modified duties activated.",
-              "He's fine. He says he's fine. He's not fine.",
+              "Burgo's back gives out. [BURGO is incapacitated -- stunned for 6s]",
+              "Modified duties activated. [BURGO is incapacitated -- stunned for 6s]",
+              "He's fine. He says he's fine. He's not fine. [BURGO is incapacitated -- stunned for 6s]",
             ]
             const msg = lines[Math.floor(Math.random() * lines.length)]
             return [
@@ -433,8 +475,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'big-hit',
         intervalMs: 7000,
+        castBarName: 'SCALPEL STRIKE',
+        description: 'Surgical Strike: BURGO delivers a precise 2.5x damage hit (defence applies).',
         action: () => [
-          { type: 'log', message: "▶ When Burgo is healthy, he is genuinely terrifying.", logType: 'dmg' },
+          { type: 'log', message: "▶ When Burgo is healthy, he is genuinely terrifying. [BURGO is striking -- 2.5x damage hit incoming, defence applies]", logType: 'dmg' },
           { type: 'damage-player', multiplier: 2.5, ignoreDefence: false },
           { type: 'set-status-icon', icon: '💥', durationMs: 1000 },
         ],
@@ -456,7 +500,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'tilt',
         hpThreshold: 0.5,
         onEnter: () => [
-          { type: 'log', message: "▶ Damo audibly sighs.", logType: 'sys' },
+          { type: 'log', message: "▶ Damo audibly sighs. [UNLINKED -- this phase has no direct mechanical effect]", logType: 'sys' },
         ],
       },
     ],
@@ -471,10 +515,12 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'tilt-check',
         intervalMs: 18000,
+        castBarName: 'TILTING HARD',
+        description: 'Tilt: DAMO loses composure below 50% HP, permanently removing your 30% miss chance and increasing his incoming damage by 50%.',
         action: (ctx) => {
           if (ctx.enemyHpPct < 0.5) {
             return [
-              { type: 'log', message: "▶ Damo is tilting. He's getting reckless.", logType: 'sys' },
+              { type: 'log', message: "▶ Damo is tilting. He's getting reckless. [DAMO loses composure -- your miss chance removed, DAMO takes +50% damage permanently]", logType: 'sys' },
               { type: 'set-player-miss', chance: 0 },
               { type: 'boss-debuff-incoming', multiplier: 1.5, durationMs: 999999 },
             ]
@@ -495,14 +541,14 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'it-consultant',
         hpThreshold: 1.0,
         onEnter: () => [
-          { type: 'log', message: "▶ You charge $80/hr and you're still doing this for free.", logType: 'sys' },
+          { type: 'log', message: "▶ You charge $80/hr and you're still doing this for free. [UNLINKED -- this phase has no mechanical effect]", logType: 'sys' },
         ],
       },
       {
         id: 'just-a-chill-guy',
         hpThreshold: 0.60,
         onEnter: () => [
-          { type: 'log', message: "▶ Nick puts his phone down.", logType: 'sys' },
+          { type: 'log', message: "▶ Nick puts his phone down. [NICK gets serious -- attacks now deal 2x damage]", logType: 'sys' },
         ],
         attackModifier: (base) => base * 2,
       },
@@ -512,7 +558,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         onEnter: () => [
           { type: 'log', message: "▶ .", logType: 'sys' },
           { type: 'log', message: "▶ ..", logType: 'sys', delayMs: 500 },
-          { type: 'log', message: "▶ MONKEY BARREL", logType: 'sys', delayMs: 1000 },
+          { type: 'log', message: "▶ MONKEY BARREL [NICK is unleashing -- unavoidable 9999 damage hit incoming]", logType: 'sys', delayMs: 1000 },
           { type: 'damage-player', multiplier: 9999.0, ignoreDefence: true },
         ],
       },
@@ -521,8 +567,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       {
         id: 'invoice',
         intervalMs: 6000,
+        castBarName: 'RAISING INVOICE',
+        description: 'Priority 2 Invoice: NICK drains 80 gold and logs the encounter as a Priority 2 support ticket.',
         action: () => [
-          { type: 'log', message: "▶ Nick invoices you.", logType: 'gold' },
+          { type: 'log', message: "▶ Nick invoices you. [NICK is billing -- 80 gold will be deducted]", logType: 'gold' },
           { type: 'log', message: "▶ Nick logs this as a Priority 2 ticket.", logType: 'sys' },
           { type: 'drain-gold', amount: 80 },
           { type: 'set-status-icon', icon: '🧾', durationMs: 2000 },

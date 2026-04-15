@@ -102,6 +102,7 @@ export function loadPlayer(): void {
     player.lifetimeStats = { ...defaults.lifetimeStats, ...(saved.lifetimeStats ?? {}) }
     player.stats      = { ...defaults.stats,      ...(saved.stats      ?? {}) }
     player.statLevels = { ...defaults.statLevels, ...(saved.statLevels ?? {}) }
+    player.materials  = { ...defaults.materials,  ...(saved.materials  ?? {}) }
     if (!player.achievements) player.achievements = []
     if (player.fraserDefeated === undefined) player.fraserDefeated = false
     if (!player.firstVisit) player.firstVisit = []
@@ -181,6 +182,19 @@ export function travelToZone(zoneIndex: number): void {
   player.currentZone = zoneIndex
   player.currentStage = 1
   savePlayer()
+}
+
+/** Compute effective goldFind multiplier including gear bonuses. Exported for timers. */
+export function goldFindMultiplier(): number {
+  const base = player.stats.goldFind
+  let pct = 0, flat = 0
+  for (const item of Object.values(player.gear)) {
+    if (!item) continue
+    flat += item.statBonuses.goldFind?.flat ?? 0
+    pct += (item.rolledBonuses ?? []).filter(r => r.stat === 'goldFind').reduce((s, r) => s + r.percent, 0)
+  }
+  const eff = Math.floor(base * (1 + pct / 100)) + flat
+  return 1 + eff / 100
 }
 
 export function addToLootQueue(item: Item): void {

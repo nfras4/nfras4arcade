@@ -738,8 +738,9 @@ function handleEnemyDeath(): void {
   )
   if (uniqueCandidates.length > 0) {
     const isFirstKill = !player.firstBossKills.includes(combatState.enemyId)
-    for (const baseItem of uniqueCandidates) {
-      const guaranteed = isFirstKill && baseItem.id === 'wolton-lanyard'
+    for (let uIdx = 0; uIdx < uniqueCandidates.length; uIdx++) {
+      const baseItem = uniqueCandidates[uIdx]
+      const guaranteed = isFirstKill && uIdx === 0   // guarantee first unique on first boss kill
       if (guaranteed || Math.random() < (baseItem.dropChance ?? 0.25)) {
         const uitem: Item = {
           ...baseItem,

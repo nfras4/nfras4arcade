@@ -275,6 +275,29 @@ export const ITEMS: Record<string, Item> = {
     dropSource: ['fraser'], dropChance: 0.15,
     lore: "The real dungeon was the budget approvals along the way.", discardable: false,
   },
+  'prime-core': {
+    id: 'prime-core', name: 'PRIME CORE', slot: 'weapon', sprite: '⚡', rarity: 'boss_unique',
+    statBonuses: {},
+    rolledBonuses: [
+      { stat: 'attack',   percent: 35, label: '+35% ATK' },
+      { stat: 'critDmg',  percent: 30, label: '+30% CRIT' },
+      { stat: 'xpBoost',  percent: 20, label: '+20% XP' },
+      { stat: 'goldFind', percent: 20, label: '+20% GFND' },
+    ],
+    dropSource: ['wolton-prime'], dropChance: 0.30,
+    lore: "Wolton Industries stock price: $0.00.", discardable: false,
+  },
+  'monkey-barrel-token': {
+    id: 'monkey-barrel-token', name: 'MONKEY BARREL TOKEN', slot: 'amulet', sprite: '🎮', rarity: 'boss_unique',
+    statBonuses: {},
+    rolledBonuses: [
+      { stat: 'attack',    percent: 40, label: '+40% ATK' },
+      { stat: 'critDmg',   percent: 25, label: '+25% CRIT' },
+      { stat: 'lifesteal', percent: 15, label: '+15% LS' },
+    ],
+    dropSource: ['nick'], dropChance: 1.0,
+    lore: "You beat the guy who made this game. He wasn't happy about it.", discardable: false,
+  },
 }
 
 export type CraftEntry = {

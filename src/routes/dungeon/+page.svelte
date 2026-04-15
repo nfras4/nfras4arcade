@@ -1044,6 +1044,8 @@
                     {:else}
                       <button class="lq-btn dc" onclick={() => discardFromLootQueue(item)}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
                     {/if}
+                  {:else}
+                    <span class="keep-badge">🔒 KEEP</span>
                   {/if}
                 </div>
               </div>
@@ -1092,8 +1094,6 @@
           {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
             {@const eq = player.gear[slot]}
             {#if eq}
-              {@const cost = rerollCost(eq)}
-              {@const canRR = canAffordReroll(eq)}
               <div class="lq-card">
                 <div class="lq-top">
                   <span class="lq-spr">{eq.sprite}</span>
@@ -1105,13 +1105,15 @@
                     {/if}
                   </div>
                 </div>
-                <div class="reroll-cost">
-                  <span>REROLL: 🪙{cost.gold}</span>
-                  {#each Object.entries(cost.materials) as [mat, amt]}
-                    <span class="{(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{matLabel(mat)}:{amt}</span>
-                  {/each}
-                </div>
                 {#if eq.rarity !== 'boss_unique'}
+                  {@const cost = rerollCost(eq)}
+                  {@const canRR = canAffordReroll(eq)}
+                  <div class="reroll-cost">
+                    <span>REROLL: 🪙{cost.gold}</span>
+                    {#each Object.entries(cost.materials) as [mat, amt]}
+                      <span class="{(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{matLabel(mat)}:{amt}</span>
+                    {/each}
+                  </div>
                   {#if rerollConfirmItem === eq}
                     <button class="cc-btn confirm-reroll {canRR ? '' : 'cant'}" onclick={() => { doReroll(eq); rerollConfirmItem = null }}>CONFIRM?</button>
                   {:else}
@@ -1121,6 +1123,8 @@
                       rerollConfirmTimeout = setTimeout(() => { rerollConfirmItem = null }, 2000)
                     }}>REROLL</button>
                   {/if}
+                {:else}
+                  <div class="reroll-cost"><span class="keep-badge">🔒 BOSS UNIQUE — CANNOT REROLL</span></div>
                 {/if}
               </div>
             {/if}

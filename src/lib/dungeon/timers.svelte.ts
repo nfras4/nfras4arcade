@@ -1,4 +1,4 @@
-import { gainMaterial, gainGold, player, savePlayer } from './player.svelte'
+import { gainMaterial, gainGold, goldFindMultiplier, player, savePlayer } from './player.svelte'
 import { prestigeMultiplier } from './constants'
 
 export type Activity = {
@@ -86,7 +86,8 @@ export function loadTimers(): void {
           const extraCycles = timeAfterFirst > 0 ? Math.floor(timeAfterFirst / activity.durationMs) : 0
           const totalCycles = 1 + extraCycles  // 1 for the original completion + extras
           const pMult = prestigeMultiplier(player.prestigeTokens)
-          const gold = Math.floor(totalCycles * activity.reward.amount * pMult)
+          const gMult = goldFindMultiplier()
+          const gold = Math.floor(totalCycles * activity.reward.amount * pMult * gMult)
           patrolGold += gold
           gainGold(gold)
           player.lifetimeStats.goldEarned += gold
@@ -124,7 +125,8 @@ export function saveTimers(): void {
 
 function applyReward(activity: Activity): void {
   if (activity.reward.material === 'gold') {
-    gainGold(activity.reward.amount)
+    const gold = Math.floor(activity.reward.amount * goldFindMultiplier())
+    gainGold(gold)
   } else {
     gainMaterial(activity.reward.material, activity.reward.amount)
   }

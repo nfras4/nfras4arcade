@@ -202,6 +202,8 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Add 5 new dungeon stats (critDmg, hpRegen, goldFind, xpBoost, lifesteal) - wired into combat engine, UI split into COMBAT/PASSIVE groups with units and UNLOCK buttons. Branch: `main`, commit: `7c99394`.
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon 3-stage RPG upgrade - hybrid flat+percent stats, MATERIAL_TIERS, 10 boss uniques, tiered mat drops, gear tab redesigned to 4 sub-tabs (LOADOUT/LOOT/CRAFTING/REROLL). Branch: `main`, commit: `0941f7b`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix dungeon RPG broken mechanics - timer reactivity via now param, onMount→$effect migration, zone lock feedback, discard confirmation for rare/epic, ESC modal dismiss. Branch: `main`, commit: `06d93cd`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix effect_update_depth_exceeded blocking item collect popup - revert init to onMount, add playerLoaded gate on zone-story effect. Branch: `main`, commit: `4cbd480`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Harden impostor hints - all 14 categories rewritten with lateral associations, cultural references, meme callbacks instead of direct descriptors. Branch: `main`, commit: `8107634`.

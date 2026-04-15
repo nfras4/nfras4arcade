@@ -117,9 +117,9 @@ export function getEffectiveStats(p: PlayerState): Stats {
 
   const result: Stats = {} as Stats
   for (const key of Object.keys(base) as StatKey[]) {
-    const b = base[key] ?? 0
-    const pct = percentBonus[key] ?? 0
-    const flat = flatBonus[key] ?? 0
+    const b = Number.isFinite(base[key]) ? base[key]! : 0
+    const pct = Number.isFinite(percentBonus[key]) ? percentBonus[key]! : 0
+    const flat = Number.isFinite(flatBonus[key]) ? flatBonus[key]! : 0
     result[key] = Math.floor(b * (1 + pct / 100)) + flat
   }
   return result

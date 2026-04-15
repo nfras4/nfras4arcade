@@ -48,6 +48,10 @@ const ROLL_RANGES: Record<string, [number, number]> = {
 // ── Core roll function ────────────────────────────────────────────────────
 
 export function craftRoll(item: Item, luckStat: number): CraftResult {
+  // Boss unique items have hardcoded rolledBonuses — skip random rolling
+  if (!ROLL_RANGES[item.rarity]) {
+    return { item, bonusRolls: item.rolledBonuses ?? [], rollQuality: 'normal' }
+  }
   const luckBonus = Math.min(luckStat * 0.008, 0.4)  // cap at +40%
 
   // Determine quality

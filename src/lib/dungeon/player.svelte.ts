@@ -50,8 +50,8 @@ function freshState(): PlayerState {
     xpToNext: 100,
     hp: 100,
     maxHp: 100,
-    gold: 5000,
-    stats:      { attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10, critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
+    gold: 3500,
+    stats:      { attack: 5, defence: 3, speed: 0, luck: 2, vitality: 10, critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
     statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0, critDmg: 0, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
     gear: { weapon: null, armour: null, helmet: null, ring: null, amulet: null },
     currentZone: 0,
@@ -98,6 +98,15 @@ export function applyPlayerData(saved: Partial<PlayerState>): void {
   player.stats      = { ...defaults.stats,      ...(saved.stats      ?? {}) }
   player.statLevels = { ...defaults.statLevels, ...(saved.statLevels ?? {}) }
   player.materials  = { ...defaults.materials,  ...(saved.materials  ?? {}) }
+  // Recalculate stats from statLevels so existing saves use the current formula
+  for (const key of Object.keys(player.statLevels) as StatKey[]) {
+    player.stats[key] = statValue(key, player.statLevels[key])
+  }
+  if (player.statLevels.vitality > 0) {
+    const levelBonus = (player.level - 1) * 10
+    player.maxHp = calcMaxHp(player.statLevels.vitality) + levelBonus
+    player.hp = Math.min(player.hp, player.maxHp)
+  }
   if (!player.achievements) player.achievements = []
   if (player.fraserDefeated === undefined) player.fraserDefeated = false
   if (!player.firstVisit) player.firstVisit = []

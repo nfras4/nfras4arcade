@@ -12,7 +12,10 @@ import { ACTIVITIES } from './timers.svelte'
 import { dropRoll } from './crafting'
 import {
   calcEnemyHp, calcEnemyDmg, ELITE_HP_MULT, MINIBOSS_HP_MULT, BOSS_HP_MULT,
-  STAGES_PER_ZONE, MAX_LOG_ENTRIES, randInt, xpPerKill, prestigeMultiplier,
+  STAGES_PER_ZONE, MAX_LOG_ENTRIES, randInt, prestigeMultiplier,
+  calcZoneReward,
+  BASE_XP_NORMAL, BASE_XP_ELITE, BASE_XP_MINIBOSS, BASE_XP_BOSS,
+  BASE_GOLD_NORMAL, BASE_GOLD_ELITE, BASE_GOLD_MINIBOSS, BASE_GOLD_BOSS,
   type StatKey,
 } from './constants'
 
@@ -697,8 +700,13 @@ function handleEnemyDeath(): void {
   const pMult = prestigeMultiplier(untrack(() => player.prestigeTokens))
   const zoneIdx = untrack(() => player.currentZone)
 
-  // Gold drop (with prestige multiplier + goldFind)
-  const baseGold = randInt(enemy.goldDrop[0], enemy.goldDrop[1])
+  // Gold drop — scales by zone tier and enemy type (with prestige multiplier + goldFind)
+  const zoneTier = zoneIdx + 1
+  const goldBase = enemy.isBoss     ? BASE_GOLD_BOSS
+                 : enemy.isMiniboss ? BASE_GOLD_MINIBOSS
+                 : enemy.isElite    ? BASE_GOLD_ELITE
+                 : BASE_GOLD_NORMAL
+  const baseGold = calcZoneReward(goldBase, zoneTier)
   const goldFindMult = 1 + (untrack(() => getEffectiveStats(player).goldFind) / 100)
   const gold = Math.floor(baseGold * pMult * goldFindMult)
   gainGold(gold)
@@ -706,8 +714,12 @@ function handleEnemyDeath(): void {
   addLog('gold', `▶ ${combatState.enemyName} dropped ${gold} gold.`)
   addFloater(`+${gold}g`, 'gold', 'enemy')
 
-  // XP (with prestige multiplier + xpBoost)
-  const baseXp = xpPerKill(enemy.baseHp, zoneIdx)
+  // XP — scales by zone tier and enemy type (with prestige multiplier + xpBoost)
+  const xpBase = enemy.isBoss     ? BASE_XP_BOSS
+               : enemy.isMiniboss ? BASE_XP_MINIBOSS
+               : enemy.isElite    ? BASE_XP_ELITE
+               : BASE_XP_NORMAL
+  const baseXp = calcZoneReward(xpBase, zoneTier)
   const xpBoostMult = 1 + (untrack(() => getEffectiveStats(player).xpBoost) / 100)
   const xp = Math.floor(baseXp * pMult * xpBoostMult)
   gainXp(xp)

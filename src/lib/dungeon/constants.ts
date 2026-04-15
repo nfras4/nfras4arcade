@@ -6,16 +6,37 @@ export const STAT_BASE_COSTS: Record<StatKey, number> = {
   attack: 50, defence: 40, speed: 80, luck: 30, vitality: 35,
   critDmg: 90, hpRegen: 60, goldFind: 70, xpBoost: 65, lifesteal: 85,
 }
+
+/** Stat values at upgrade level 0 (no upgrades purchased).
+ *  speed = 0 means no attack-speed bonus; calcAttackInterval uses (1 + speed). */
 export const STAT_BASE_VALUES: Record<StatKey, number> = {
-  attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10,
+  attack: 5, defence: 3, speed: 0, luck: 2, vitality: 10,
   critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0,
 }
-export const STAT_INCREMENTS: Record<StatKey, number> = {
-  attack: 3, defence: 2, speed: 1, luck: 1, vitality: 20,
-  critDmg: 10, hpRegen: 1, goldFind: 3, xpBoost: 3, lifesteal: 1,
+
+/**
+ * Gain per level at LVL 1. Actual per-level gain tapers via calcUpgradeGain.
+ * speed: +0.08 = 8% faster attacks at LVL 1 (dimensionless multiplier).
+ * vitality: gain * 10 = HP gained (8 * 10 = 80 HP at LVL 1).
+ * critDmg: stored as percentage points (25 = +0.25x multiplier).
+ * goldFind/xpBoost/lifesteal: percentage points (12 = +12%).
+ */
+export const STAT_BASE_GAINS: Record<StatKey, number> = {
+  attack: 12, defence: 6, speed: 0.08, luck: 8, vitality: 8,
+  critDmg: 25, hpRegen: 3, goldFind: 12, xpBoost: 12, lifesteal: 6,
 }
 
-export const UPGRADE_COST_SCALE = 1.14
+/** Base XP per kill by enemy tier at zone tier 1. Scales via calcZoneReward. */
+export const BASE_XP_NORMAL   = 18
+export const BASE_XP_ELITE    = 35
+export const BASE_XP_MINIBOSS = 80
+export const BASE_XP_BOSS     = 200
+
+/** Base gold per kill by enemy tier at zone tier 1. Scales via calcZoneReward. */
+export const BASE_GOLD_NORMAL   = 10
+export const BASE_GOLD_ELITE    = 22
+export const BASE_GOLD_MINIBOSS = 45
+export const BASE_GOLD_BOSS     = 120
 export const ATTACK_BASE_INTERVAL = 1500
 export const ENEMY_ATTACK_INTERVAL = 2000
 export const ENEMY_HP_ZONE_SCALE = 1.18
@@ -31,12 +52,33 @@ export const AUTOSAVE_INTERVAL_MS = 30_000
 export const XP_PER_KILL = 50
 export const XP_BONUS_WIN = 50
 
-export function upgradeCost(stat: StatKey, currentLevel: number): number {
-  return Math.floor(STAT_BASE_COSTS[stat] * Math.pow(UPGRADE_COST_SCALE, currentLevel))
+/** Zone reward scaling: base * 1.35^(tier-1). tier = zoneIndex + 1. */
+export function calcZoneReward(base: number, tier: number): number {
+  return Math.round(base * Math.pow(1.35, tier - 1))
 }
 
+/** Per-level stat gain with diminishing returns. level is 1-indexed (level being purchased). */
+export function calcUpgradeGain(stat: StatKey, level: number): number {
+  return STAT_BASE_GAINS[stat] * (1 / (1 + 0.15 * (level - 1)))
+}
+
+/** Upgrade cost: baseCost * 1.4^currentLevel, rounded to nearest 5. */
+export function calcUpgradeCost(stat: StatKey, currentLevel: number): number {
+  return Math.round(STAT_BASE_COSTS[stat] * Math.pow(1.4, currentLevel) / 5) * 5
+}
+
+/** Alias kept for UI imports — delegates to calcUpgradeCost. */
+export function upgradeCost(stat: StatKey, currentLevel: number): number {
+  return calcUpgradeCost(stat, currentLevel)
+}
+
+/** Cumulative stat value at a given upgrade level. */
 export function statValue(stat: StatKey, level: number): number {
-  return STAT_BASE_VALUES[stat] + level * STAT_INCREMENTS[stat]
+  let value = STAT_BASE_VALUES[stat]
+  for (let i = 1; i <= level; i++) {
+    value += calcUpgradeGain(stat, i)
+  }
+  return value
 }
 
 export function calcMaxHp(vitalityLevel: number): number {
@@ -48,11 +90,6 @@ export function xpToNextLevel(level: number): number {
   return Math.floor(100 * Math.pow(1.12, level))
 }
 
-/** XP earned per kill based on enemy base HP and zone */
-export function xpPerKill(enemyBaseHp: number, zoneIndex: number): number {
-  return Math.floor(enemyBaseHp * 0.8 * (1 + 0.15 * zoneIndex))
-}
-
 /** Prestige multiplier applied to gold and XP earnings */
 export function prestigeMultiplier(tokens: number): number {
   return 1 + tokens * 0.10
@@ -61,8 +98,9 @@ export function prestigeMultiplier(tokens: number): number {
 /** Level requirement per zone index — both boss kill AND level needed */
 export const ZONE_LEVEL_REQUIREMENTS = [0, 5, 10, 15, 20, 25, 30, 35, 40]
 
+/** Attack interval in ms. speed is a dimensionless bonus (0 = base, 0.08 = 8% faster). */
 export function calcAttackInterval(speed: number): number {
-  return Math.max(200, Math.floor(ATTACK_BASE_INTERVAL / (speed * 0.15)))
+  return Math.max(200, Math.floor(ATTACK_BASE_INTERVAL / (1 + speed)))
 }
 
 export function calcEnemyHp(baseHp: number, zoneIndex: number, stageNumber: number, mult = 1): number {

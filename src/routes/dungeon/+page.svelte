@@ -794,6 +794,18 @@
     document.addEventListener('click', handler)
     return () => document.removeEventListener('click', handler)
   })
+
+  // Auto-dismiss item drop toast after 6s
+  let _dropDismissTimer: ReturnType<typeof setTimeout> | null = null
+  $effect(() => {
+    if (showCraftResult) {
+      if (_dropDismissTimer) clearTimeout(_dropDismissTimer)
+      _dropDismissTimer = setTimeout(() => dismissCraftOverlay(), 6000)
+    } else {
+      if (_dropDismissTimer) { clearTimeout(_dropDismissTimer); _dropDismissTimer = null }
+    }
+    return () => { if (_dropDismissTimer) clearTimeout(_dropDismissTimer) }
+  })
 </script>
 
 <svelte:head>
@@ -1601,37 +1613,39 @@
   </div>
 {/if}
 
-<!-- CRAFT RESULT OVERLAY -->
+<!-- ITEM DROP TOAST -->
 {#if showCraftResult && craftResult}
   {@const cr = craftResult}
   <div
-    class="craft-overlay {cr.rollQuality === 'perfect' ? 'perfect-flash' : ''}"
+    class="item-drop-toast {cr.rollQuality === 'perfect' ? 'perfect-flash' : ''}"
     onclick={dismissCraftOverlay}
-    role="dialog"
-    aria-modal="true"
+    role="status"
+    title="Click to dismiss"
   >
-    <div class="craft-result-box" onclick={(e) => e.stopPropagation()}>
-      <div class="cr-sprite">{cr.item.sprite}</div>
-      <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">{cr.item.name}</div>
-      <div class="cr-quality-badge" style="color:{QUALITY_COLOR[cr.rollQuality]}">{cr.rollQuality.toUpperCase()}</div>
-      <div class="cr-base">
-        {#each Object.entries(cr.item.statBonuses).filter(([, v]) => v?.flat) as [stat, bonus]}
-          <div class="cr-stat-row base-stat">+{bonus!.flat} {stat.toUpperCase()}</div>
-        {/each}
-      </div>
-      {#if cr.bonusRolls.length > 0}
-        <div class="cr-rolls-label">BONUS ROLLS</div>
-        {#each cr.bonusRolls as roll}
-          <div class="cr-stat-row rolled-stat">{roll.label}</div>
-        {/each}
-      {:else}
-        <div class="cr-no-rolls">No bonus rolls this time.</div>
-      {/if}
-      {#if pendingDropResults.length > 0}
-        <div class="cr-queue-hint">{pendingDropResults.length} more pending</div>
-      {/if}
-      <button class="cr-collect-btn" onclick={dismissCraftOverlay}>COLLECT</button>
+    <div class="idt-header">
+      <span class="idt-label">ITEM DROP</span>
+      <span class="idt-quality" style="color:{QUALITY_COLOR[cr.rollQuality]}">{cr.rollQuality.toUpperCase()}</span>
+      <span class="idt-close">✕</span>
     </div>
+    <div class="idt-body">
+      <span class="cr-sprite">{cr.item.sprite}</span>
+      <div class="idt-info">
+        <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">{cr.item.name}</div>
+        <div class="cr-base">
+          {#each Object.entries(cr.item.statBonuses).filter(([, v]) => v?.flat) as [stat, bonus]}
+            <div class="cr-stat-row base-stat">+{bonus!.flat} {stat.toUpperCase()}</div>
+          {/each}
+        </div>
+        {#if cr.bonusRolls.length > 0}
+          {#each cr.bonusRolls as roll}
+            <div class="cr-stat-row rolled-stat">{roll.label}</div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+    {#if pendingDropResults.length > 0}
+      <div class="cr-queue-hint">+{pendingDropResults.length} more</div>
+    {/if}
   </div>
 {/if}
 
@@ -2324,36 +2338,35 @@
   .vic-line  { color: #ccc; font-size: 10px; margin-bottom: 6px; }
   .vic-hint  { color: #333; font-size: 8px; margin-top: 24px; }
 
-  /* ── CRAFT RESULT OVERLAY ─────────────────────────────────────────── */
-  .craft-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 400; cursor: pointer;
+  /* ── ITEM DROP TOAST ─────────────────────────────────────────────── */
+  .item-drop-toast {
+    position: fixed; bottom: 24px; right: 20px; z-index: 400;
+    background: var(--z-panel); border: 2px solid var(--z-border-hi);
+    box-shadow: 4px 4px 0 #000; padding: 10px 14px;
+    min-width: 220px; max-width: 300px; cursor: pointer;
+    font-family: 'Press Start 2P', monospace;
+    animation: toast-in 0.25s ease-out;
   }
-  .craft-result-box {
-    background: #1a1a1a; border: 2px solid var(--z-border-hi);
-    padding: 28px 32px; text-align: center; min-width: 260px;
-    cursor: default;
+  .item-drop-toast:hover { border-color: var(--z-accent); }
+  .idt-header {
+    display: flex; align-items: center; gap: 6px;
+    padding-bottom: 6px; margin-bottom: 8px;
+    border-bottom: 1px solid var(--z-border);
   }
-  .cr-sprite { font-size: 42px; margin-bottom: 11px; }
-  .cr-name   { font-size: 12px; margin-bottom: 6px; }
-  .cr-quality-badge { font-size: 11px; margin-bottom: 14px; }
-  .cr-base   { margin-bottom: 11px; }
-  .cr-stat-row { font-size: 10px; margin: 4px 0; }
-  .base-stat  { color: #ccc; }
+  .idt-label   { font-size: 7px; color: #888; flex: 1; }
+  .idt-quality { font-size: 7px; }
+  .idt-close   { font-size: 9px; color: #555; margin-left: 4px; }
+  .idt-body    { display: flex; gap: 10px; align-items: flex-start; }
+  .idt-info    { flex: 1; min-width: 0; }
+  .cr-sprite   { font-size: 28px; flex-shrink: 0; }
+  .cr-name     { font-size: 9px; margin-bottom: 5px; }
+  .cr-base     { margin-bottom: 4px; }
+  .cr-stat-row { font-size: 8px; margin: 3px 0; }
+  .base-stat   { color: #ccc; }
   .rolled-stat { color: #f0c030; }
-  .cr-rolls-label { font-size: 9px; color: #888; margin: 9px 0 4px; }
-  .cr-no-rolls { font-size: 9px; color: #555; margin: 9px 0; }
-  .cr-queue-hint { font-size: 8px; color: #666; margin-top: 14px; }
-  .cr-collect-btn {
-    display: block; width: 100%; margin-top: 14px;
-    background: #1a3a1a; border: 2px solid var(--z-accent, #40a040);
-    color: var(--z-accent, #40a040); font-family: inherit; font-size: 11px;
-    letter-spacing: 2px; padding: 10px 0; cursor: pointer;
-  }
-  .cr-collect-btn:hover { background: #243a24; }
-  @keyframes perfect-flash { 0%,100%{opacity:1} 50%{opacity:0.7;background:rgba(240,192,48,0.12)} }
-  .perfect-flash { animation: perfect-flash 0.6s ease 2; }
+  .cr-queue-hint { font-size: 7px; color: #666; margin-top: 8px; text-align: right; }
+  @keyframes perfect-flash { 0%,100%{opacity:1} 50%{opacity:0.85;border-color:#f0c030;box-shadow:4px 4px 0 #000,0 0 12px rgba(240,192,48,0.4)} }
+  .perfect-flash { animation: perfect-flash 0.6s ease 3; }
 
   /* ── REROLL / CRAFT LUCK ──────────────────────────────────────────── */
   .craft-luck-hint { font-size: 8px; color: #40a040; margin: 4px 0 9px; }

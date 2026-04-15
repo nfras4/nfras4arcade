@@ -18,8 +18,7 @@ export const ACTIVITIES: Activity[] = [
   { id: 'patrol',       name: 'PATROL',       sprite: '🗺️', durationMs: 60_000, reward: { material: 'gold',   amount: 80 }, unlockLevel: 1 },
 ]
 
-// TODO Prompt 3: implement activity slot unlocks — stub slot system
-export const MAX_SLOTS = 1   // upgrades can increase this
+export const BASE_SLOTS = 2
 
 export type TimerEntry = {
   activityId: string
@@ -143,7 +142,7 @@ export function activeSlotCount(): number {
 
 export function canStart(activity: Activity): boolean {
   if (player.level < activity.unlockLevel) return false
-  if (activeSlotCount() >= MAX_SLOTS) return false
+  if (activeSlotCount() >= BASE_SLOTS + player.prestigeTokens) return false
   const existing = timerState.active[activity.id]
   if (existing && !existing.collected) return false
   return true

@@ -430,7 +430,7 @@
   })
 
   function lbStatLabel(entry: LbEntry, tab: LbTab): string {
-    if (tab === 'zone')    return `Z${entry.highestZone + 1} S${entry.highestStage}`
+    if (tab === 'zone')    return `Zone ${entry.highestZone + 1} S${entry.highestStage}`
     if (tab === 'prestige') return `⚡${entry.prestigeTokens}`
     if (tab === 'level')   return `LV${entry.playerLevel}`
     if (tab === 'fraser')  return `${entry.fraserKills}x`

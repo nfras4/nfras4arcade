@@ -4,7 +4,7 @@
   type Props = { data: { leaderboard: null | {
     zone:    { player_name: string; highest_zone: number; highest_stage: number }[]
     prestige: { player_name: string; prestige_tokens: number }[]
-    fraser:  { player_name: string; fraser_kills: number }[]
+    level:   { player_name: string; player_level: number }[]
   }}}
 
   let { data }: Props = $props()
@@ -15,15 +15,15 @@
   $effect(() => {
     const id = setInterval(async () => {
       try {
-        const [zone, prestige, fraser] = await Promise.all([
+        const [zone, prestige, level] = await Promise.all([
           fetch('/api/dungeon/leaderboard?sort=zone&limit=5').then(r => r.json()),
           fetch('/api/dungeon/leaderboard?sort=prestige&limit=5').then(r => r.json()),
-          fetch('/api/dungeon/leaderboard?sort=fraser&limit=5').then(r => r.json()),
+          fetch('/api/dungeon/leaderboard?sort=level&limit=5').then(r => r.json()),
         ])
         lbData = {
           zone:    zone.entries?.slice(0, 5)    ?? [],
           prestige: prestige.entries?.slice(0, 5) ?? [],
-          fraser:  fraser.entries?.slice(0, 5)  ?? [],
+          level:   level.entries?.slice(0, 5)   ?? [],
         }
       } catch { /* keep showing existing data */ }
     }, 120_000)
@@ -128,7 +128,7 @@
               <div class="lb-row">
                 <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
                 <span class="lb-pname">{row.player_name}</span>
-                <span class="lb-val">Z{row.highest_zone + 1}-S{row.highest_stage}</span>
+                <span class="lb-val">Zone {row.highest_zone + 1} S{row.highest_stage}</span>
               </div>
             {:else}
               <div class="lb-empty">No entries yet</div>
@@ -147,12 +147,12 @@
             {/each}
           </div>
           <div class="lb-col">
-            <div class="lb-col-title">FRASER KILLS</div>
-            {#each lbData.fraser as row, i}
+            <div class="lb-col-title">HIGHEST LEVEL</div>
+            {#each lbData.level as row, i}
               <div class="lb-row">
                 <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
                 <span class="lb-pname">{row.player_name}</span>
-                <span class="lb-val">{row.fraser_kills}x</span>
+                <span class="lb-val">LV{row.player_level}</span>
               </div>
             {:else}
               <div class="lb-empty">No entries yet</div>

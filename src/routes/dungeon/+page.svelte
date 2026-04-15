@@ -89,6 +89,10 @@
   let discardConfirmItem: Item | null = $state(null)
   let discardConfirmTimeout: ReturnType<typeof setTimeout> | null = null
 
+  // Clear all confirmation
+  let clearAllConfirm   = $state(false)
+  let clearAllTimeout: ReturnType<typeof setTimeout> | null = null
+
   // Tutorial
   let showTutorial   = $state(false)
   let tutorialSlide  = $state(0)
@@ -268,6 +272,14 @@
   }
 
   const DISCARD_GOLD: Record<string, number> = { common: 15, uncommon: 60, rare: 200, epic: 600 }
+
+  function clearAllLoot() {
+    const discardable = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')
+    const refund = discardable.reduce((s, i) => s + (DISCARD_GOLD[i.rarity] ?? 10), 0)
+    player.gold += refund
+    player.lootQueue = player.lootQueue.filter(i => i.discardable === false || i.rarity === 'boss_unique')
+    clearAllConfirm = false
+  }
 
   function itemPower(item: Item): number {
     const base = Object.values(item.statBonuses).reduce((s, v) => s + (v?.flat ?? 0), 0)
@@ -1021,7 +1033,7 @@
       <div class="gear-row">
         {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
           {@const equipped = player.gear[slot]}
-          <div class="gslot {equipped ? 'filled' : ''}" title={slot.toUpperCase()} onclick={() => equipModalSlot = slot}>
+          <div class="gslot {equipped ? 'filled' : ''}" title={equipped ? `${equipped.name}\n${formatStatBonuses(equipped)}` : slot.toUpperCase()}>
             {#if equipped}
               {equipped.sprite}
             {:else}
@@ -1320,6 +1332,25 @@
           {#if player.lootQueue.length === 0}
             <div class="stub">NO PENDING LOOT</div>
           {:else}
+            {@const discardableItems = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')}
+            {@const clearRefund = discardableItems.reduce((s, i) => s + (DISCARD_GOLD[i.rarity] ?? 10), 0)}
+            {@const keptUniques = player.lootQueue.filter(i => i.discardable === false || i.rarity === 'boss_unique').length}
+            {#if discardableItems.length > 0}
+              <div class="clear-all-row">
+                {#if clearAllConfirm}
+                  <button class="lq-btn dc confirm clear-all-btn" onclick={() => { clearAllLoot(); clearAllConfirm = false }}>CONFIRM CLEAR? (3s)</button>
+                {:else}
+                  <button class="lq-btn dc clear-all-btn" onclick={() => {
+                    clearAllConfirm = true
+                    if (clearAllTimeout) clearTimeout(clearAllTimeout)
+                    clearAllTimeout = setTimeout(() => { clearAllConfirm = false }, 3000)
+                  }}>CLEAR ALL (+{clearRefund}g)</button>
+                {/if}
+                {#if keptUniques > 0}
+                  <span class="clear-kept-note">{keptUniques} UNIQUE ITEM{keptUniques > 1 ? 'S' : ''} KEPT</span>
+                {/if}
+              </div>
+            {/if}
             {#each sortedLootQueue as item, idx (item.instanceId ?? idx)}
               <div class="lq-card">
                 <div class="lq-top">
@@ -2435,6 +2466,10 @@
   .lq-btn.eq:hover { background: color-mix(in srgb, var(--z-accent) 28%, #000); }
   .lq-btn.dc { background: #1a0a00; color: #f0c030; border-color: #3a2a00; }
   .lq-btn.dc:hover { background: #2a1800; }
+  .lq-btn.dc.confirm { border-color: #ff4444; color: #ff4444; }
+  .clear-all-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .clear-all-btn { flex: 1; }
+  .clear-kept-note { font-size: 9px; color: #ff9000; white-space: nowrap; }
 
   /* ── CRAFT CARDS ──────────────────────────────────────────────────── */
   .craft-card {
@@ -2850,7 +2885,12 @@
   .seff { color: #ffffff; font-size: 10px; font-weight: bold; }
 
   /* ── GEAR SUB-TABS ────────────────────────────────────────────────── */
-  .gear-subtabs { display:flex; gap:4px; margin-bottom:6px; }
+  .gear-subtabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin-bottom: 10px;
+}
   .gsub { flex:1; padding:5px 0; font-size:9px; font-family:inherit; background:#111; color:#555; border:1px solid #222; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
   .gsub.active { background:#1a1a1a; color:#f0c030; border-color:#f0c030; }
   .unique-badge { color:#ff9000; font-size:8px; }

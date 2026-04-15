@@ -202,8 +202,6 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon UI readability pass — GLD label in topbar, taller HP/XP bars, brighter log colors, crit log type, shop single-row layout, zone dot indicators, activity progress %. Branch: `main`, commit: `2965fd6`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Cloud saves for dungeon — D1 dungeon_saves table, GET/POST/DELETE /api/dungeon/save, dual-write with 5s debounce, cloud-first load, sendBeacon on unload, sync indicator, guest banner, RESET SAVE modal. Migration 0013 needs manual apply. Branch: `main`, commit: `29e3e5f`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix dungeon inactive tab contrast (#555 → #999) so GEAR/ITEMS tabs and mobile PLAYER/SHOP/TIMERS tabs are legible on dark background. Branch: `main`, commit: `63829f0`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: 7-bug QA pass — firstBossKills guaranteed drop, materials deep-merge on load, goldFind applied to patrol gold, added monkey-barrel-token + prime-core boss uniques, 🔒 KEEP label, rerollCost NaN guard. Branch: `main`, commit: `cb9536b`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix NaN damage (Number.isFinite guards in getEffectiveStats) and boss_unique drop crash (craftRoll early-return). Branch: `main`, commit: `7ed8c14`.
@@ -213,3 +211,4 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Allow concurrent timer activities — 2 base slots, +1 per prestige token (max 5). Branch: `main`, commit: `0ccd7cd`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Leaderboard — swap Fraser Kills column for Highest Level, reformat zone display to 'Zone N SN'. Branch: `main`, commit: `0194180`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Block default names (PLAYER, NICK) from leaderboard submissions to prevent test entries reappearing. Branch: `main`, commit: `5f55cb0`.
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Fix dungeon gear modal — boss_unique items now show stats, rolled bonuses shown for all items in equip slot modal. Branch: `main`, commit: `46ec5e9`.

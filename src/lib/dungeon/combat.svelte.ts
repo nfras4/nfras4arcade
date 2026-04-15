@@ -18,7 +18,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-export type LogType = 'dmg' | 'heal' | 'gold' | 'sys'
+export type LogType = 'dmg' | 'crit' | 'heal' | 'gold' | 'sys'
 
 export type LogEntry = {
   type: LogType
@@ -620,7 +620,7 @@ export function playerAttack(): void {
   }
 
   if (isCrit) {
-    addLog('dmg', `▶ CRIT! You hit ${combatState.enemyName} for ${dmg}!`)
+    addLog('crit', `▶ CRIT! You hit ${combatState.enemyName} for ${dmg}!`)
     addFloater(`CRIT ${dmg}!`, 'crit', 'enemy')
   } else {
     addLog('dmg', `▶ You attacked ${combatState.enemyName} for ${dmg}.`)

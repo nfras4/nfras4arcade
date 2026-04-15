@@ -813,7 +813,7 @@
     <a href="/" class="back-btn" title="Back to Arcade">← HUB</a>
     <div class="logo">⚔ WOLTON <span>DUNGEON</span></div>
     <div class="res-bar">
-      <div class="res"><span>🪙</span><span class="rv">{fmtNum(player.gold)}</span></div>
+      <div class="res"><span>🪙</span><span class="res-label">GLD</span><span class="rv">{fmtNum(player.gold)}</span></div>
       <div class="res"><span>🪵</span><span class="res-label">WOOD</span><span class="rv">{player.materials.wood ?? 0}</span></div>
       <div class="res"><span>⛏️</span><span class="res-label">IRON</span><span class="rv">{player.materials.iron ?? 0}</span></div>
       <div class="res"><span>🧪</span><span class="res-label">POT</span><span class="rv">{player.materials.potion ?? 0}</span></div>
@@ -1019,9 +1019,18 @@
 
       <!-- Stage bar -->
       <div class="stagebar">
-        <span class="slbl">ZONE PROGRESS</span>
-        <div class="strack"><div class="sfill" style="width:{stagePct}%"></div></div>
-        <span class="scnt">{player.currentStage} / {STAGES_PER_ZONE}</span>
+        <div class="stagebar-top">
+          <span class="slbl">ZONE PROGRESS</span>
+          <div class="strack"><div class="sfill" style="width:{stagePct}%"></div></div>
+          <span class="scnt">{player.currentStage} / {STAGES_PER_ZONE}</span>
+        </div>
+        <div class="zone-dots">
+          {#each ZONES as _z, i}
+            {#if i <= player.unlockedZones + 1}
+              <div class="zdot {player.currentZone === i ? 'zd-active' : (i < player.currentZone ? 'zd-done' : 'zd-locked')}" title="Z{i+1}: {ZONES[i].label}"></div>
+            {/if}
+          {/each}
+        </div>
       </div>
 
       <!-- Zone navigator -->
@@ -1287,7 +1296,7 @@
           <div class="ttime {d.rdy ? 'd' : ''}">
             {#if locked}LVL {act.unlockLevel}
             {:else if d.rdy}COLLECT!
-            {:else if d.run}{formatMs(d.rem)}
+            {:else if d.run}{formatMs(d.rem)} · {Math.round(d.prog)}%
             {:else}START
             {/if}
           </div>
@@ -1774,8 +1783,8 @@
   .pname  { text-align: center; font-size: 8px; color: #fff; }
   .pclass { text-align: center; font-size: 6px; color: var(--z-accent2); }
   .bgrp { display: flex; flex-direction: column; gap: 2px; }
-  .blbl { display: flex; justify-content: space-between; font-size: 6px; color: #555; }
-  .btrack { height: 7px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
+  .blbl { display: flex; justify-content: space-between; font-size: 7px; color: #999; }
+  .btrack { height: 9px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
   .bfill  { height: 100%; transition: width 0.3s; }
   .bfill::after { content: ''; display: block; height: 3px; background: rgba(255,255,255,0.15); }
   .hpf { background: #40c060; }
@@ -1789,7 +1798,7 @@
   .gslot:hover { border-color: var(--z-accent); }
   .gem { color: #333; font-size: 10px; }
   .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-  .sgrp-lbl { font-size: 5px; color: #555; padding: 3px 0 1px; letter-spacing: 1px; }
+  .sgrp-lbl { font-size: 5px; color: #777; padding: 4px 0 2px; letter-spacing: 1px; border-bottom: 1px solid var(--z-border); margin-bottom: 1px; }
   .sbox {
     background: var(--z-panel2); border: 1px solid var(--z-border);
     padding: 5px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -1877,19 +1886,26 @@
 
   .clog {
     flex-shrink: 0; background: rgba(0,0,0,0.85); border-top: 2px solid var(--z-border);
-    padding: 5px 10px; height: 50px; overflow: hidden; display: flex; flex-direction: column; gap: 2px;
+    padding: 5px 10px; height: 64px; overflow: hidden; display: flex; flex-direction: column; gap: 3px;
   }
-  .ll       { font-size: 6px; color: #505060; }
-  .ll.dmg   { color: #c04040; }
+  .ll       { font-size: 6px; color: #686878; line-height: 1.7; }
+  .ll.dmg   { color: #d04040; }
+  .ll.crit  { color: var(--z-accent2); }
   .ll.heal  { color: #40c060; }
   .ll.gold  { color: var(--z-accent); }
-  .ll.sys   { color: #4080c0; }
+  .ll.sys   { color: #5090d0; }
 
   .stagebar {
     flex-shrink: 0; background: var(--z-panel); border-top: 2px solid var(--z-border);
-    padding: 5px 10px; display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px; display: flex; flex-direction: column; gap: 4px;
   }
-  .slbl  { font-size: 6px; color: #555; white-space: nowrap; }
+  .stagebar-top { display: flex; align-items: center; gap: 8px; }
+  .zone-dots { display: flex; gap: 4px; align-items: center; padding: 0 2px; }
+  .zdot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--z-border); flex-shrink: 0; transition: background 0.3s, border-color 0.3s, box-shadow 0.3s; }
+  .zdot.zd-active { background: var(--z-accent); border-color: var(--z-accent); box-shadow: 0 0 5px var(--z-accent); }
+  .zdot.zd-done { background: color-mix(in srgb, var(--z-accent2) 50%, #000); border-color: var(--z-accent2); }
+  .zdot.zd-locked { background: transparent; opacity: 0.3; }
+  .slbl  { font-size: 6px; color: #666; white-space: nowrap; }
   .strack{ flex: 1; height: 10px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
   .sfill {
     height: 100%;
@@ -1910,17 +1926,17 @@
   }
   .tab.active { background: var(--z-border-hi); color: var(--z-accent); border-color: var(--z-accent); }
   .shopitem {
-    background: var(--z-panel2); border: 1px solid var(--z-border); padding: 5px;
-    display: flex; flex-direction: column; gap: 3px;
+    background: var(--z-panel2); border: 1px solid var(--z-border); padding: 6px 5px;
+    display: flex; flex-direction: row; align-items: center; gap: 6px;
   }
   .shopitem:hover { border-color: var(--z-accent); }
-  .sit  { display: flex; align-items: center; gap: 5px; }
-  .sii  { font-size: 13px; }
-  .sinf { flex: 1; }
+  .sit  { display: flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
+  .sii  { font-size: 13px; flex-shrink: 0; }
+  .sinf { flex: 1; min-width: 0; }
   .sn   { font-size: 6px; color: #ccc; }
-  .sd   { font-size: 5px; color: #555; margin-top: 1px; }
-  .slv  { font-size: 5px; color: #444; background: #1a1a1a; padding: 2px 3px; }
-  .sic  { display: flex; align-items: center; justify-content: space-between; }
+  .sd   { font-size: 5px; color: #666; margin-top: 2px; }
+  .slv  { font-size: 5px; color: #555; background: #1a1a1a; padding: 2px 3px; flex-shrink: 0; }
+  .sic  { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; }
   .sprice { font-size: 6px; color: var(--z-accent); }
   .sbuy {
     background: color-mix(in srgb, var(--z-accent) 15%, #000);
@@ -1950,7 +1966,7 @@
   .tic  { font-size: 11px; }
   .tn   { font-size: 5px; color: #ccc; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tr   { font-size: 5px; color: var(--z-accent); white-space: nowrap; }
-  .ttrack { height: 4px; background: #050508; border: 1px solid #1a1a1a; overflow: hidden; }
+  .ttrack { height: 6px; background: #050508; border: 1px solid #1a1a1a; overflow: hidden; border-radius: 1px; }
   .tfill  { height: 100%; background: color-mix(in srgb, var(--z-accent2) 80%, #000); }
   .tfill.done { background: var(--z-accent); animation: glow 0.5s ease-in-out infinite alternate; }
   .ttime   { font-size: 5px; color: #444; text-align: right; }

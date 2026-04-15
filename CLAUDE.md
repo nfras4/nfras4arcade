@@ -202,6 +202,8 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Cloud saves for dungeon — D1 dungeon_saves table, GET/POST/DELETE /api/dungeon/save, dual-write with 5s debounce, cloud-first load, sendBeacon on unload, sync indicator, guest banner, RESET SAVE modal. Migration 0013 needs manual apply. Branch: `main`, commit: `29e3e5f`.
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Fix dungeon inactive tab contrast (#555 → #999) so GEAR/ITEMS tabs and mobile PLAYER/SHOP/TIMERS tabs are legible on dark background. Branch: `main`, commit: `63829f0`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: 7-bug QA pass — firstBossKills guaranteed drop, materials deep-merge on load, goldFind applied to patrol gold, added monkey-barrel-token + prime-core boss uniques, 🔒 KEEP label, rerollCost NaN guard. Branch: `main`, commit: `cb9536b`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix NaN damage (Number.isFinite guards in getEffectiveStats) and boss_unique drop crash (craftRoll early-return). Branch: `main`, commit: `7ed8c14`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Add 5 new dungeon stats (critDmg, hpRegen, goldFind, xpBoost, lifesteal) - wired into combat engine, UI split into COMBAT/PASSIVE groups with units and UNLOCK buttons. Branch: `main`, commit: `7c99394`.
@@ -211,8 +213,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Harden impostor hints - all 14 categories rewritten with lateral associations, cultural references, meme callbacks instead of direct descriptors. Branch: `main`, commit: `8107634`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon init timing - restore $effect+untrack for init so loadPlayer runs before zone-story effect, fixing story modal blocking clicks and enemies not appearing. Branch: `main`, commit: `cdc2430`.
 - **2026-04-14** - Deployed to nfras4arcade. Summary: Switch baccarat to Super 6 (commission-free) - banker wins with 6 pay 0.5:1, all other banker wins pay 1:1. Branch: `main`, commit: `78d2aa4`.
-- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix effect_update_depth_exceeded - convert 6 no-dep $effects to onMount, wrap $state writes with untrack, fix impure isPlayerStunned $derived. Branch: `main`, commit: `1a5b6cc`.
-- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix dungeon loot overlay undismissable - add COLLECT button, queue drain, backdrop click, filter to good+ quality only. Branch: `main`, commit: `e0ae4b2`.
-- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix AudioContext autoplay error and effect_update_depth_exceeded in dungeon. Branch: `main`, commit: `c797f8a`.
-- **2026-04-14** - Deployed to nfras4arcade. Summary: Fix WCAG AA text contrast - boost --text-muted and --text-subtle in dark mode, darken --text-subtle in light mode. Branch: `main`, commit: `9a6be03`.
-- **2026-04-14** - Deployed to nfras4arcade. Summary: Restructure hub into 3 category cards (Party Games, Casino, RPG coming soon), party games moved to /games, light mode overhaul with cool-gray theme. Branch: `main`, commit: `27e0d97`.

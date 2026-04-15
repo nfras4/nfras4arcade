@@ -1,5 +1,5 @@
-import { gainMaterial, gainGold, goldFindMultiplier, player, savePlayer } from './player.svelte'
-import { prestigeMultiplier } from './constants'
+import { gainMaterial, gainGold, goldFindMultiplier, player, savePlayer, gainSkillXp } from './player.svelte'
+import { prestigeMultiplier, SKILL_TIER_UNLOCKS, type SkillId } from './constants'
 
 export type Activity = {
   id: string
@@ -19,6 +19,50 @@ export const ACTIVITIES: Activity[] = [
 ]
 
 export const BASE_SLOTS = 2
+
+// ── Skill integration ─────────────────────────────────────────────────────
+
+export type ActivityId = 'chop-wood' | 'mine-iron' | 'brew-potion' | 'gather-herbs' | 'patrol'
+
+export const SKILL_MAP: Record<ActivityId, SkillId> = {
+  'chop-wood':    'woodcutting',
+  'mine-iron':    'mining',
+  'brew-potion':  'brewing',
+  'gather-herbs': 'herbalism',
+  'patrol':       'patrol',
+}
+
+const ACTIVITY_BASE_XP: Record<ActivityId, number> = {
+  'chop-wood':    15,
+  'mine-iron':    25,
+  'brew-potion':  35,
+  'gather-herbs': 40,
+  'patrol':       20,
+}
+
+const BASE_MATERIAL: Record<ActivityId, string> = {
+  'chop-wood':    'wood',
+  'mine-iron':    'iron',
+  'brew-potion':  'potion',
+  'gather-herbs': 'herbs',
+  'patrol':       'gold',
+}
+
+export function getActivityYield(activityId: string, skillLevel: number): number {
+  const activity = ACTIVITIES.find(a => a.id === activityId)
+  if (!activity) return 1
+  return activity.reward.amount + Math.floor(skillLevel / 10)  // +1 per 10 levels
+}
+
+export function getActivityMaterial(activityId: string, skillLevel: number): string {
+  const skillId = SKILL_MAP[activityId as ActivityId]
+  if (!skillId) return BASE_MATERIAL[activityId as ActivityId] ?? 'wood'
+  const unlocks = SKILL_TIER_UNLOCKS[skillId]
+  const tiers = Object.entries(unlocks)
+    .filter(([lvl]) => Number(lvl) <= skillLevel)
+    .sort((a, b) => Number(b[0]) - Number(a[0]))
+  return tiers[0]?.[1]?.[0] ?? BASE_MATERIAL[activityId as ActivityId] ?? 'wood'
+}
 
 export type TimerEntry = {
   activityId: string
@@ -86,10 +130,13 @@ export function loadTimers(): void {
           const totalCycles = 1 + extraCycles  // 1 for the original completion + extras
           const pMult = prestigeMultiplier(player.prestigeTokens)
           const gMult = goldFindMultiplier()
-          const gold = Math.floor(totalCycles * activity.reward.amount * pMult * gMult)
+          const patrolBase = 80 + (player.skills?.patrol?.level ?? 0) * 5
+          const gold = Math.floor(totalCycles * patrolBase * pMult * gMult)
           patrolGold += gold
           gainGold(gold)
           player.lifetimeStats.goldEarned += gold
+          const patrolXp = Math.floor(ACTIVITY_BASE_XP['patrol'] * (player.skillXpMultiplier ?? 1.0))
+          gainSkillXp('patrol', patrolXp)
         } else {
           applyReward(activity)
           materialRewards.push({ name: activity.name, amount: activity.reward.amount })
@@ -127,12 +174,23 @@ export function resetTimers(): void {
 }
 
 function applyReward(activity: Activity): void {
-  if (activity.reward.material === 'gold') {
-    const gold = Math.floor(activity.reward.amount * goldFindMultiplier())
+  const skillId = SKILL_MAP[activity.id as ActivityId]
+  const skillLevel = player.skills?.[skillId]?.level ?? 0
+
+  if (activity.id === 'patrol') {
+    const patrolBase = 80 + skillLevel * 5
+    const gold = Math.floor(patrolBase * goldFindMultiplier())
     gainGold(gold)
+    player.lifetimeStats.goldEarned += gold
   } else {
-    gainMaterial(activity.reward.material, activity.reward.amount)
+    const mat    = getActivityMaterial(activity.id, skillLevel)
+    const amount = getActivityYield(activity.id, skillLevel)
+    gainMaterial(mat, amount)
   }
+
+  const xpGain = Math.floor((ACTIVITY_BASE_XP[activity.id as ActivityId] ?? 0) * (player.skillXpMultiplier ?? 1.0))
+  if (xpGain > 0 && skillId) gainSkillXp(skillId, xpGain)
+
   savePlayer()
 }
 

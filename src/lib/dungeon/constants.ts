@@ -3,7 +3,7 @@ export type StatKey =
   | 'critDmg' | 'hpRegen' | 'goldFind' | 'xpBoost' | 'lifesteal'
 
 export const STAT_BASE_COSTS: Record<StatKey, number> = {
-  attack: 50, defence: 50, speed: 80, luck: 50, vitality: 50,
+  attack: 50, defence: 50, speed: 70, luck: 50, vitality: 50,
   critDmg: 90, hpRegen: 60, goldFind: 70, xpBoost: 65, lifesteal: 85,
 }
 
@@ -16,14 +16,19 @@ export const STAT_BASE_VALUES: Record<StatKey, number> = {
 
 /**
  * Gain per level at LVL 1. Actual per-level gain tapers via calcUpgradeGain.
- * speed: +0.08 = 8% faster attacks at LVL 1 (dimensionless multiplier).
+ * speed: whole-number scale, 4 per level with 0.12 diminishing rate (see STAT_DIMINISHING_RATES).
  * vitality: gain * 10 = HP gained (8 * 10 = 80 HP at LVL 1).
  * critDmg: stored as percentage points (25 = +0.25x multiplier).
  * goldFind/xpBoost/lifesteal: percentage points (12 = +12%).
  */
 export const STAT_BASE_GAINS: Record<StatKey, number> = {
-  attack: 12, defence: 6, speed: 0.08, luck: 8, vitality: 8,
+  attack: 12, defence: 6, speed: 4, luck: 8, vitality: 8,
   critDmg: 25, hpRegen: 3, goldFind: 12, xpBoost: 12, lifesteal: 6,
+}
+
+/** Per-stat diminishing-returns rate. Stats not listed use the default 0.15. */
+const STAT_DIMINISHING_RATES: Partial<Record<StatKey, number>> = {
+  speed: 0.12,
 }
 
 /** Base XP per kill by enemy tier at zone tier 1. Scales via calcZoneReward. */
@@ -59,7 +64,8 @@ export function calcZoneReward(base: number, tier: number): number {
 
 /** Per-level stat gain with diminishing returns. level is 1-indexed (level being purchased). */
 export function calcUpgradeGain(stat: StatKey, level: number): number {
-  return STAT_BASE_GAINS[stat] * (1 / (1 + 0.15 * (level - 1)))
+  const rate = STAT_DIMINISHING_RATES[stat] ?? 0.15
+  return STAT_BASE_GAINS[stat] * (1 / (1 + rate * (level - 1)))
 }
 
 /** Upgrade cost: baseCost * 1.18^currentLevel, rounded to nearest 5. */
@@ -78,7 +84,7 @@ const STAT_SANITY_CAPS: Partial<Record<StatKey, number>> = {
   defence:   800,
   vitality: 50000,
   critDmg:  1500,
-  speed:       5,
+  speed:     150,
 }
 
 /** Cumulative stat value at a given upgrade level, derived fresh from base each call. */
@@ -112,9 +118,9 @@ export function prestigeMultiplier(tokens: number): number {
 /** Level requirement per zone index — both boss kill AND level needed */
 export const ZONE_LEVEL_REQUIREMENTS = [0, 5, 10, 15, 20, 25, 30, 35, 40]
 
-/** Attack interval in ms. speed is a dimensionless bonus (0 = base, 0.08 = 8% faster). */
+/** Attack interval in ms. Exponential decay: 1500 * 0.978^speed, floor 250ms (200ms with 2x toggle). */
 export function calcAttackInterval(speed: number): number {
-  return Math.max(200, Math.floor(ATTACK_BASE_INTERVAL / (1 + speed)))
+  return Math.max(250, Math.floor(ATTACK_BASE_INTERVAL * Math.pow(0.978, speed)))
 }
 
 export function calcEnemyHp(baseHp: number, zoneIndex: number, stageNumber: number, mult = 1): number {

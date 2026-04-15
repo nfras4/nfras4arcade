@@ -1,5 +1,5 @@
 import type { StatKey } from './constants'
-import type { StatRoll } from './crafting'
+import type { StatRoll, ItemModifier } from './crafting'
 
 export type ItemSlot = 'weapon' | 'armour' | 'helmet' | 'ring' | 'amulet'
 
@@ -19,12 +19,19 @@ export type Item = {
   craftCost?: { materials: Record<string, number>; gold: number }
   dropSource?: string[]
   dropChance?: number
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'boss_unique'
+  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'boss_unique'
   lore?: string
   discardable?: boolean
   instanceId?: string
   rolledBonuses?: StatRoll[]
   rerollCount?: number
+  tier?: number        // 1-7, undefined for boss uniques
+  tierIndex?: number   // same as tier, used for forge chain lookups
+  itemLevel?: number
+  itemXp?: number
+  itemXpToNext?: number
+  forgeCount?: number
+  modifier?: ItemModifier
 }
 
 export const MATERIAL_TIERS: Record<string, { tier: number; sprite: string; name: string }> = {
@@ -38,6 +45,26 @@ export const MATERIAL_TIERS: Record<string, { tier: number; sprite: string; name
   darkwood:     { tier: 3, sprite: '🌑', name: 'Darkwood'     },
   wolton_alloy: { tier: 3, sprite: '⚡', name: 'Wolton Alloy' },
   void_essence: { tier: 3, sprite: '💜', name: 'Void Essence' },
+
+  // T4
+  shadowwood:      { tier: 4, sprite: '🌿', name: 'Shadowwood'     },
+  refined_alloy:   { tier: 4, sprite: '🔱', name: 'Refined Alloy'  },
+  cursed_herbs:    { tier: 4, sprite: '☠️',  name: 'Cursed Herbs'   },
+
+  // T5
+  abysswood:       { tier: 5, sprite: '🌑', name: 'Abysswood'      },
+  wolton_core:     { tier: 5, sprite: '💠', name: 'Wolton Core'    },
+  ancient_essence: { tier: 5, sprite: '✨', name: 'Ancient Essence' },
+
+  // T6
+  voidwood:        { tier: 6, sprite: '🕳️', name: 'Voidwood'       },
+  fractured_steel: { tier: 6, sprite: '⚡', name: 'Fractured Steel' },
+  primordial_dust: { tier: 6, sprite: '🌀', name: 'Primordial Dust' },
+
+  // T7
+  etherwood:       { tier: 7, sprite: '🔮', name: 'Etherwood'      },
+  wolton_fragment: { tier: 7, sprite: '💎', name: 'Wolton Fragment' },
+  ascendant_shard: { tier: 7, sprite: '⭐', name: 'Ascendant Shard' },
 }
 
 export const ITEMS: Record<string, Item> = {
@@ -45,30 +72,30 @@ export const ITEMS: Record<string, Item> = {
   // ── WEAPONS ───────────────────────────────────────────────────────────────
   'wooden-stick': {
     id: 'wooden-stick', name: 'WOODEN STICK', slot: 'weapon', sprite: '🪵',
-    statBonuses: { attack: { flat: 2 } }, rarity: 'common',
+    statBonuses: { attack: { flat: 2 } }, rarity: 'common', tier: 1, tierIndex: 1,
     dropSource: ['mystery-slime', 'basement-rat'],
   },
   'iron-sword': {
     id: 'iron-sword', name: 'IRON SWORD', slot: 'weapon', sprite: '🗡️',
-    statBonuses: { attack: { flat: 6 } }, rarity: 'common',
+    statBonuses: { attack: { flat: 6 } }, rarity: 'common', tier: 2, tierIndex: 2,
     dropSource: ['forgotten-thing', 'court-slime'],
     craftCost: { materials: { iron: 10 }, gold: 50 },
   },
   'steel-blade': {
     id: 'steel-blade', name: 'STEEL BLADE', slot: 'weapon', sprite: '⚔️',
-    statBonuses: { attack: { flat: 12 } }, rarity: 'uncommon',
+    statBonuses: { attack: { flat: 12 } }, rarity: 'uncommon', tier: 3, tierIndex: 3,
     dropSource: ['thesis-demon', 'brainrot-specter'],
     craftCost: { materials: { steel: 20 }, gold: 150 },
   },
   'enchanted-sword': {
     id: 'enchanted-sword', name: 'ENCHANTED SWORD', slot: 'weapon', sprite: '🌟',
-    statBonuses: { attack: { flat: 20 } }, rarity: 'rare',
+    statBonuses: { attack: { flat: 20 } }, rarity: 'rare', tier: 4, tierIndex: 4,
     dropSource: ['ward-sentinel', 'corporate-drone'],
     craftCost: { materials: { wolton_alloy: 20, rare_herbs: 8 }, gold: 500 },
   },
   'wolton-breaker': {
     id: 'wolton-breaker', name: 'WOLTON BREAKER', slot: 'weapon', sprite: '💥',
-    statBonuses: { attack: { flat: 35 } }, rarity: 'epic',
+    statBonuses: { attack: { flat: 35 } }, rarity: 'epic', tier: 5, tierIndex: 5,
     dropSource: ['executive-enforcer', 'wolton-prime'],
     craftCost: { materials: { wolton_alloy: 40, void_essence: 8 }, gold: 1200 },
   },
@@ -76,31 +103,31 @@ export const ITEMS: Record<string, Item> = {
   // ── ARMOUR ────────────────────────────────────────────────────────────────
   'cloth-robe': {
     id: 'cloth-robe', name: 'CLOTH ROBE', slot: 'armour', sprite: '👘',
-    statBonuses: { defence: { flat: 2 } }, rarity: 'common',
+    statBonuses: { defence: { flat: 2 } }, rarity: 'common', tier: 1, tierIndex: 1,
     dropSource: ['basement-rat', 'mystery-creature'],
     craftCost: { materials: { wood: 5 }, gold: 30 },
   },
   'leather-vest': {
     id: 'leather-vest', name: 'LEATHER VEST', slot: 'armour', sprite: '🧥',
-    statBonuses: { defence: { flat: 5 } }, rarity: 'common',
+    statBonuses: { defence: { flat: 5 } }, rarity: 'common', tier: 2, tierIndex: 2,
     dropSource: ['aggressive-ref', 'the-bouncer'],
     craftCost: { materials: { wood: 15 }, gold: 100 },
   },
   'chain-mail': {
     id: 'chain-mail', name: 'CHAIN MAIL', slot: 'armour', sprite: '🛡️',
-    statBonuses: { defence: { flat: 10 } }, rarity: 'uncommon',
+    statBonuses: { defence: { flat: 10 } }, rarity: 'uncommon', tier: 3, tierIndex: 3,
     dropSource: ['grad-overseer', 'rowdy-fan'],
     craftCost: { materials: { steel: 15 }, gold: 200 },
   },
   'plate-armour': {
     id: 'plate-armour', name: 'PLATE ARMOUR', slot: 'armour', sprite: '🦺',
-    statBonuses: { defence: { flat: 18 } }, rarity: 'rare',
+    statBonuses: { defence: { flat: 18 } }, rarity: 'rare', tier: 4, tierIndex: 4,
     dropSource: ['hr-director', 'security-golem'],
     craftCost: { materials: { steel: 30, wolton_alloy: 10 }, gold: 600 },
   },
   'wolton-suit': {
     id: 'wolton-suit', name: 'WOLTON SUIT', slot: 'armour', sprite: '💼',
-    statBonuses: { defence: { flat: 28 } }, rarity: 'epic',
+    statBonuses: { defence: { flat: 28 } }, rarity: 'epic', tier: 5, tierIndex: 5,
     dropSource: ['fraser', 'wolton-prime'],
     craftCost: { materials: { wolton_alloy: 50, void_essence: 10 }, gold: 2000 },
   },
@@ -108,25 +135,25 @@ export const ITEMS: Record<string, Item> = {
   // ── HELMETS ───────────────────────────────────────────────────────────────
   'cap': {
     id: 'cap', name: 'CAP', slot: 'helmet', sprite: '🧢',
-    statBonuses: { defence: { flat: 1 }, luck: { flat: 1 } }, rarity: 'common',
+    statBonuses: { defence: { flat: 1 }, luck: { flat: 1 } }, rarity: 'common', tier: 1, tierIndex: 1,
     dropSource: ['mystery-slime', 'court-slime'],
     craftCost: { materials: { wood: 3 }, gold: 20 },
   },
   'iron-helm': {
     id: 'iron-helm', name: 'IRON HELM', slot: 'helmet', sprite: '⛑️',
-    statBonuses: { defence: { flat: 4 }, luck: { flat: 2 } }, rarity: 'common',
+    statBonuses: { defence: { flat: 4 }, luck: { flat: 2 } }, rarity: 'common', tier: 2, tierIndex: 2,
     dropSource: ['overtime-ghost', 'late-assignment'],
     craftCost: { materials: { iron: 8 }, gold: 80 },
   },
   'enchanted-hood': {
     id: 'enchanted-hood', name: 'ENCHANTED HOOD', slot: 'helmet', sprite: '🪄',
-    statBonuses: { defence: { flat: 8 }, luck: { flat: 5 } }, rarity: 'uncommon',
+    statBonuses: { defence: { flat: 8 }, luck: { flat: 5 } }, rarity: 'uncommon', tier: 3, tierIndex: 3,
     dropSource: ['thesis-demon', 'taco-van-guardian'],
     craftCost: { materials: { rare_herbs: 8 }, gold: 200 },
   },
   'wolton-visor': {
     id: 'wolton-visor', name: 'WOLTON VISOR', slot: 'helmet', sprite: '🥽',
-    statBonuses: { defence: { flat: 15 }, luck: { flat: 8 } }, rarity: 'epic',
+    statBonuses: { defence: { flat: 15 }, luck: { flat: 8 } }, rarity: 'epic', tier: 4, tierIndex: 4,
     dropSource: ['damo', 'executive-enforcer'],
     craftCost: { materials: { wolton_alloy: 20, rare_herbs: 12 }, gold: 900 },
   },
@@ -134,19 +161,19 @@ export const ITEMS: Record<string, Item> = {
   // ── RINGS ─────────────────────────────────────────────────────────────────
   'copper-ring': {
     id: 'copper-ring', name: 'COPPER RING', slot: 'ring', sprite: '💍',
-    statBonuses: { luck: { flat: 3 } }, rarity: 'common',
+    statBonuses: { luck: { flat: 3 } }, rarity: 'common', tier: 1, tierIndex: 1,
     dropSource: ['basement-rat', 'stressed-postgrad'],
     craftCost: { materials: {}, gold: 40 },
   },
   'speed-ring': {
     id: 'speed-ring', name: 'SPEED RING', slot: 'ring', sprite: '💫',
-    statBonuses: { speed: { flat: 2 } }, rarity: 'uncommon',
+    statBonuses: { speed: { flat: 2 } }, rarity: 'uncommon', tier: 3, tierIndex: 3,
     dropSource: ['penalty-wraith', 'frenzied-shopper'],
     craftCost: { materials: { iron: 5 }, gold: 180 },
   },
   'power-ring': {
     id: 'power-ring', name: 'POWER RING', slot: 'ring', sprite: '🔮',
-    statBonuses: { attack: { flat: 5 } }, rarity: 'rare',
+    statBonuses: { attack: { flat: 5 } }, rarity: 'rare', tier: 4, tierIndex: 4,
     dropSource: ['chief-surgeon', 'hr-director'],
     craftCost: { materials: { rare_herbs: 10 }, gold: 300 },
   },
@@ -154,20 +181,86 @@ export const ITEMS: Record<string, Item> = {
   // ── AMULETS ───────────────────────────────────────────────────────────────
   'rat-tooth': {
     id: 'rat-tooth', name: 'RAT TOOTH', slot: 'amulet', sprite: '🦷',
-    statBonuses: { attack: { flat: 2 }, luck: { flat: 1 } }, rarity: 'common',
+    statBonuses: { attack: { flat: 2 }, luck: { flat: 1 } }, rarity: 'common', tier: 1, tierIndex: 1,
     dropSource: ['basement-rat', 'rat-king'],
   },
   'lucky-charm': {
     id: 'lucky-charm', name: 'LUCKY CHARM', slot: 'amulet', sprite: '🍀',
-    statBonuses: { luck: { flat: 5 } }, rarity: 'uncommon',
+    statBonuses: { luck: { flat: 5 } }, rarity: 'uncommon', tier: 3, tierIndex: 3,
     dropSource: ['the-coach', 'the-examiner'],
     craftCost: { materials: { rare_herbs: 5 }, gold: 150 },
   },
   'wolton-badge': {
     id: 'wolton-badge', name: 'WOLTON BADGE', slot: 'amulet', sprite: '📛',
-    statBonuses: { attack: { flat: 8 }, defence: { flat: 5 } }, rarity: 'epic',
+    statBonuses: { attack: { flat: 8 }, defence: { flat: 5 } }, rarity: 'epic', tier: 4, tierIndex: 4,
     dropSource: ['damo', 'fraser'],
     craftCost: { materials: { wolton_alloy: 20, void_essence: 5 }, gold: 800 },
+  },
+
+  // ── T5 ITEMS (forge-only) ─────────────────────────────────────────────────
+  't5-void-blade': {
+    id: 't5-void-blade', name: 'VOID BLADE', slot: 'weapon', sprite: '🌑',
+    statBonuses: { attack: { flat: 30 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+  },
+  't5-void-plate': {
+    id: 't5-void-plate', name: 'VOID PLATE', slot: 'armour', sprite: '🌑',
+    statBonuses: { defence: { flat: 35 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+  },
+  't5-void-crown': {
+    id: 't5-void-crown', name: 'VOID CROWN', slot: 'helmet', sprite: '🌑',
+    statBonuses: { defence: { flat: 20 }, luck: { flat: 10 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+  },
+  't5-void-ring': {
+    id: 't5-void-ring', name: 'VOID RING', slot: 'ring', sprite: '🌑',
+    statBonuses: { speed: { flat: 8 }, luck: { flat: 8 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+  },
+  't5-void-amulet': {
+    id: 't5-void-amulet', name: 'VOID AMULET', slot: 'amulet', sprite: '🌑',
+    statBonuses: { attack: { flat: 15 }, defence: { flat: 15 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+  },
+
+  // ── T6 ITEMS (forge-only) ─────────────────────────────────────────────────
+  't6-fractured-edge': {
+    id: 't6-fractured-edge', name: 'FRACTURED EDGE', slot: 'weapon', sprite: '⚡',
+    statBonuses: { attack: { percent: 8 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+  },
+  't6-fractured-mail': {
+    id: 't6-fractured-mail', name: 'FRACTURED MAIL', slot: 'armour', sprite: '⚡',
+    statBonuses: { defence: { percent: 8 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+  },
+  't6-fractured-visor': {
+    id: 't6-fractured-visor', name: 'FRACTURED VISOR', slot: 'helmet', sprite: '⚡',
+    statBonuses: { defence: { percent: 6 }, luck: { percent: 6 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+  },
+  't6-fractured-band': {
+    id: 't6-fractured-band', name: 'FRACTURED BAND', slot: 'ring', sprite: '⚡',
+    statBonuses: { speed: { percent: 8 }, luck: { percent: 6 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+  },
+  't6-fractured-charm': {
+    id: 't6-fractured-charm', name: 'FRACTURED CHARM', slot: 'amulet', sprite: '⚡',
+    statBonuses: { attack: { percent: 7 }, defence: { percent: 7 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+  },
+
+  // ── T7 ITEMS (forge-only) ─────────────────────────────────────────────────
+  't7-ascendant-reaper': {
+    id: 't7-ascendant-reaper', name: 'ASCENDANT REAPER', slot: 'weapon', sprite: '🌟',
+    statBonuses: { attack: { percent: 18 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+  },
+  't7-ascendant-robes': {
+    id: 't7-ascendant-robes', name: 'ASCENDANT ROBES', slot: 'armour', sprite: '🌟',
+    statBonuses: { defence: { percent: 18 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+  },
+  't7-ascendant-crown': {
+    id: 't7-ascendant-crown', name: 'ASCENDANT CROWN', slot: 'helmet', sprite: '🌟',
+    statBonuses: { defence: { percent: 14 }, luck: { percent: 12 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+  },
+  't7-ascendant-ring': {
+    id: 't7-ascendant-ring', name: 'ASCENDANT RING', slot: 'ring', sprite: '🌟',
+    statBonuses: { speed: { percent: 16 }, luck: { percent: 14 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+  },
+  't7-ascendant-totem': {
+    id: 't7-ascendant-totem', name: 'ASCENDANT TOTEM', slot: 'amulet', sprite: '🌟',
+    statBonuses: { attack: { percent: 16 }, defence: { percent: 16 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
   },
 
   // ── BOSS UNIQUES ──────────────────────────────────────────────────────────
@@ -327,3 +420,42 @@ export const CRAFT_RECIPES: CraftEntry[] = [
   { itemId: 'lucky-charm',     materials: { rare_herbs: 5 },                     gold: 150,  unlockLevel: 5  },
   { itemId: 'wolton-badge',    materials: { wolton_alloy: 20, void_essence: 5 }, gold: 800,  unlockLevel: 14 },
 ]
+
+// ── Forge chains — maps each item id to its next-tier item id ─────────────
+export const FORGE_CHAINS: Record<string, string> = {
+  // weapons
+  'wooden-stick':       'iron-sword',
+  'iron-sword':         'steel-blade',
+  'steel-blade':        'enchanted-sword',
+  'enchanted-sword':    'wolton-breaker',
+  'wolton-breaker':     't5-void-blade',
+  't5-void-blade':      't6-fractured-edge',
+  't6-fractured-edge':  't7-ascendant-reaper',
+  // armour
+  'cloth-robe':         'leather-vest',
+  'leather-vest':       'chain-mail',
+  'chain-mail':         'plate-armour',
+  'plate-armour':       'wolton-suit',
+  'wolton-suit':        't5-void-plate',
+  't5-void-plate':      't6-fractured-mail',
+  't6-fractured-mail':  't7-ascendant-robes',
+  // helmets
+  'cap':                'iron-helm',
+  'iron-helm':          'enchanted-hood',
+  'enchanted-hood':     'wolton-visor',
+  'wolton-visor':       't5-void-crown',
+  't5-void-crown':      't6-fractured-visor',
+  't6-fractured-visor': 't7-ascendant-crown',
+  // rings
+  'copper-ring':        'speed-ring',
+  'speed-ring':         'power-ring',
+  'power-ring':         't5-void-ring',
+  't5-void-ring':       't6-fractured-band',
+  't6-fractured-band':  't7-ascendant-ring',
+  // amulets
+  'rat-tooth':          'lucky-charm',
+  'lucky-charm':        'wolton-badge',
+  'wolton-badge':       't5-void-amulet',
+  't5-void-amulet':     't6-fractured-charm',
+  't6-fractured-charm': 't7-ascendant-totem',
+}

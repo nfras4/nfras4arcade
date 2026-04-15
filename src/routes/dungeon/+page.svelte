@@ -2,9 +2,9 @@
   import { untrack } from 'svelte'
   import {
     player, loadPlayer, savePlayer, upgradeStats, applyPlayerData, loadFromCloud, deleteCloudSave,
-    travelToZone, equipFromLootQueue, discardFromLootQueue,
+    travelToZone, equipFromLootQueue,
     prestige, canPrestige, setOnAchievement, checkAchievements,
-    submitLeaderboard,
+    submitLeaderboard, itemXpToNext,
   } from '$lib/dungeon/player.svelte'
   import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats } from '$lib/dungeon/combat.svelte'
   import { ENEMIES } from '$lib/dungeon/enemies'
@@ -12,16 +12,18 @@
     loadTimers, saveTimers, startActivity, collectActivity,
     timerProgress, timerRemaining, isRunning, isReady, formatMs, formatDuration,
     canStart, ACTIVITIES, getOfflineEarnings, clearOfflineEarnings, resetTimers,
+    getActivityYield, getActivityMaterial, SKILL_MAP,
   } from '$lib/dungeon/timers.svelte'
   import { ZONES } from '$lib/dungeon/zones'
   import {
     upgradeCost, statValue, calcAttackInterval,
     ENEMY_ATTACK_INTERVAL, AUTOSAVE_INTERVAL_MS, STAGES_PER_ZONE,
     ZONE_LEVEL_REQUIREMENTS, ACHIEVEMENTS, prestigeMultiplier,
-    type StatKey,
+    SKILL_TIER_UNLOCKS, SKILL_COMBAT_BONUSES,
+    type StatKey, type SkillId,
   } from '$lib/dungeon/constants'
-  import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS } from '$lib/dungeon/items'
-  import { craftRoll, rerollCost, type CraftResult } from '$lib/dungeon/crafting'
+  import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS, FORGE_CHAINS } from '$lib/dungeon/items'
+  import { craftRoll, rerollCost, reforgeCost, rollModifier, type CraftResult } from '$lib/dungeon/crafting'
   import { playSound, setMuted, isMuted, initAudio } from '$lib/dungeon/audio'
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
@@ -40,7 +42,7 @@
   let showLeaderboard    = $state(false)
   let storyText          = $state<string[]>([])
   let activeTab          = $state<'upgrades' | 'gear' | 'items'>('upgrades')
-  let gearSubTab         = $state<'loadout' | 'loot' | 'crafting' | 'reroll'>('loot')
+  let gearSubTab         = $state<'loadout' | 'loot' | 'crafting' | 'reforge' | 'forge'>('loot')
   let now                = $state(Date.now())
   let equipModalSlot     = $state<ItemSlot | null>(null)
   let showBossDeathOverlay = $state(false)
@@ -81,13 +83,17 @@
   let rerollConfirmItem: Item | null = $state(null)
   let rerollConfirmTimeout: ReturnType<typeof setTimeout> | null = null
 
+  // Reforge confirmation
+  let reforgeConfirmItem: Item | null = $state(null)
+  let reforgeConfirmTimeout: ReturnType<typeof setTimeout> | null = null
+
+  // Forge confirmation
+  let forgeConfirmItem: Item | null = $state(null)
+  let forgeConfirmTimeout: ReturnType<typeof setTimeout> | null = null
+
   // Zone lock feedback
   let zoneLockMsg = $state('')
   let zoneLockTimeout: ReturnType<typeof setTimeout> | null = null
-
-  // Discard confirmation
-  let discardConfirmItem: Item | null = $state(null)
-  let discardConfirmTimeout: ReturnType<typeof setTimeout> | null = null
 
   // Clear all confirmation
   let clearAllConfirm   = $state(false)
@@ -244,14 +250,15 @@
 
   // ── Item / loot helpers ───────────────────────────────────────────────────
   function rarityColor(rarity: string): string {
-    const c: Record<string, string> = { common: '#808080', uncommon: '#40a040', rare: '#4080ff', epic: '#c040ff', boss_unique: '#ff9000' }
+    const c: Record<string, string> = { common: '#808080', uncommon: '#40a040', rare: '#4080ff', epic: '#c040ff', legendary: '#f0c030', boss_unique: '#ff9000' }
     return c[rarity] ?? '#808080'
   }
 
   function formatStatBonuses(item: Item): string {
+    const lvlMult = 1 + ((item.itemLevel ?? 1) - 1) * 0.08
     const base = Object.entries(item.statBonuses)
       .filter(([, v]) => v?.flat)
-      .map(([k, v]) => `+${v!.flat} ${k.slice(0, 3).toUpperCase()}`)
+      .map(([k, v]) => `+${Math.floor(v!.flat! * lvlMult)} ${k.slice(0, 3).toUpperCase()}`)
       .join(' ')
     if (base) return base
     return (item.rolledBonuses ?? []).map(r => r.label).join(' ')
@@ -271,14 +278,14 @@
     }, 0)
   }
 
-  const DISCARD_GOLD: Record<string, number> = { common: 15, uncommon: 60, rare: 200, epic: 600 }
-
   function clearAllLoot() {
-    const discardable = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')
-    const refund = discardable.reduce((s, i) => s + (DISCARD_GOLD[i.rarity] ?? 10), 0)
-    player.gold += refund
+    const sellable = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')
+    for (const item of sellable) {
+      player.gold += sellReturn(item)
+    }
     player.lootQueue = player.lootQueue.filter(i => i.discardable === false || i.rarity === 'boss_unique')
     clearAllConfirm = false
+    savePlayer()
   }
 
   function itemPower(item: Item): number {
@@ -315,6 +322,10 @@
         instanceId: crypto.randomUUID(),
         rolledBonuses: result.bonusRolls,
         rerollCount: 0,
+        itemLevel: 1,
+        itemXp: 0,
+        itemXpToNext: itemXpToNext(1),
+        modifier: rollModifier(baseItem.tier ?? 1, luck, false),
       }
       player.lootQueue = [...player.lootQueue, item]
       craftResult = { ...result, item }
@@ -350,6 +361,198 @@
     savePlayer()
   }
 
+  function computeReforgeCost(item: Item): { gold: number; materials: Record<string, number> } {
+    if (item.rarity === 'boss_unique') {
+      const base = reforgeCost({ ...item, tier: 5 })
+      return {
+        gold: base.gold * 3,
+        materials: Object.fromEntries(Object.entries(base.materials).map(([k, v]) => [k, v * 3]))
+      }
+    }
+    return reforgeCost(item)
+  }
+
+  function doReforge(item: Item): void {
+    const cost = computeReforgeCost(item)
+    if (player.gold < cost.gold) return
+    for (const [mat, amt] of Object.entries(cost.materials)) {
+      if ((player.materials[mat] ?? 0) < amt) return
+    }
+    player.gold -= cost.gold
+    for (const [mat, amt] of Object.entries(cost.materials)) {
+      player.materials[mat] = (player.materials[mat] ?? 0) - amt
+    }
+    const luck = getEffectiveStats(player).luck
+    item.modifier = rollModifier(item.tier ?? 1, luck, item.rarity === 'boss_unique')
+    item.rerollCount = (item.rerollCount ?? 0) + 1
+    savePlayer()
+  }
+
+  function canAffordReforge(item: Item): boolean {
+    const cost = computeReforgeCost(item)
+    if (player.gold < cost.gold) return false
+    for (const [mat, amt] of Object.entries(cost.materials)) {
+      if ((player.materials[mat] ?? 0) < amt) return false
+    }
+    return true
+  }
+
+  function forgeCost(item: Item): { gold: number; materials: Record<string, number> } | null {
+    const nextId = FORGE_CHAINS[item.id]
+    if (!nextId) return null
+    const nextItem = ITEMS[nextId]
+    if (!nextItem) return null
+    if (nextItem.craftCost) return nextItem.craftCost
+    const tierCosts: Record<number, { gold: number; materials: Record<string, number> }> = {
+      5: { gold: 3000,  materials: { wolton_alloy: 30, void_essence: 15 } },
+      6: { gold: 8000,  materials: { wolton_core: 20, ancient_essence: 10 } },
+      7: { gold: 20000, materials: { wolton_fragment: 15, ascendant_shard: 8 } },
+    }
+    return tierCosts[nextItem.tier ?? 5] ?? { gold: 5000, materials: {} }
+  }
+
+  function canAffordForge(item: Item): boolean {
+    const cost = forgeCost(item)
+    if (!cost) return false
+    if (player.gold < cost.gold) return false
+    for (const [mat, amt] of Object.entries(cost.materials)) {
+      if ((player.materials[mat] ?? 0) < amt) return false
+    }
+    return true
+  }
+
+  function doForge(item: Item): void {
+    const nextId = FORGE_CHAINS[item.id]
+    if (!nextId) return
+    const cost = forgeCost(item)
+    if (!cost || !canAffordForge(item)) return
+    player.gold -= cost.gold
+    for (const [mat, amt] of Object.entries(cost.materials)) {
+      player.materials[mat] = (player.materials[mat] ?? 0) - amt
+    }
+    const nextBase = ITEMS[nextId]
+    if (!nextBase) return
+    const luck = getEffectiveStats(player).luck
+    const forged: Item = {
+      ...nextBase,
+      instanceId: crypto.randomUUID(),
+      rolledBonuses: item.rolledBonuses ?? [],
+      rerollCount: item.rerollCount ?? 0,
+      forgeCount: (item.forgeCount ?? 0) + 1,
+      itemLevel: 1,
+      itemXp: 0,
+      itemXpToNext: itemXpToNext(1),
+      modifier: rollModifier(nextBase.tier ?? 1, luck, false),
+    }
+    const slot = item.slot
+    if (player.gear[slot] === item) {
+      player.gear[slot] = forged
+    } else {
+      const idx = player.lootQueue.indexOf(item)
+      if (idx !== -1) {
+        const q = [...player.lootQueue]
+        q[idx] = forged
+        player.lootQueue = q
+      }
+    }
+    playSound('craft-perfect')
+    savePlayer()
+  }
+
+  function modifierColor(quality: string): string {
+    const colors: Record<string, string> = {
+      weak:      '#808080',
+      average:   '#d0d2e8',
+      strong:    '#40c060',
+      legendary: '#4080ff',
+      godroll:   '#f0c040',
+    }
+    return colors[quality] ?? '#aaa'
+  }
+
+  function itemLevelColor(level: number): string {
+    if (level >= 9) return '#00ffff'
+    if (level >= 5) return '#f0c030'
+    return '#fff'
+  }
+
+  // ── Stage 5: Break down / sell helpers ──────────────────────────────────
+  const TIER_PRIMARY_MAT: Record<number, string> = {
+    1: 'iron', 2: 'steel', 3: 'wolton_alloy',
+    4: 'refined_alloy', 5: 'wolton_core',
+    6: 'fractured_steel', 7: 'wolton_fragment',
+  }
+  const MAX_MAT_RETURN: Record<number, number> = {
+    1: 3, 2: 6, 3: 12, 4: 20, 5: 35, 6: 50, 7: 80,
+  }
+  const GOLD_PER_LEVEL: Record<number, number> = {
+    1: 5, 2: 15, 3: 40, 4: 90, 5: 200, 6: 450, 7: 1000,
+  }
+
+  function breakdownReturn(item: Item): { mat: string; amount: number; gold: number } | { voidEssence: number } {
+    if (item.rarity === 'boss_unique') {
+      const level = item.itemLevel ?? 1
+      return { voidEssence: Math.max(1, Math.floor(level / 5)) }
+    }
+    const tier = item.tier ?? 1
+    const level = item.itemLevel ?? 1
+    const threshold = 10
+    const matAmt = Math.floor((level / threshold) * (MAX_MAT_RETURN[tier] ?? 3))
+    const gold = Math.floor(level * (GOLD_PER_LEVEL[tier] ?? 5))
+    return { mat: TIER_PRIMARY_MAT[tier] ?? 'iron', amount: Math.max(1, matAmt), gold }
+  }
+
+  function sellReturn(item: Item): number {
+    if (item.rarity === 'boss_unique') return 0
+    const tier = item.tier ?? 1
+    const level = item.itemLevel ?? 1
+    return Math.floor(level * (GOLD_PER_LEVEL[tier] ?? 5) * 1.2)
+  }
+
+  function doBreakdown(item: Item): void {
+    const ret = breakdownReturn(item)
+    if ('voidEssence' in ret) {
+      player.materials['void_essence'] = (player.materials['void_essence'] ?? 0) + ret.voidEssence
+    } else {
+      if (ret.amount > 0) player.materials[ret.mat] = (player.materials[ret.mat] ?? 0) + ret.amount
+      player.gold += ret.gold
+    }
+    removeItem(item)
+    savePlayer()
+  }
+
+  function doSell(item: Item): void {
+    if (item.rarity === 'boss_unique') return
+    player.gold += sellReturn(item)
+    removeItem(item)
+    savePlayer()
+  }
+
+  function removeItem(item: Item): void {
+    const idx = player.lootQueue.indexOf(item)
+    if (idx !== -1) {
+      const q = [...player.lootQueue]
+      q.splice(idx, 1)
+      player.lootQueue = q
+      return
+    }
+    for (const slot of Object.keys(player.gear) as ItemSlot[]) {
+      if (player.gear[slot] === item) {
+        player.gear[slot] = null
+        break
+      }
+    }
+  }
+
+  // ── Stage 5 state ─────────────────────────────────────────────────────────
+  let breakdownConfirmItem: Item | null = $state(null)
+  let sellConfirmItem: Item | null = $state(null)
+  let breakdownConfirmTimeout: ReturnType<typeof setTimeout> | null = null
+  let sellConfirmTimeout: ReturnType<typeof setTimeout> | null = null
+
+  // ── Stage 6 state ─────────────────────────────────────────────────────────
+  let showSkillsModal = $state(false)
+
   function dismissCraftOverlay(): void {
     if (pendingDropResults.length > 0) {
       craftResult = pendingDropResults[0]
@@ -378,6 +581,7 @@
     else if (equipModalSlot) equipModalSlot = null
     else if (showCraftResult) dismissCraftOverlay()
     else if (showAchModal) showAchModal = false
+    else if (showSkillsModal) showSkillsModal = false
     else if (showStatsModal) showStatsModal = false
     else if (showLeaderboard) showLeaderboard = false
     else if (showStoryModal) showStoryModal = false
@@ -537,9 +741,9 @@
   const STAT_ROWS: { key: StatKey; icon: string; name: string; desc: string; short: string; unit: string; group: 'combat' | 'passive' }[] = [
     { key: 'attack',    icon: '⚔️',  name: 'ATTACK',     desc: '+3 atk dmg',                  short: 'ATK',   unit: '',   group: 'combat'  },
     { key: 'defence',   icon: '🛡️',  name: 'DEFENCE',    desc: '+2 dmg reduction',             short: 'DEF',   unit: '',   group: 'combat'  },
-    { key: 'speed',     icon: '⚡',   name: 'SPEED',      desc: 'faster attacks',               short: 'SPD',   unit: '',   group: 'combat'  },
+    { key: 'speed',     icon: '⚡',   name: 'SPEED',      desc: 'Attack interval. Lower is faster. Min: 250ms.',short: 'SPD',   unit: '',   group: 'combat'  },
     { key: 'vitality',  icon: '❤️',  name: 'VITALITY',   desc: '+200 max HP',                  short: 'VIT',   unit: '',   group: 'combat'  },
-    { key: 'critDmg',   icon: '💥',  name: 'CRIT DMG',   desc: 'crit multiplier +0.1x',        short: 'CRIT',  unit: '%',  group: 'combat'  },
+    { key: 'critDmg',   icon: '💥',  name: 'CRIT DMG',   desc: 'Crit multiplier. Higher = more crit damage.',        short: 'CRIT',  unit: '%',  group: 'combat'  },
     { key: 'luck',      icon: '🍀',  name: 'LUCK',       desc: '+2% crit chance',              short: 'LCK',   unit: '',   group: 'passive' },
     { key: 'hpRegen',   icon: '💚',  name: 'HP REGEN',   desc: '+1 HP/sec passively',          short: 'REGEN', unit: '/s', group: 'passive' },
     { key: 'goldFind',  icon: '🪙',  name: 'GOLD FIND',  desc: '+3% gold from all sources',    short: 'GFND',  unit: '%',  group: 'passive' },
@@ -691,7 +895,7 @@
   // combatSpeed is the only tracked dep (user-toggled UI state).
   $effect(() => {
     const spd = combatSpeed
-    const speed = untrack(() => player.stats.speed)
+    const speed = untrack(() => getEffectiveStats(player).speed)
     const ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
     const id = setInterval(playerAttack, ms)
     return () => clearInterval(id)
@@ -1053,7 +1257,7 @@
           <div class="sbox" title={row.desc}>
             <span class="sn">{row.short}</span>
             <span class="sv" style="color:{STAT_COLORS[row.key] ?? 'var(--z-accent)'}">
-              {row.key === 'critDmg' ? `${eff}%` : `${eff}${row.unit}`}
+              {row.key === 'critDmg' ? `${(eff / 100).toFixed(2)}x` : row.key === 'speed' ? `${calcAttackInterval(eff)}ms` : `${eff}${row.unit}`}
               {#if flat > 0}<span class="sgear"> +{flat}</span>{/if}
               {#if pct > 0}<span class="sgear-pct"> +{pct}%</span>{/if}
             </span>
@@ -1086,6 +1290,7 @@
       {/if}
 
       <div class="icon-btns">
+        <button class="icon-btn" onclick={() => showSkillsModal = true} title="Skills">⚒️</button>
         <button class="icon-btn" onclick={() => showAchModal = true} title="Achievements">🎖️</button>
         <button class="icon-btn" onclick={() => showStatsModal = true} title="Stats">📊</button>
         <button class="icon-btn" onclick={() => showLeaderboard = true} title="Leaderboard">🏆</button>
@@ -1284,11 +1489,16 @@
 
       {:else if activeTab === 'gear'}
         <!-- Sub-tab bar -->
+        <!-- Row 1: LOADOUT LOOT CRAFT -->
         <div class="gear-subtabs">
           <button class="gsub {gearSubTab === 'loadout' ? 'active' : ''}" onclick={() => gearSubTab = 'loadout'}>LOADOUT</button>
-          <button class="gsub {gearSubTab === 'loot' ? 'active' : ''}" onclick={() => gearSubTab = 'loot'}>LOOT{#if player.lootQueue.length > 0} [{player.lootQueue.length}]{/if}</button>
+          <button class="gsub {gearSubTab === 'loot' ? 'active' : ''}" onclick={() => gearSubTab = 'loot'}>LOOT{#if player.lootQueue.length > 0}<span class="tab-badge">{player.lootQueue.length}</span>{/if}</button>
           <button class="gsub {gearSubTab === 'crafting' ? 'active' : ''}" onclick={() => gearSubTab = 'crafting'}>CRAFT</button>
-          <button class="gsub {gearSubTab === 'reroll' ? 'active' : ''}" onclick={() => gearSubTab = 'reroll'}>REROLL</button>
+        </div>
+        <!-- Row 2: REFORGE FORGE -->
+        <div class="gear-subtabs-row2">
+          <button class="gsub {gearSubTab === 'reforge' ? 'active' : ''}" onclick={() => gearSubTab = 'reforge'}>REFORGE</button>
+          <button class="gsub {gearSubTab === 'forge' ? 'active' : ''}" onclick={() => gearSubTab = 'forge'}>FORGE</button>
         </div>
 
         {#if gearSubTab === 'loadout'}
@@ -1314,17 +1524,56 @@
                 <div class="lq-top">
                   <span class="lq-spr">{eq.sprite}</span>
                   <div class="lq-inf">
-                    <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">{eq.name}{#if eq.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}</div>
+                    <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">
+                      {eq.name}
+                      {#if eq.tier}<span class="tier-badge">T{eq.tier}</span>{/if}
+                      {#if eq.modifier}<span class="mod-badge {eq.modifier.quality === 'godroll' ? 'mod-godroll' : ''}" style="color:{modifierColor(eq.modifier.quality)}">{eq.modifier.quality.toUpperCase()}</span>{/if}
+                      {#if (eq.forgeCount ?? 0) > 0}<span class="forge-count-badge">x{eq.forgeCount}</span>{/if}
+                      {#if eq.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}
+                    </div>
+                    <div class="item-lvl-line" style="color:{itemLevelColor(eq.itemLevel ?? 1)}">LV {eq.itemLevel ?? 1} / 10</div>
+                    {#if (eq.itemLevel ?? 1) < 10}
+                      <div class="item-xp-bar"><div class="item-xp-fill" style="width:{Math.min(100, ((eq.itemXp ?? 0) / (eq.itemXpToNext ?? itemXpToNext(eq.itemLevel ?? 1))) * 100)}%"></div></div>
+                    {:else}
+                      <div class="max-level-badge">MAX LEVEL</div>
+                    {/if}
                     <div class="lq-st">{formatStatBonuses(eq)}</div>
                     {#if eq.rolledBonuses && eq.rolledBonuses.length > 0}
                       <div class="lq-rolls">{eq.rolledBonuses.map(r => r.label).join(' ')}</div>
                     {/if}
+                    {#if eq.modifier && eq.modifier.bonuses.length > 0}
+                      <div class="lq-rolls mod-rolls">{eq.modifier.bonuses.map(r => r.label).join(' ')}</div>
+                    {/if}
                     {#if eq.lore}<div class="item-lore">{eq.lore}</div>{/if}
                   </div>
                 </div>
+                <div class="lq-btns">
+                  {#if eq.rarity !== 'boss_unique'}
+                    {#if breakdownConfirmItem === eq}
+                      <button class="lq-btn bd confirm" onclick={() => { doBreakdown(eq); breakdownConfirmItem = null }}>CONFIRM?</button>
+                    {:else}
+                      <button class="lq-btn bd" onclick={() => {
+                        breakdownConfirmItem = eq; sellConfirmItem = null
+                        if (breakdownConfirmTimeout) clearTimeout(breakdownConfirmTimeout)
+                        breakdownConfirmTimeout = setTimeout(() => { breakdownConfirmItem = null }, 2000)
+                      }}>BREAK DOWN</button>
+                    {/if}
+                    {#if sellConfirmItem === eq}
+                      <button class="lq-btn sell confirm" onclick={() => { doSell(eq); sellConfirmItem = null }}>CONFIRM?</button>
+                    {:else}
+                      <button class="lq-btn sell" onclick={() => {
+                        sellConfirmItem = eq; breakdownConfirmItem = null
+                        if (sellConfirmTimeout) clearTimeout(sellConfirmTimeout)
+                        sellConfirmTimeout = setTimeout(() => { sellConfirmItem = null }, 2000)
+                      }}>SELL ({sellReturn(eq)}g)</button>
+                    {/if}
+                  {:else}
+                    <span class="keep-badge">🔒 BOSS UNIQUE</span>
+                  {/if}
+                </div>
               </div>
             {:else}
-              <div class="stub">{slot.toUpperCase()} — EMPTY</div>
+              <div class="stub">{slot.toUpperCase()} -- EMPTY</div>
             {/if}
           {/each}
 
@@ -1332,19 +1581,19 @@
           {#if player.lootQueue.length === 0}
             <div class="stub">NO PENDING LOOT</div>
           {:else}
-            {@const discardableItems = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')}
-            {@const clearRefund = discardableItems.reduce((s, i) => s + (DISCARD_GOLD[i.rarity] ?? 10), 0)}
+            {@const sellableItems = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')}
+            {@const clearRefund = sellableItems.reduce((s, i) => s + sellReturn(i), 0)}
             {@const keptUniques = player.lootQueue.filter(i => i.discardable === false || i.rarity === 'boss_unique').length}
-            {#if discardableItems.length > 0}
+            {#if sellableItems.length > 0}
               <div class="clear-all-row">
                 {#if clearAllConfirm}
-                  <button class="lq-btn dc confirm clear-all-btn" onclick={() => { clearAllLoot(); clearAllConfirm = false }}>CONFIRM CLEAR? (3s)</button>
+                  <button class="lq-btn sell confirm clear-all-btn" onclick={() => { clearAllLoot(); clearAllConfirm = false }}>CONFIRM CLEAR? (3s)</button>
                 {:else}
-                  <button class="lq-btn dc clear-all-btn" onclick={() => {
+                  <button class="lq-btn sell clear-all-btn" onclick={() => {
                     clearAllConfirm = true
                     if (clearAllTimeout) clearTimeout(clearAllTimeout)
                     clearAllTimeout = setTimeout(() => { clearAllConfirm = false }, 3000)
-                  }}>CLEAR ALL (+{clearRefund}g)</button>
+                  }}>CLEAR ALL (sell all for {clearRefund}g)</button>
                 {/if}
                 {#if keptUniques > 0}
                   <span class="clear-kept-note">{keptUniques} UNIQUE ITEM{keptUniques > 1 ? 'S' : ''} KEPT</span>
@@ -1356,30 +1605,52 @@
                 <div class="lq-top">
                   <span class="lq-spr">{item.sprite}</span>
                   <div class="lq-inf">
-                    <div class="lq-nm" style="color:{rarityColor(item.rarity)}">{item.name}{#if item.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}</div>
+                    <div class="lq-nm" style="color:{rarityColor(item.rarity)}">
+                      {item.name}
+                      <span class="item-lvl-badge" style="color:{itemLevelColor(item.itemLevel ?? 1)}">Lv{item.itemLevel ?? 1}</span>
+                      {#if item.tier}<span class="tier-badge">T{item.tier}</span>{/if}
+                      {#if item.modifier}<span class="mod-badge {item.modifier.quality === 'godroll' ? 'mod-godroll' : ''}" style="color:{modifierColor(item.modifier.quality)}">{item.modifier.quality.toUpperCase()}</span>{/if}
+                      {#if (item.forgeCount ?? 0) > 0}<span class="forge-count-badge">x{item.forgeCount}</span>{/if}
+                      {#if item.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}
+                    </div>
+                    {#if (item.itemLevel ?? 1) < 10}
+                      <div class="item-xp-bar"><div class="item-xp-fill" style="width:{Math.min(100, ((item.itemXp ?? 0) / (item.itemXpToNext ?? itemXpToNext(item.itemLevel ?? 1))) * 100)}%"></div></div>
+                    {/if}
                     <div class="lq-st">{formatStatBonuses(item)}</div>
                     {#if item.rolledBonuses && item.rolledBonuses.length > 0}
                       <div class="lq-rolls">{item.rolledBonuses.map(r => r.label).join(' ')}</div>
+                    {/if}
+                    {#if item.modifier && item.modifier.bonuses.length > 0}
+                      <div class="lq-rolls mod-rolls">{item.modifier.bonuses.map(r => r.label).join(' ')}</div>
                     {/if}
                     {#if item.lore}<div class="item-lore">{item.lore}</div>{/if}
                   </div>
                 </div>
                 <div class="lq-btns">
                   <button class="lq-btn eq" onclick={() => equipFromLootQueue(item)}>EQUIP</button>
-                  {#if item.discardable !== false}
-                    {#if ['rare', 'epic'].includes(item.rarity) && discardConfirmItem === item}
-                      <button class="lq-btn dc confirm" onclick={() => { discardFromLootQueue(item); discardConfirmItem = null }}>CONFIRM?</button>
-                    {:else if ['rare', 'epic'].includes(item.rarity)}
-                      <button class="lq-btn dc" onclick={() => {
-                        discardConfirmItem = item
-                        if (discardConfirmTimeout) clearTimeout(discardConfirmTimeout)
-                        discardConfirmTimeout = setTimeout(() => { discardConfirmItem = null }, 2000)
-                      }}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                  {#if item.rarity !== 'boss_unique'}
+                    {@const bdRet = breakdownReturn(item)}
+                    {#if breakdownConfirmItem === item}
+                      <button class="lq-btn bd confirm" onclick={() => { doBreakdown(item); breakdownConfirmItem = null }}>CONFIRM?</button>
                     {:else}
-                      <button class="lq-btn dc" onclick={() => discardFromLootQueue(item)}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                      <button class="lq-btn bd" onclick={() => {
+                        breakdownConfirmItem = item; sellConfirmItem = null
+                        if (breakdownConfirmTimeout) clearTimeout(breakdownConfirmTimeout)
+                        breakdownConfirmTimeout = setTimeout(() => { breakdownConfirmItem = null }, 2000)
+                      }}>{'voidEssence' in bdRet ? `BD (${bdRet.voidEssence}x void)` : bdRet.amount > 0 ? `BD (${bdRet.amount}x ${MATERIAL_TIERS[bdRet.mat]?.sprite ?? ''}+${bdRet.gold}g)` : `BD (+${bdRet.gold}g)`}</button>
+                    {/if}
+                    {@const sv = sellReturn(item)}
+                    {#if sellConfirmItem === item}
+                      <button class="lq-btn sell confirm" onclick={() => { doSell(item); sellConfirmItem = null }}>CONFIRM?</button>
+                    {:else}
+                      <button class="lq-btn sell" onclick={() => {
+                        sellConfirmItem = item; breakdownConfirmItem = null
+                        if (sellConfirmTimeout) clearTimeout(sellConfirmTimeout)
+                        sellConfirmTimeout = setTimeout(() => { sellConfirmItem = null }, 2000)
+                      }}>SELL ({sv}g)</button>
                     {/if}
                   {:else}
-                    <span class="keep-badge">🔒 KEEP</span>
+                    <span class="keep-badge">🔒 BOSS UNIQUE</span>
                   {/if}
                 </div>
               </div>
@@ -1387,16 +1658,18 @@
           {/if}
 
         {:else if gearSubTab === 'crafting'}
-          <!-- Materials sidebar -->
-          <div class="mat-sidebar">
-            {#each Object.entries(MATERIAL_TIERS) as [mat, info]}
-              {@const qty = player.materials[mat] ?? 0}
-              <div class="mat-chip {qty === 0 ? 'zero' : ''}">
-                <span>{info.sprite}</span>
-                <span>{info.name}</span>
-                <span class="mat-qty">×{qty}</span>
-              </div>
-            {/each}
+          <div class="mat-compact-grid">
+            <div class="mat-grid-title">MATERIALS</div>
+            <div class="mat-grid-cells">
+              {#each Object.entries(MATERIAL_TIERS) as [mat, info]}
+                {@const qty = player.materials[mat] ?? 0}
+                <div class="mat-cell {qty === 0 ? 'mat-zero' : ''}">
+                  <span class="mat-icon">{info.sprite}</span>
+                  <span class="mat-name">{info.name}</span>
+                  <span class="mat-qty-val">{qty}</span>
+                </div>
+              {/each}
+            </div>
           </div>
           <div class="craft-luck-hint">🍀 LUCK BONUS: +{luckBonusPct()}% — CHANCE OF BONUS ROLLS</div>
           {#each CRAFT_RECIPES.filter(r => player.level >= r.unlockLevel) as recipe}
@@ -1424,47 +1697,131 @@
             <div class="stub">REACH LVL 1 TO UNLOCK</div>
           {/each}
 
-        {:else if gearSubTab === 'reroll'}
-          {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
-            {@const eq = player.gear[slot]}
-            {#if eq}
+        {:else if gearSubTab === 'reforge'}
+          {@const allReforgeItems = [
+            ...Object.values(player.gear).filter((i): i is Item => i !== null),
+            ...player.lootQueue,
+          ]}
+          {#if allReforgeItems.length === 0}
+            <div class="stub">NO ITEMS TO REFORGE</div>
+          {:else}
+            {#each allReforgeItems as eq (eq.instanceId ?? eq.id)}
+              {@const rfCost = computeReforgeCost(eq)}
+              {@const canRF = canAffordReforge(eq)}
               <div class="lq-card">
                 <div class="lq-top">
                   <span class="lq-spr">{eq.sprite}</span>
                   <div class="lq-inf">
-                    <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">{eq.name}{#if (eq.rerollCount ?? 0) > 0}<span class="reroll-badge"> REROLLED x{eq.rerollCount}</span>{/if}</div>
+                    <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">
+                      {eq.name}
+                      {#if eq.tier}<span class="tier-badge">T{eq.tier}</span>{/if}
+                      {#if eq.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}
+                    </div>
                     <div class="lq-st">{formatStatBonuses(eq)}</div>
-                    {#if eq.rolledBonuses && eq.rolledBonuses.length > 0}
-                      <div class="lq-rolls">{eq.rolledBonuses.map(r => r.label).join(' ')}</div>
+                    {#if eq.modifier}
+                      <div class="reforge-mod-block">
+                        <span class="mod-badge {eq.modifier.quality === 'godroll' ? 'mod-godroll' : ''}" style="color:{modifierColor(eq.modifier.quality)};font-size:9px">{eq.modifier.quality.toUpperCase()}</span>
+                        <span class="mod-bonuses">{eq.modifier.bonuses.map(r => `+${r.percent}% ${r.stat.toUpperCase()}`).join(', ')}</span>
+                      </div>
                     {/if}
                   </div>
                 </div>
-                {#if eq.rarity !== 'boss_unique'}
-                  {@const cost = rerollCost(eq)}
-                  {@const canRR = canAffordReroll(eq)}
-                  <div class="reroll-cost">
-                    <span>REROLL: 🪙{cost.gold}</span>
-                    {#each Object.entries(cost.materials) as [mat, amt]}
-                      <span class="{(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{matLabel(mat)}:{amt}</span>
-                    {/each}
-                  </div>
-                  {#if rerollConfirmItem === eq}
-                    <button class="cc-btn confirm-reroll {canRR ? '' : 'cant'}" onclick={() => { doReroll(eq); rerollConfirmItem = null }}>CONFIRM?</button>
-                  {:else}
-                    <button class="cc-btn {canRR ? '' : 'cant'}" onclick={() => {
-                      rerollConfirmItem = eq
-                      if (rerollConfirmTimeout) clearTimeout(rerollConfirmTimeout)
-                      rerollConfirmTimeout = setTimeout(() => { rerollConfirmItem = null }, 2000)
-                    }}>REROLL</button>
-                  {/if}
+                <div class="reroll-cost">
+                  <span>REFORGE: 🪙{rfCost.gold}</span>
+                  {#each Object.entries(rfCost.materials) as [mat, amt]}
+                    <span class="{(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{matLabel(mat)}:{amt}</span>
+                  {/each}
+                </div>
+                {#if reforgeConfirmItem === eq}
+                  <button class="cc-btn confirm-reroll {canRF ? '' : 'cant'}" onclick={() => { doReforge(eq); reforgeConfirmItem = null }}>CONFIRM?</button>
                 {:else}
-                  <div class="reroll-cost"><span class="keep-badge">🔒 BOSS UNIQUE — CANNOT REROLL</span></div>
+                  <button class="cc-btn {canRF ? '' : 'cant'}" onclick={() => {
+                    reforgeConfirmItem = eq
+                    if (reforgeConfirmTimeout) clearTimeout(reforgeConfirmTimeout)
+                    reforgeConfirmTimeout = setTimeout(() => { reforgeConfirmItem = null }, 2000)
+                  }}>REFORGE</button>
                 {/if}
               </div>
-            {/if}
-          {/each}
-          {#if !Object.values(player.gear).some(Boolean)}
-            <div class="stub">NO GEAR EQUIPPED</div>
+            {/each}
+          {/if}
+
+        {:else if gearSubTab === 'forge'}
+          {@const allForgeItems = [
+            ...Object.values(player.gear).filter((i): i is Item => i !== null),
+            ...player.lootQueue,
+          ]}
+          {@const readyItems = allForgeItems.filter(i => FORGE_CHAINS[i.id] && (i.itemLevel ?? 1) >= 10)}
+          {@const almostItems = allForgeItems.filter(i => FORGE_CHAINS[i.id] && (i.itemLevel ?? 1) >= 8 && (i.itemLevel ?? 1) < 10)}
+
+          {#if readyItems.length === 0 && almostItems.length === 0}
+            <div class="stub">NO ITEMS READY TO FORGE</div>
+            <div class="forge-hint">Items can be forged when they reach their max level. Keep fighting!</div>
+          {/if}
+
+          {#if readyItems.length > 0}
+            <div class="forge-section-lbl">READY TO FORGE</div>
+            {#each readyItems as item (item.instanceId ?? item.id)}
+              {@const nextId = FORGE_CHAINS[item.id]}
+              {@const nextItem = nextId ? ITEMS[nextId] : null}
+              {@const cost = forgeCost(item)}
+              {@const canForge = canAffordForge(item)}
+              <div class="forge-card {canForge ? '' : 'ca'}">
+                <div class="forge-tier-row">
+                  <span style="color:{rarityColor(item.rarity)}">{item.sprite} {item.name}</span>
+                  <span class="forge-tier-arrow">T{item.tier ?? '?'} > T{nextItem?.tier ?? '?'}</span>
+                </div>
+                <div class="forge-lvl-row">
+                  <span style="color:#f0c030">LV {item.itemLevel ?? 1}/10</span>
+                  <div class="item-xp-bar forge-ready-bar"><div class="item-xp-fill" style="width:100%"></div></div>
+                  <span class="forge-ready-badge">READY</span>
+                </div>
+                {#if item.modifier}
+                  <div class="forge-mod-line">
+                    <span class="mod-badge {item.modifier.quality === 'godroll' ? 'mod-godroll' : ''}" style="color:{modifierColor(item.modifier.quality)}">{item.modifier.quality.toUpperCase()}</span>
+                    <span class="forge-mod-bonuses">{item.modifier.bonuses.map(r => `+${r.percent}% ${r.stat.toUpperCase()}`).join('  ')}</span>
+                  </div>
+                {/if}
+                {#if nextItem}
+                  <div class="forge-result-line">Result: <span style="color:{rarityColor(nextItem.rarity)}">{nextItem.name}</span> — keeps modifier + rolled bonuses</div>
+                {/if}
+                {#if cost}
+                  <div class="cc-cost">
+                    {#each Object.entries(cost.materials) as [mat, amt]}
+                      {@const have = player.materials[mat] ?? 0}
+                      <span class="cc-mat {have >= amt ? '' : 'miss'}">{MATERIAL_TIERS[mat]?.sprite ?? ''}{amt}x {matLabel(mat)} <span style="color:{have >= amt ? '#40c060' : '#f04040'}">({have})</span></span>
+                    {/each}
+                    <span class="cc-mat {player.gold >= cost.gold ? '' : 'miss'}">🪙{cost.gold} <span style="color:{player.gold >= cost.gold ? '#40c060' : '#f04040'}">({fmtNum(player.gold)})</span></span>
+                  </div>
+                  {#if forgeConfirmItem === item}
+                    <button class="cc-btn confirm-reroll {canForge ? '' : 'cant'}" onclick={() => { doForge(item); forgeConfirmItem = null }}>CONFIRM FORGE?</button>
+                  {:else}
+                    <button class="cc-btn forge-btn {canForge ? '' : 'cant'}" onclick={() => {
+                      forgeConfirmItem = item
+                      if (forgeConfirmTimeout) clearTimeout(forgeConfirmTimeout)
+                      forgeConfirmTimeout = setTimeout(() => { forgeConfirmItem = null }, 2000)
+                    }}>FORGE ></button>
+                  {/if}
+                {/if}
+              </div>
+            {/each}
+          {/if}
+
+          {#if almostItems.length > 0}
+            <div class="forge-section-lbl almost">ALMOST READY</div>
+            {#each almostItems as item (item.instanceId ?? item.id)}
+              {@const nextId = FORGE_CHAINS[item.id]}
+              {@const nextItem = nextId ? ITEMS[nextId] : null}
+              <div class="forge-card almost-card">
+                <div class="forge-tier-row">
+                  <span style="color:{rarityColor(item.rarity)}">{item.sprite} {item.name}</span>
+                  <span class="forge-tier-arrow">T{item.tier ?? '?'} > T{nextItem?.tier ?? '?'}</span>
+                </div>
+                <div class="forge-lvl-row">
+                  <span style="color:#aaa">LV {item.itemLevel ?? 1}/10</span>
+                  <div class="item-xp-bar"><div class="item-xp-fill" style="width:{Math.min(100, ((item.itemXp ?? 0) / (item.itemXpToNext ?? 1)) * 100 + ((item.itemLevel ?? 1) - 1) * 10)}%"></div></div>
+                </div>
+              </div>
+            {/each}
           {/if}
         {/if}
 
@@ -1485,6 +1842,14 @@
       {#each ACTIVITIES as act}
         {@const d = td(act.id, now)}
         {@const locked = player.level < act.unlockLevel}
+        {@const skillId = SKILL_MAP[act.id as keyof typeof SKILL_MAP]}
+        {@const skill = player.skills?.[skillId]}
+        {@const skillLevel = skill?.level ?? 0}
+        {@const skillXp = skill?.xp ?? 0}
+        {@const skillXpMax = skill?.xpToNext ?? 1}
+        {@const currentYield = getActivityYield(act.id, skillLevel)}
+        {@const currentMat = getActivityMaterial(act.id, skillLevel)}
+        {@const matInfo = MATERIAL_TIERS[currentMat]}
         <div
           class="tcard {d.run ? 'run' : ''} {d.rdy ? 'rdy' : ''} {locked ? 'lck' : ''}"
           onclick={() => onTimerClick(act.id)}
@@ -1496,10 +1861,11 @@
           <div class="ttop">
             <span class="tic">{act.sprite}</span>
             <div class="tinfo">
-              <span class="tn">{act.name}</span>
-              <span class="tr">+{act.reward.amount} {act.reward.material}</span>
+              <span class="tn">{act.name} <span class="skill-lvl-badge">LV {skillLevel}</span></span>
+              <span class="tr">{currentYield}x {matInfo?.sprite ?? ''}{matInfo?.name ?? currentMat}</span>
             </div>
           </div>
+          <div class="skill-xp-bar"><div class="skill-xp-fill" style="width:{Math.min(100, (skillXp / skillXpMax) * 100)}%"></div></div>
           <div class="ttrack"><div class="tfill {d.rdy ? 'done' : ''}" style="width:{d.prog}%"></div></div>
           <div class="ttime {d.rdy ? 'd' : ''}">
             {#if locked}LVL {act.unlockLevel}
@@ -1539,6 +1905,8 @@
             <div class="mv">
               {#if row.key === 'critDmg'}
                 {formatStat(cur, row.key)} <span>→</span> <span class="mnxt">{formatStat(nxt, row.key)}</span>
+              {:else if row.key === 'speed'}
+                {calcAttackInterval(cur)}ms <span>→</span> <span class="mnxt">{calcAttackInterval(nxt)}ms</span>
               {:else}
                 {formatStat(cur, row.key)}{row.unit} <span>→</span> <span class="mnxt">{formatStat(nxt, row.key)}{row.unit}</span>
               {/if}
@@ -1585,10 +1953,19 @@
         <div class="eloot-item">
           <span class="lq-spr">{equipped.sprite}</span>
           <div class="lq-inf">
-            <div class="lq-nm" style="color:{rarityColor(equipped.rarity)}">{equipped.name}</div>
+            <div class="lq-nm" style="color:{rarityColor(equipped.rarity)}">
+              {equipped.name}
+              <span class="item-lvl-badge" style="color:{itemLevelColor(equipped.itemLevel ?? 1)}">Lv{equipped.itemLevel ?? 1}</span>
+              {#if equipped.tier}<span class="tier-badge">T{equipped.tier}</span>{/if}
+              {#if equipped.modifier}<span class="mod-badge" style="color:{modifierColor(equipped.modifier.quality)}">{equipped.modifier.quality.toUpperCase()}</span>{/if}
+              {#if (equipped.forgeCount ?? 0) > 0}<span class="forge-count-badge">x{equipped.forgeCount}</span>{/if}
+            </div>
             <div class="lq-st">{formatStatBonuses(equipped)}</div>
             {#if equipped.rolledBonuses && equipped.rolledBonuses.length > 0 && Object.keys(equipped.statBonuses).length > 0}
               <div class="lq-rolls">{equipped.rolledBonuses.map(r => r.label).join(' ')}</div>
+            {/if}
+            {#if equipped.modifier && equipped.modifier.bonuses.length > 0}
+              <div class="lq-rolls mod-rolls">{equipped.modifier.bonuses.map(r => r.label).join(' ')}</div>
             {/if}
           </div>
         </div>
@@ -1601,10 +1978,19 @@
         <div class="eloot-item clickable" onclick={() => { equipFromLootQueue(item); equipModalSlot = null }}>
           <span class="lq-spr">{item.sprite}</span>
           <div class="lq-inf">
-            <div class="lq-nm" style="color:{rarityColor(item.rarity)}">{item.name}</div>
+            <div class="lq-nm" style="color:{rarityColor(item.rarity)}">
+              {item.name}
+              <span class="item-lvl-badge" style="color:{itemLevelColor(item.itemLevel ?? 1)}">Lv{item.itemLevel ?? 1}</span>
+              {#if item.tier}<span class="tier-badge">T{item.tier}</span>{/if}
+              {#if item.modifier}<span class="mod-badge" style="color:{modifierColor(item.modifier.quality)}">{item.modifier.quality.toUpperCase()}</span>{/if}
+              {#if (item.forgeCount ?? 0) > 0}<span class="forge-count-badge">x{item.forgeCount}</span>{/if}
+            </div>
             <div class="lq-st">{formatStatBonuses(item)}</div>
             {#if item.rolledBonuses && item.rolledBonuses.length > 0 && Object.keys(item.statBonuses).length > 0}
               <div class="lq-rolls">{item.rolledBonuses.map(r => r.label).join(' ')}</div>
+            {/if}
+            {#if item.modifier && item.modifier.bonuses.length > 0}
+              <div class="lq-rolls mod-rolls">{item.modifier.bonuses.map(r => r.label).join(' ')}</div>
             {/if}
           </div>
           <span class="eequip-hint">EQUIP</span>
@@ -1675,6 +2061,48 @@
           </div>
         {/each}
       </div>
+    </div>
+  </div>
+{/if}
+
+<!-- SKILLS MODAL -->
+{#if showSkillsModal}
+  <div class="moverlay" onclick={() => showSkillsModal = false} role="dialog" aria-modal="true">
+    <div class="mbox skills-box" onclick={(e) => e.stopPropagation()}>
+      <div class="mhdr">
+        <span class="mtitle">⚒️ SKILLS</span>
+        <button class="mclose" onclick={() => showSkillsModal = false}>✕</button>
+      </div>
+      <div class="skill-xp-mult-label">SKILL XP MULTIPLIER: <span style="color:#f0c030">{player.skillXpMultiplier}x</span> (prestige bonus)</div>
+      {#each (['woodcutting', 'mining', 'herbalism', 'brewing', 'patrol'] as SkillId[]) as sid}
+        {@const skill = player.skills?.[sid]}
+        {@const level = skill?.level ?? 0}
+        {@const xp = skill?.xp ?? 0}
+        {@const xpToNext = skill?.xpToNext ?? 1}
+        {@const bonus = SKILL_COMBAT_BONUSES[sid]}
+        {@const unlocks = SKILL_TIER_UNLOCKS[sid]}
+        <div class="skill-modal-card">
+          <div class="skill-modal-hdr">
+            <span class="skill-modal-name">{sid.toUpperCase()}</span>
+            <span class="skill-modal-lvl" style="color:#f0c030">LV {level}</span>
+          </div>
+          <div class="skill-modal-xp-row">
+            <div class="skill-modal-xp-bar"><div class="skill-modal-xp-fill" style="width:{Math.min(100, (xp / xpToNext) * 100)}%"></div></div>
+            <span class="skill-modal-xp-txt">{xp} / {xpToNext} XP</span>
+          </div>
+          {#if bonus}
+            <div class="skill-modal-bonus">{sid} LV {level} -> +{(level * bonus.perLevel).toFixed(1)}% {bonus.stat.toUpperCase()}</div>
+          {/if}
+          {#if unlocks && Object.keys(unlocks).length > 0}
+            <div class="skill-modal-unlocks">
+              {#each Object.entries(unlocks).sort((a, b) => Number(a[0]) - Number(b[0])) as [threshold, mats]}
+                {@const met = level >= Number(threshold)}
+                <span class="skill-unlock-entry {met ? 'met' : 'unmet'}">LV {threshold}: {mats.join(', ')}</span>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/each}
     </div>
   </div>
 {/if}
@@ -1842,7 +2270,11 @@
     <div class="idt-body">
       <span class="cr-sprite">{cr.item.sprite}</span>
       <div class="idt-info">
-        <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">{cr.item.name}</div>
+        <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">
+          {cr.item.name}
+          {#if cr.item.tier}<span class="tier-badge">T{cr.item.tier}</span>{/if}
+          {#if cr.item.modifier}<span class="mod-badge" style="color:{modifierColor(cr.item.modifier.quality)}">{cr.item.modifier.quality.toUpperCase()}</span>{/if}
+        </div>
         <div class="cr-base">
           {#each Object.entries(cr.item.statBonuses).filter(([, v]) => v?.flat) as [stat, bonus]}
             <div class="cr-stat-row base-stat">+{bonus!.flat} {stat.toUpperCase()}</div>
@@ -1853,11 +2285,19 @@
             <div class="cr-stat-row rolled-stat">{roll.label}</div>
           {/each}
         {/if}
+        {#if cr.item.modifier && cr.item.modifier.bonuses.length > 0}
+          {#each cr.item.modifier.bonuses as roll}
+            <div class="cr-stat-row mod-stat">{roll.label}</div>
+          {/each}
+        {/if}
       </div>
     </div>
     {#if pendingDropResults.length > 0}
       <div class="cr-queue-hint">+{pendingDropResults.length} more</div>
     {/if}
+    <div class="toast-tap-hint" onclick={(e) => { e.stopPropagation(); activeTab = 'gear'; gearSubTab = 'loot' }}>
+      TAP TO VIEW LOOT >
+    </div>
   </div>
 {/if}
 
@@ -2032,10 +2472,10 @@
   .sgrp-lbl { font-size: 8px; color: #777; padding: 7px 0 4px; letter-spacing: 1px; border-bottom: 1px solid var(--z-border); margin-bottom: 1px; }
   .sbox {
     background: var(--z-panel2); border: 1px solid var(--z-border);
-    padding: 7px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 6px; display: flex; flex-direction: column; align-items: center; gap: 3px;
   }
   .sn { font-size: 8px; color: #555; letter-spacing: 0.5px; }
-  .sv { font-size: 14px; font-weight: bold; color: var(--z-accent); line-height: 1.1; }
+  .sv { font-size: 9px; font-weight: bold; color: var(--z-accent); line-height: 1.1; }
   .upbtn {
     background: color-mix(in srgb, var(--z-accent) 25%, #000);
     border: none; color: var(--z-accent);
@@ -2405,7 +2845,7 @@
   @keyframes blink  { 0%,100% { opacity:1; } 50% { opacity:0; } }
 
   /* ── GEAR STAT BONUS ──────────────────────────────────────────────── */
-  .sgear { font-size: 8px; color: #c040ff; }
+  .sgear { font-size: 7px; color: #c040ff; }
   .gslot.filled { border-color: var(--z-accent2); }
 
   /* ── ZONE NAVIGATOR ───────────────────────────────────────────────── */
@@ -2881,15 +3321,21 @@
   .tut-btn { width: 100%; margin-top: 11px; }
 
   /* ── HYBRID STATS ─────────────────────────────────────────────────── */
-  .sgear-pct { color: #f0c030; font-size: 9px; }
+  .sgear-pct { color: #f0c030; font-size: 7px; }
   .seff { color: #ffffff; font-size: 10px; font-weight: bold; }
 
   /* ── GEAR SUB-TABS ────────────────────────────────────────────────── */
   .gear-subtabs {
   display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+  .gear-subtabs-row2 {
+  display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
   .gsub { flex:1; padding:5px 0; font-size:9px; font-family:inherit; background:#111; color:#555; border:1px solid #222; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
   .gsub.active { background:#1a1a1a; color:#f0c030; border-color:#f0c030; }
@@ -2901,4 +3347,127 @@
   .mat-chip { display:flex; align-items:center; gap:4px; padding:4px 7px; background:#111; border:1px solid #222; font-size:9px; color:#ccc; }
   .mat-chip.zero { opacity:0.35; }
   .mat-qty { color:#f0c030; font-weight:bold; }
+
+  /* ── ITEM LEVEL / MODIFIER / FORGE BADGES ─────────────────────────── */
+  .item-lvl-badge { font-size: 7px; margin-left: 4px; font-weight: bold; }
+  .tier-badge { font-size: 7px; color: #555; margin-left: 3px; }
+  .mod-badge { font-size: 7px; margin-left: 3px; font-weight: bold; }
+  .forge-count-badge { font-size: 7px; color: #ff9000; margin-left: 3px; }
+  .mod-rolls { color: #4CAF50 !important; }
+  .mod-stat { color: #4CAF50; }
+
+  /* ── ITEM XP BAR ───────────────────────────────────────────────────── */
+  .item-xp-bar {
+    height: 3px; background: #1a1a1a; border-radius: 1px; margin: 2px 0;
+    overflow: hidden; width: 100%;
+  }
+  .item-xp-fill {
+    height: 100%; background: #4080ff; border-radius: 1px;
+    transition: width 0.3s ease;
+  }
+
+  /* ── FORGE TAB ─────────────────────────────────────────────────────── */
+  .forge-card {
+    background: #0d0d0d; border: 1px solid #222; padding: 8px; margin-bottom: 6px;
+  }
+  .forge-card.ca { opacity: 0.6; }
+  .forge-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  }
+  .forge-from, .forge-to {
+    display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;
+  }
+  .forge-arrow { color: #f0c030; font-size: 12px; flex-shrink: 0; }
+  .forge-from-info, .forge-to-info { min-width: 0; }
+  .forge-section-lbl { font-size: 8px; color: #f0c030; letter-spacing: 1px; margin: 8px 0 4px; }
+  .forge-section-lbl.almost { color: #888; }
+  .forge-hint { font-size: 7px; color: #555; text-align: center; margin-top: 4px; line-height: 1.4; }
+  .forge-tier-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; font-size: 9px; }
+  .forge-tier-arrow { color: #f0c030; font-size: 8px; }
+  .forge-lvl-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 8px; }
+  .forge-ready-bar .item-xp-fill { background: #f0c030 !important; }
+  .forge-ready-badge { color: #f0c030; font-size: 7px; letter-spacing: 0.5px; animation: boss-pulse 1s ease-in-out infinite; }
+  .forge-mod-line { font-size: 8px; margin-bottom: 3px; display: flex; gap: 6px; align-items: center; }
+  .forge-mod-bonuses { color: #aaa; font-size: 7px; }
+  .forge-result-line { font-size: 7px; color: #666; margin-bottom: 4px; }
+  .forge-btn { color: #f0c040 !important; border-color: #f0c040 !important; }
+  .almost-card { opacity: 0.6; }
+
+  /* ── MATERIALS COMPACT GRID ────────────────────────────────────────── */
+  .mat-compact-grid { margin-bottom: 8px; }
+  .mat-grid-title { font-size: 7px; color: #555; letter-spacing: 1px; margin-bottom: 4px; }
+  .mat-grid-cells { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; }
+  .mat-cell { display: flex; align-items: center; gap: 2px; font-size: 7px; padding: 2px 3px; background: rgba(255,255,255,0.03); border-radius: 2px; }
+  .mat-cell.mat-zero { opacity: 0.3; }
+  .mat-icon { font-size: 9px; }
+  .mat-name { flex: 1; color: #aaa; overflow: hidden; white-space: nowrap; font-size: 6px; }
+  .mat-qty-val { color: #fff; font-weight: bold; font-size: 8px; }
+  .mat-cell:not(.mat-zero) .mat-qty-val { color: #f0c030; }
+
+  /* ── TOAST TAP HINT ────────────────────────────────────────────────── */
+  .toast-tap-hint { font-size: 6px; color: #555; text-align: right; margin-top: 4px; cursor: pointer; }
+  .toast-tap-hint:hover { color: var(--z-accent); }
+
+  /* ── GEAR SUBTABS 3-COL (removed, now using row1/row2 layout) ──────── */
+
+  /* ── BREAK DOWN / SELL BUTTONS ──────────────────────────────────────── */
+  .lq-btn.bd { background: #0a0a1a; color: #4080ff; border-color: #1a2a4a; }
+  .lq-btn.bd:hover { background: #0f1025; }
+  .lq-btn.bd.confirm { border-color: #ff4444; color: #ff4444; animation: bb 0.4s ease-in-out infinite alternate; }
+  .lq-btn.sell { background: #1a0a00; color: #f0c030; border-color: #3a2a00; }
+  .lq-btn.sell:hover { background: #2a1800; }
+  .lq-btn.sell.confirm { border-color: #ff4444; color: #ff4444; animation: bb 0.4s ease-in-out infinite alternate; }
+
+  /* ── ITEM LEVEL LINE / MAX LEVEL ────────────────────────────────────── */
+  .item-lvl-line { font-size: 8px; margin: 2px 0; font-weight: bold; }
+  .max-level-badge {
+    font-size: 7px; color: #f0c030; font-weight: bold;
+    animation: max-lvl-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes max-lvl-pulse { 0%,100%{ opacity:1 } 50%{ opacity:0.6 } }
+
+  /* ── GODROLL SHIMMER ─────────────────────────────────────────────────── */
+  @keyframes godroll-shimmer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  .mod-godroll { animation: godroll-shimmer 1.2s ease-in-out infinite; }
+
+  /* ── REFORGE MOD BLOCK ──────────────────────────────────────────────── */
+  .reforge-mod-block {
+    display: flex; align-items: center; gap: 6px; margin: 3px 0;
+    font-size: 8px;
+  }
+  .mod-bonuses { color: #4CAF50; font-size: 8px; }
+
+  /* ── SKILL LEVEL BADGE (timer card) ─────────────────────────────────── */
+  .skill-lvl-badge { color: #f0c030; font-size: 7px; font-weight: bold; }
+  .skill-xp-bar {
+    height: 2px; background: #1a1a1a; margin: 1px 0; overflow: hidden; width: 100%;
+  }
+  .skill-xp-fill {
+    height: 100%; background: #f0c030; transition: width 0.3s ease;
+  }
+
+  /* ── SKILLS MODAL ───────────────────────────────────────────────────── */
+  .skills-box { max-width: 420px; width: 95vw; }
+  .skill-xp-mult-label { font-size: 8px; color: #888; margin-bottom: 10px; }
+  .skill-modal-card {
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    padding: 8px; margin-bottom: 6px;
+  }
+  .skill-modal-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .skill-modal-name { font-size: 9px; color: #ccc; font-weight: bold; }
+  .skill-modal-lvl { font-size: 10px; font-weight: bold; }
+  .skill-modal-xp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .skill-modal-xp-bar {
+    flex: 1; height: 5px; background: #1a1a1a; border: 1px solid #222; overflow: hidden;
+  }
+  .skill-modal-xp-fill { height: 100%; background: #f0c030; transition: width 0.3s; }
+  .skill-modal-xp-txt { font-size: 7px; color: #888; white-space: nowrap; }
+  .skill-modal-bonus { font-size: 8px; color: #40c060; margin-bottom: 4px; }
+  .skill-modal-unlocks { display: flex; flex-wrap: wrap; gap: 4px; }
+  .skill-unlock-entry { font-size: 7px; padding: 2px 5px; border: 1px solid #222; }
+  .skill-unlock-entry.met { color: #f0c030; border-color: #3a2a00; }
+  .skill-unlock-entry.unmet { color: #555; border-color: #1a1a1a; }
 </style>

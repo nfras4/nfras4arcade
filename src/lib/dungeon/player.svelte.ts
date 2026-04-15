@@ -1,5 +1,9 @@
-import { statValue, calcMaxHp, upgradeCost, xpToNextLevel, type StatKey, ACHIEVEMENTS, ZONE_LEVEL_REQUIREMENTS } from './constants'
+import { statValue, calcMaxHp, upgradeCost, xpToNextLevel, skillXpToNext, type StatKey, type SkillId, type SkillState, ACHIEVEMENTS, ZONE_LEVEL_REQUIREMENTS } from './constants'
 import type { ItemSlot, Item } from './items'
+
+export function itemXpToNext(level: number): number {
+  return Math.round(50 * Math.pow(level, 1.4))
+}
 
 export type Stats = Record<StatKey, number>
 
@@ -38,6 +42,8 @@ export type PlayerState = {
   lifetimeStats: LifetimeStats
   lastSaveTimestamp: number
   saveVersion: number     // increments on each cloud save for conflict resolution
+  skills: Record<SkillId, SkillState>
+  skillXpMultiplier: number
 }
 
 const SAVE_KEY = 'wolton-dungeon-player'
@@ -76,6 +82,14 @@ function freshState(): PlayerState {
     },
     lastSaveTimestamp: Date.now(),
     saveVersion: 0,
+    skills: {
+      woodcutting: { level: 0, xp: 0, xpToNext: skillXpToNext(0) },
+      mining:      { level: 0, xp: 0, xpToNext: skillXpToNext(0) },
+      herbalism:   { level: 0, xp: 0, xpToNext: skillXpToNext(0) },
+      brewing:     { level: 0, xp: 0, xpToNext: skillXpToNext(0) },
+      patrol:      { level: 0, xp: 0, xpToNext: skillXpToNext(0) },
+    },
+    skillXpMultiplier: 1.0,
   }
 }
 
@@ -113,16 +127,35 @@ export function applyPlayerData(saved: Partial<PlayerState>): void {
   if (!player.firstBossKills) player.firstBossKills = []
   if (player.nickDefeated === undefined) player.nickDefeated = false
   if (!player.lastSaveTimestamp) player.lastSaveTimestamp = Date.now()
+  // Merge skills individually so new skill IDs get defaults when loading old saves
+  const skillDefaults = defaults.skills
+  const savedSkills = (saved.skills ?? {}) as Partial<Record<SkillId, Partial<SkillState>>>
+  player.skills = Object.fromEntries(
+    (Object.keys(skillDefaults) as SkillId[]).map(id => [
+      id,
+      { ...skillDefaults[id], ...(savedSkills[id] ?? {}) },
+    ])
+  ) as Record<SkillId, SkillState>
+  if (!player.skillXpMultiplier) player.skillXpMultiplier = 1.0
 }
 
 function mergeWithDefaults(saved: Partial<PlayerState>): PlayerState {
   const d = freshState()
+  const savedSkillsData = (saved.skills ?? {}) as Partial<Record<SkillId, Partial<SkillState>>>
+  const skills = Object.fromEntries(
+    (Object.keys(d.skills) as SkillId[]).map(id => [
+      id,
+      { ...d.skills[id], ...(savedSkillsData[id] ?? {}) },
+    ])
+  ) as Record<SkillId, SkillState>
   return {
     ...d, ...saved,
     lifetimeStats: { ...d.lifetimeStats, ...(saved.lifetimeStats ?? {}) },
     stats:         { ...d.stats,         ...(saved.stats         ?? {}) },
     statLevels:    { ...d.statLevels,    ...(saved.statLevels    ?? {}) },
     materials:     { ...d.materials,     ...(saved.materials     ?? {}) },
+    skills,
+    skillXpMultiplier: saved.skillXpMultiplier ?? 1.0,
   } as PlayerState
 }
 
@@ -158,6 +191,10 @@ export function upgradeStats(stat: StatKey): boolean {
 export let onLevelUp: ((level: number) => void) | null = null
 export function setOnLevelUp(cb: ((level: number) => void) | null): void { onLevelUp = cb }
 
+/** Skill level-up callback — set from +page.svelte */
+export let onSkillLevelUp: ((skillId: SkillId, level: number) => void) | null = null
+export function setOnSkillLevelUp(cb: ((skillId: SkillId, level: number) => void) | null): void { onSkillLevelUp = cb }
+
 export function gainXp(amount: number): void {
   player.xp += amount
   while (player.xp >= player.xpToNext) {
@@ -170,12 +207,44 @@ export function gainXp(amount: number): void {
   }
 }
 
+/** Item level-up callback -- set from combat.svelte.ts to inject log entries */
+export let onItemLevelUp: ((item: Item) => void) | null = null
+export function setOnItemLevelUp(cb: ((item: Item) => void) | null): void { onItemLevelUp = cb }
+
+export function gainItemXp(amount: number): void {
+  for (const item of Object.values(player.gear)) {
+    if (!item) continue
+    const level = item.itemLevel ?? 1
+    if (level >= 10) continue
+    item.itemXp = (item.itemXp ?? 0) + amount
+    const toNext = itemXpToNext(level)
+    if (item.itemXp >= toNext) {
+      item.itemXp -= toNext
+      item.itemLevel = level + 1
+      item.itemXpToNext = itemXpToNext(level + 1)
+      if (onItemLevelUp) onItemLevelUp(item)
+    }
+  }
+}
+
 export function gainGold(amount: number): void {
   player.gold += amount
 }
 
 export function gainMaterial(material: string, amount: number): void {
   player.materials[material] = (player.materials[material] ?? 0) + amount
+}
+
+export function gainSkillXp(skillId: SkillId, amount: number): void {
+  if (!player.skills?.[skillId]) return
+  const skill = player.skills[skillId]
+  skill.xp += amount
+  while (skill.xp >= skill.xpToNext && skill.level < 60) {
+    skill.xp -= skill.xpToNext
+    skill.level++
+    skill.xpToNext = skillXpToNext(skill.level)
+    if (onSkillLevelUp) onSkillLevelUp(skillId, skill.level)
+  }
 }
 
 export function healPlayer(amount: number): void {
@@ -259,6 +328,7 @@ export function prestige(): void {
   const name = player.name
   const achievements = [...player.achievements]
   const lifetimeStats = { ...player.lifetimeStats, timesPrestiged: player.lifetimeStats.timesPrestiged + 1 }
+  const savedSkills = { ...player.skills } as Record<SkillId, SkillState>
   const fresh = freshState()
   Object.assign(player, fresh)
   player.name = name
@@ -267,6 +337,9 @@ export function prestige(): void {
   player.unlockedZones = 0
   player.achievements = achievements
   player.lifetimeStats = lifetimeStats
+  player.skills = savedSkills
+  const multiplierTable = [1.0, 1.2, 1.3, 1.4, 1.5, 1.7, 2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 4.5, 5.0]
+  player.skillXpMultiplier = multiplierTable[Math.min(tokens, multiplierTable.length - 1)]
   player.lastSaveTimestamp = Date.now()
   savePlayer()
 }

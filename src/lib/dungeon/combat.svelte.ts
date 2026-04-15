@@ -144,29 +144,60 @@ export function getEffectiveStats(p: PlayerState): Stats {
   return result
 }
 
-function rollDrops(enemy: (typeof ENEMIES)[string], luckStat: number, zoneIndex: number, isBoss: boolean): Item[] {
-  const drops: Item[] = []
-  const luckBonus = 1 + luckStat * 0.02
-  for (const entry of enemy.drops) {
-    if (Math.random() < entry.chance * luckBonus) {
-      const baseItem = ITEMS[entry.itemId]
-      if (!baseItem) continue
-      // Apply drop roll (zone-biased stat rolls)
-      const result = dropRoll(baseItem, luckStat, zoneIndex, isBoss)
-      const item: Item = {
-        ...baseItem,
-        instanceId: crypto.randomUUID(),
-        rolledBonuses: result.bonusRolls,
-        rerollCount: 0,
-        itemLevel: 1,
-        itemXp: 0,
-        itemXpToNext: itemXpToNext(1),
-        modifier: rollModifier(baseItem.tier ?? 1, luckStat, false),
-      }
-      drops.push(item)
-    }
+function rollDrops(
+  enemy: (typeof ENEMIES)[string],
+  luckStat: number,
+  zoneIndex: number,
+  isBoss: boolean,
+  isFirstKill: boolean,
+): Item[] {
+  if (!enemy.drops || enemy.drops.length === 0) return []
+
+  // Determine base chance by enemy type
+  let baseChance: number
+  if (isFirstKill) {
+    baseChance = 1.0
+  } else if (enemy.isBoss) {
+    baseChance = 0.50
+  } else if (enemy.isMiniboss) {
+    baseChance = 0.40
+  } else if (enemy.isElite) {
+    baseChance = 0.15
+  } else {
+    baseChance = 0.05
   }
-  return drops
+
+  // Luck adds minor chance bonus (0.1% per luck point, capped at +15%)
+  const dropBonus = Math.min(luckStat * 0.001, 0.15)
+  const finalChance = Math.min(baseChance + dropBonus, 0.95)
+
+  if (Math.random() > finalChance) return []
+
+  // Pick which item drops (weighted by entry.chance as relative weight)
+  const totalWeight = enemy.drops.reduce((s, e) => s + (e.chance ?? 1), 0)
+  let r = Math.random() * totalWeight
+  let chosen = enemy.drops[0]
+  for (const entry of enemy.drops) {
+    r -= entry.chance ?? 1
+    if (r <= 0) { chosen = entry; break }
+  }
+
+  const baseItem = ITEMS[chosen.itemId]
+  if (!baseItem) return []
+
+  const result = dropRoll(baseItem, luckStat, zoneIndex, isBoss)
+  const isBossUnique = baseItem.rarity === 'boss_unique'
+  const item: Item = {
+    ...baseItem,
+    instanceId: crypto.randomUUID(),
+    rolledBonuses: result.bonusRolls,
+    rerollCount: 0,
+    itemLevel: 1,
+    itemXp: 0,
+    itemXpToNext: itemXpToNext(1),
+    modifier: rollModifier(baseItem.tier ?? 1, luckStat, isBossUnique),
+  }
+  return [item]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -774,7 +805,8 @@ function handleEnemyDeath(): void {
 
   // Item drops
   const luck  = untrack(() => getEffectiveStats(player).luck)
-  const drops = rollDrops(enemy, luck, zoneIdx, !!enemy.isBoss)
+  const isFirstKillForDrops = !!enemy.isBoss && !player.firstBossKills.includes(combatState.enemyId)
+  const drops = rollDrops(enemy, luck, zoneIdx, !!enemy.isBoss, isFirstKillForDrops)
   for (const item of drops) {
     addToLootQueue(item)
     player.lifetimeStats.itemsLooted++

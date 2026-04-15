@@ -123,14 +123,118 @@ export function dropRoll(item: Item, luckStat: number, zoneIndex: number, isBoss
 // ── Reroll cost ────────────────────────────────────────────────────────────
 
 const BASE_GOLD: Record<string, number> = {
-  common: 50, uncommon: 150, rare: 400, epic: 1000,
+  common: 50, uncommon: 150, rare: 400, epic: 1000, legendary: 2500, boss_unique: 5000,
 }
 
 const BASE_MATS: Record<string, Record<string, number>> = {
-  common:   { wood: 3 },
-  uncommon: { iron: 3 },
-  rare:     { iron: 5, herbs: 2 },
-  epic:     { iron: 10, herbs: 5 },
+  common:      { wood: 3 },
+  uncommon:    { iron: 3 },
+  rare:        { iron: 5, herbs: 2 },
+  epic:        { iron: 10, herbs: 5 },
+  legendary:   { wolton_alloy: 5, void_essence: 2 },
+  boss_unique: { wolton_alloy: 10, void_essence: 5 },
+}
+
+// ── Item Modifiers (Terraria model) ───────────────────────────────────────
+
+export type ModifierQuality =
+  | 'weak' | 'average' | 'strong' | 'legendary' | 'godroll'
+
+export type ItemModifier = {
+  quality: ModifierQuality
+  bonuses: StatRoll[]    // 1-3 percent bonuses, replaced entirely on reforge
+}
+
+function weightedRandom(weights: Record<string, number>): string {
+  const r = Math.random()
+  let cumulative = 0
+  for (const [key, weight] of Object.entries(weights)) {
+    cumulative += weight
+    if (r <= cumulative) return key
+  }
+  return Object.keys(weights).at(-1)!
+}
+
+export function rollModifier(
+  itemTier: number,
+  luckStat: number,
+  isBossUnique: boolean,
+): ItemModifier {
+  const upgraded = itemTier >= 6
+  const luckBonus = Math.min(luckStat * 0.005, 0.25)
+
+  const weights = upgraded
+    ? {
+        weak:      0,
+        average:   0.35 - luckBonus,
+        strong:    0.35,
+        legendary: 0.22 + luckBonus * 0.5,
+        godroll:   0.08 + luckBonus * 0.5,
+      }
+    : {
+        weak:      0.40 - luckBonus,
+        average:   0.30,
+        strong:    0.20 + luckBonus * 0.3,
+        legendary: 0.08 + luckBonus * 0.5,
+        godroll:   isBossUnique
+          ? 0.02 + luckBonus * 0.3
+          : 0.02 + luckBonus * 0.2,
+      }
+
+  const quality = weightedRandom(weights) as ModifierQuality
+
+  const bonusCounts: Record<ModifierQuality, number> = {
+    weak: 1, average: 1, strong: 2, legendary: 2, godroll: 3,
+  }
+  const ranges: Record<ModifierQuality, [number, number]> = {
+    weak:      [2, 5],
+    average:   [6, 10],
+    strong:    [11, 18],
+    legendary: [19, 30],
+    godroll:   [25, 40],
+  }
+
+  const count = bonusCounts[quality]
+  const [min, max] = ranges[quality]
+  const eligible: StatKey[] = [
+    'attack', 'defence', 'speed', 'luck', 'vitality',
+    'critDmg', 'hpRegen', 'goldFind', 'xpBoost', 'lifesteal',
+  ]
+  const used = new Set<StatKey>()
+  const bonuses: StatRoll[] = []
+
+  for (let i = 0; i < count; i++) {
+    const available = eligible.filter(s => !used.has(s))
+    if (!available.length) break
+    const stat = available[Math.floor(Math.random() * available.length)]
+    used.add(stat)
+    const value = Math.floor(Math.random() * (max - min + 1)) + min
+    bonuses.push({ stat, percent: value, label: `+${value}% ${stat.toUpperCase()}` })
+  }
+
+  return { quality, bonuses }
+}
+
+export function reforgeCost(item: Item): { materials: Record<string, number>; gold: number } {
+  const tier = item.tier ?? 1
+  const count = item.rerollCount ?? 0
+  const multiplier = 1 + count * 0.4
+
+  const baseCosts: Record<number, { mat: string; amount: number; gold: number }> = {
+    1: { mat: 'iron',             amount: 3, gold: 50    },
+    2: { mat: 'steel',            amount: 3, gold: 150   },
+    3: { mat: 'wolton_alloy',     amount: 3, gold: 350   },
+    4: { mat: 'refined_alloy',    amount: 3, gold: 700   },
+    5: { mat: 'wolton_core',      amount: 3, gold: 1400  },
+    6: { mat: 'fractured_steel',  amount: 3, gold: 3000  },
+    7: { mat: 'wolton_fragment',  amount: 3, gold: 6000  },
+  }
+
+  const base = baseCosts[Math.min(tier, 7)]
+  return {
+    materials: { [base.mat]: Math.ceil(base.amount * multiplier) },
+    gold: Math.floor(base.gold * multiplier),
+  }
 }
 
 export function rerollCost(item: Item): RerollCost {

@@ -3,6 +3,12 @@ export type DropEntry = {
   chance: number   // 0-1
 }
 
+export type MaterialDropEntry = {
+  materialId: string
+  chance: number         // 0-1
+  amount: [number, number]  // [min, max]
+}
+
 export type Enemy = {
   id: string
   name: string
@@ -11,6 +17,7 @@ export type Enemy = {
   baseDmg: number
   goldDrop?: [number, number]  // unused — gold derives from calcZoneReward
   drops: DropEntry[]
+  materialDrops?: MaterialDropEntry[]
   isElite?: boolean
   isMiniboss?: boolean
   isBoss?: boolean
@@ -287,6 +294,10 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'power-ring',   chance: 0.04 },
     ],
     isElite: true,
+    materialDrops: [
+      { materialId: 'shadowwood',    chance: 0.12, amount: [1, 2] },
+      { materialId: 'refined_alloy', chance: 0.12, amount: [1, 2] },
+    ],
   },
   'zone-manager': {
     id: 'zone-manager', name: "ZONE MANAGER", sprite: '🔑',
@@ -334,6 +345,10 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'plate-armour',    chance: 0.04 },
     ],
     isElite: true,
+    materialDrops: [
+      { materialId: 'cursed_herbs', chance: 0.12, amount: [1, 2] },
+      { materialId: 'abysswood',    chance: 0.08, amount: [1, 2] },
+    ],
   },
   'head-nurse': {
     id: 'head-nurse', name: "HEAD NURSE", sprite: '💉',
@@ -353,6 +368,10 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'wolton-suit',  chance: 0.10 },
     ],
     isBoss: true,
+    materialDrops: [
+      { materialId: 'abysswood',   chance: 0.30, amount: [1, 3] },
+      { materialId: 'wolton_core', chance: 0.30, amount: [1, 3] },
+    ],
   },
 
   // ── ZONE 8: WOLTON INDUSTRIES LOBBY ──────────────────────────────────────
@@ -380,6 +399,11 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'enchanted-sword', chance: 0.06 },
     ],
     isElite: true,
+    materialDrops: [
+      { materialId: 'wolton_core',     chance: 0.08, amount: [1, 2] },
+      { materialId: 'ancient_essence', chance: 0.08, amount: [1, 2] },
+      { materialId: 'voidwood',        chance: 0.05, amount: [1, 1] },
+    ],
   },
   'hr-director': {
     id: 'hr-director', name: "HR DIRECTOR", sprite: '📊',
@@ -399,6 +423,10 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'wolton-badge', chance: 0.005 },
     ],
     isBoss: true,
+    materialDrops: [
+      { materialId: 'ancient_essence', chance: 0.30, amount: [1, 3] },
+      { materialId: 'voidwood',        chance: 0.15, amount: [1, 2] },
+    ],
   },
 
   // ── ZONE 9: WOLTON HQ 32ND FLOOR ─────────────────────────────────────────
@@ -408,6 +436,10 @@ export const ENEMIES: Record<string, Enemy> = {
     drops: [
       { itemId: 'wolton-suit',  chance: 0.06 },
       { itemId: 'wolton-badge', chance: 0.04 },
+    ],
+    materialDrops: [
+      { materialId: 'etherwood',       chance: 0.10, amount: [1, 2] },
+      { materialId: 'wolton_fragment', chance: 0.10, amount: [1, 2] },
     ],
   },
   'red-tape-wraith': {
@@ -426,6 +458,10 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'wolton-suit',    chance: 0.04 },
     ],
     isElite: true,
+    materialDrops: [
+      { materialId: 'fractured_steel', chance: 0.05, amount: [1, 2] },
+      { materialId: 'primordial_dust', chance: 0.05, amount: [1, 2] },
+    ],
   },
   'executive-enforcer': {
     id: 'executive-enforcer', name: "EXECUTIVE ENFORCER", sprite: '⚙️',
@@ -447,6 +483,10 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'wolton-visor',   chance: 0.20 },
     ],
     isBoss: true,
+    materialDrops: [
+      { materialId: 'fractured_steel', chance: 0.15, amount: [1, 3] },
+      { materialId: 'primordial_dust', chance: 0.15, amount: [1, 3] },
+    ],
     // TODO Prompt 4: final boss phase mechanic
   },
 
@@ -462,6 +502,11 @@ export const ENEMIES: Record<string, Enemy> = {
       { itemId: 'wolton-suit',    chance: 1.0 },
       { itemId: 'wolton-visor',   chance: 1.0 },
       { itemId: 'wolton-badge',   chance: 1.0 },
+    ],
+    materialDrops: [
+      { materialId: 'etherwood',       chance: 0.10, amount: [1, 2] },
+      { materialId: 'wolton_fragment', chance: 0.10, amount: [1, 2] },
+      { materialId: 'ascendant_shard', chance: 0.10, amount: [1, 2] },
     ],
   },
 }

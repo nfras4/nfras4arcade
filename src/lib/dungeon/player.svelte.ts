@@ -34,6 +34,7 @@ export type PlayerState = {
   firstVisit: string[]
   nickDefeated: boolean
   achievements: string[]
+  firstBossKills: string[]
   lifetimeStats: LifetimeStats
   lastSaveTimestamp: number
 }
@@ -54,7 +55,7 @@ function freshState(): PlayerState {
     gear: { weapon: null, armour: null, helmet: null, ring: null, amulet: null },
     currentZone: 0,
     currentStage: 1,
-    materials: { wood: 0, iron: 0, potion: 0, herbs: 0 },
+    materials: { wood: 0, iron: 0, potion: 0, herbs: 0, hardwood: 0, steel: 0, rare_herbs: 0, darkwood: 0, wolton_alloy: 0, void_essence: 0 },
     prestigeTokens: 0,
     unlockedZones: 0,
     lootQueue: [],
@@ -62,6 +63,7 @@ function freshState(): PlayerState {
     firstVisit: [],
     nickDefeated: false,
     achievements: [],
+    firstBossKills: [],
     lifetimeStats: {
       enemiesKilled: 0,
       goldEarned: 0,
@@ -101,6 +103,7 @@ export function loadPlayer(): void {
     if (!player.achievements) player.achievements = []
     if (player.fraserDefeated === undefined) player.fraserDefeated = false
     if (!player.firstVisit) player.firstVisit = []
+    if (!player.firstBossKills) player.firstBossKills = []
     if (player.nickDefeated === undefined) player.nickDefeated = false
     if (!player.lastSaveTimestamp) player.lastSaveTimestamp = Date.now()
   } catch {
@@ -197,7 +200,7 @@ export function equipFromLootQueue(item: Item): void {
 }
 
 export function discardFromLootQueue(item: Item): void {
-  const goldRefund: Record<string, number> = { common: 10, uncommon: 30, rare: 80, epic: 200 }
+  const goldRefund: Record<string, number> = { common: 15, uncommon: 60, rare: 200, epic: 600 }
   const idx = player.lootQueue.indexOf(item)
   if (idx === -1) return
   const newQueue = [...player.lootQueue]

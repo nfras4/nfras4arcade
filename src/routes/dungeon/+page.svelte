@@ -20,7 +20,7 @@
     ZONE_LEVEL_REQUIREMENTS, ACHIEVEMENTS, prestigeMultiplier,
     type StatKey,
   } from '$lib/dungeon/constants'
-  import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES } from '$lib/dungeon/items'
+  import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS } from '$lib/dungeon/items'
   import { craftRoll, rerollCost, type CraftResult } from '$lib/dungeon/crafting'
   import { playSound, setMuted, isMuted, initAudio } from '$lib/dungeon/audio'
 
@@ -40,6 +40,7 @@
   let showLeaderboard    = $state(false)
   let storyText          = $state<string[]>([])
   let activeTab          = $state<'upgrades' | 'gear' | 'items'>('upgrades')
+  let gearSubTab         = $state<'loadout' | 'loot' | 'crafting' | 'reroll'>('loot')
   let now                = $state(Date.now())
   let equipModalSlot     = $state<ItemSlot | null>(null)
   let showBossDeathOverlay = $state(false)
@@ -105,29 +106,41 @@
 
   // ── Item / loot helpers ───────────────────────────────────────────────────
   function rarityColor(rarity: string): string {
-    const c: Record<string, string> = { common: '#808080', uncommon: '#40a040', rare: '#4080ff', epic: '#c040ff' }
+    const c: Record<string, string> = { common: '#808080', uncommon: '#40a040', rare: '#4080ff', epic: '#c040ff', boss_unique: '#ff9000' }
     return c[rarity] ?? '#808080'
   }
 
   function formatStatBonuses(item: Item): string {
-    return Object.entries(item.statBonuses).map(([k, v]) => `+${v} ${k.slice(0, 3).toUpperCase()}`).join(' ')
+    return Object.entries(item.statBonuses)
+      .filter(([, v]) => v?.flat)
+      .map(([k, v]) => `+${v!.flat} ${k.slice(0, 3).toUpperCase()}`)
+      .join(' ')
   }
 
-  function gearBonus(stat: StatKey): number {
+  function gearFlatBonus(stat: StatKey): number {
     return Object.values(player.gear).reduce((sum, item) => {
       if (!item) return sum
-      const base = item.statBonuses[stat] ?? 0
-      const rolled = (item.rolledBonuses ?? []).filter(r => r.stat === stat).reduce((s, r) => s + r.value, 0)
-      return sum + base + rolled
+      return sum + (item.statBonuses[stat]?.flat ?? 0)
     }, 0)
   }
 
-  const DISCARD_GOLD: Record<string, number> = { common: 10, uncommon: 30, rare: 80, epic: 200 }
+  function gearPercentBonus(stat: StatKey): number {
+    return Object.values(player.gear).reduce((sum, item) => {
+      if (!item) return sum
+      return sum + (item.rolledBonuses ?? []).filter(r => r.stat === stat).reduce((s, r) => s + r.percent, 0)
+    }, 0)
+  }
+
+  const DISCARD_GOLD: Record<string, number> = { common: 15, uncommon: 60, rare: 200, epic: 600 }
 
   function itemPower(item: Item): number {
-    const base = Object.values(item.statBonuses).reduce((s, v) => s + (v as number), 0)
-    const rolled = (item.rolledBonuses ?? []).reduce((s, r) => s + r.value, 0)
+    const base = Object.values(item.statBonuses).reduce((s, v) => s + (v?.flat ?? 0), 0)
+    const rolled = (item.rolledBonuses ?? []).reduce((s, r) => s + r.percent, 0)
     return base + rolled
+  }
+
+  function matLabel(mat: string): string {
+    return MATERIAL_TIERS[mat]?.name ?? (mat[0].toUpperCase() + mat.slice(1).replace('_', ' '))
   }
 
   const sortedLootQueue = $derived([...player.lootQueue].sort((a, b) => itemPower(b) - itemPower(a)))
@@ -745,10 +758,21 @@
 
       <div class="ptitle">▶ STATS</div>
       <div class="sgrid">
-        <div class="sbox" title="Damage per hit"><span class="si">⚔️</span><span class="sn">ATK</span><span class="sv">{player.stats.attack}{#if gearBonus('attack') > 0}<span class="sgear"> +{gearBonus('attack')}</span>{/if}</span></div>
-        <div class="sbox" title="Reduces incoming damage"><span class="si">🛡️</span><span class="sn">DEF</span><span class="sv">{player.stats.defence}{#if gearBonus('defence') > 0}<span class="sgear"> +{gearBonus('defence')}</span>{/if}</span></div>
-        <div class="sbox" title="Attack interval (faster = lower ms)"><span class="si">⚡</span><span class="sn">SPD</span><span class="sv">{player.stats.speed}{#if gearBonus('speed') > 0}<span class="sgear"> +{gearBonus('speed')}</span>{/if}</span></div>
-        <div class="sbox" title="Drop rate and craft roll quality"><span class="si">🍀</span><span class="sn">LCK</span><span class="sv">{player.stats.luck}{#if gearBonus('luck') > 0}<span class="sgear"> +{gearBonus('luck')}</span>{/if}</span></div>
+        {#each ([['attack','⚔️','ATK','Damage per hit'],['defence','🛡️','DEF','Reduces incoming damage'],['speed','⚡','SPD','Attack interval'],['luck','🍀','LCK','Drop rate and craft quality']] as [string,string,string,string][]) as [sk, icon, label, tip]}
+          {@const flat = gearFlatBonus(sk as StatKey)}
+          {@const pct = gearPercentBonus(sk as StatKey)}
+          {@const eff = getEffectiveStats(player)[sk as StatKey]}
+          <div class="sbox" title={tip}>
+            <span class="si">{icon}</span>
+            <span class="sn">{label}</span>
+            <span class="sv">
+              {player.stats[sk as StatKey]}
+              {#if flat > 0}<span class="sgear"> +{flat}</span>{/if}
+              {#if pct > 0}<span class="sgear-pct"> +{pct}%</span>{/if}
+              {#if flat > 0 || pct > 0}<span class="seff"> ={eff}</span>{/if}
+            </span>
+          </div>
+        {/each}
       </div>
 
       <button class="upbtn" onclick={() => showUpgradeModal = true}>⬆ UPGRADE STATS</button>
@@ -911,119 +935,167 @@
           </div>
         {/each}
 
-        <div class="ptitle" style="margin-top:6px">▶ CRAFT</div>
-        <div class="craft-luck-hint">🍀 LUCK BONUS: +{luckBonusPct()}% — CHANCE OF BONUS ROLLS</div>
-        {#each CRAFT_RECIPES.filter(r => player.level >= r.unlockLevel) as recipe}
-          {@const item = ITEMS[recipe.itemId]}
-          {@const affordable = canAffordCraft(recipe)}
-          {#if item}
-            <div class="craft-card {affordable ? '' : 'ca'}">
-              <div class="cc-top">
-                <span class="cc-spr">{item.sprite}</span>
-                <div class="cc-inf">
-                  <div class="cc-nm" style="color:{rarityColor(item.rarity)}">{item.name}</div>
-                  <div class="cc-st">{formatStatBonuses(item)}</div>
-                </div>
-              </div>
-              <div class="cc-cost">
-                {#each Object.entries(recipe.materials) as [mat, amt]}
-                  <span class="cc-mat {(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{mat[0].toUpperCase()}{mat.slice(1)}:{amt}</span>
-                {/each}
-                <span class="cc-mat {player.gold >= recipe.gold ? '' : 'miss'}">🪙{recipe.gold}</span>
-              </div>
-              <button class="cc-btn {affordable ? '' : 'cant'}" onclick={() => doCraft(recipe)}>CRAFT</button>
-            </div>
-          {/if}
-        {:else}
-          <div class="stub">REACH LVL 1 TO UNLOCK</div>
-        {/each}
-
       {:else if activeTab === 'gear'}
-        <!-- Gear slots row -->
-        <div class="gs-row">
-          {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
-            {@const eq = player.gear[slot]}
-            <div class="gs-slot {eq ? 'filled' : ''}" onclick={() => equipModalSlot = slot} title={slot.toUpperCase()}>
-              {#if eq}
-                <span class="gs-spr">{eq.sprite}</span>
-                <div class="gs-rar" style="background:{rarityColor(eq.rarity)}"></div>
-              {:else}
-                <span class="gs-empty">○</span>
-              {/if}
-              <div class="gs-lbl">{slot.slice(0, 3).toUpperCase()}</div>
-            </div>
-          {/each}
+        <!-- Sub-tab bar -->
+        <div class="gear-subtabs">
+          <button class="gsub {gearSubTab === 'loadout' ? 'active' : ''}" onclick={() => gearSubTab = 'loadout'}>LOADOUT</button>
+          <button class="gsub {gearSubTab === 'loot' ? 'active' : ''}" onclick={() => gearSubTab = 'loot'}>LOOT{#if player.lootQueue.length > 0} [{player.lootQueue.length}]{/if}</button>
+          <button class="gsub {gearSubTab === 'crafting' ? 'active' : ''}" onclick={() => gearSubTab = 'crafting'}>CRAFT</button>
+          <button class="gsub {gearSubTab === 'reroll' ? 'active' : ''}" onclick={() => gearSubTab = 'reroll'}>REROLL</button>
         </div>
 
-        <!-- Equipped gear reroll -->
-        <div class="ptitle" style="margin-top:4px">▶ EQUIPPED GEAR</div>
-        {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
-          {@const eq = player.gear[slot]}
-          {#if eq}
-            {@const cost = rerollCost(eq)}
-            {@const canRR = canAffordReroll(eq)}
-            <div class="lq-card">
-              <div class="lq-top">
-                <span class="lq-spr">{eq.sprite}</span>
-                <div class="lq-inf">
-                  <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">{eq.name}{#if (eq.rerollCount ?? 0) > 0}<span class="reroll-badge"> REROLLED x{eq.rerollCount}</span>{/if}</div>
-                  <div class="lq-st">{formatStatBonuses(eq)}</div>
-                  {#if eq.rolledBonuses && eq.rolledBonuses.length > 0}
-                    <div class="lq-rolls">{eq.rolledBonuses.map(r => r.label).join(' ')}</div>
-                  {/if}
-                </div>
-              </div>
-              <div class="reroll-cost">
-                <span>REROLL: 🪙{cost.gold}</span>
-                {#each Object.entries(cost.materials) as [mat, amt]}
-                  <span class="{(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{mat[0].toUpperCase()}{mat.slice(1)}:{amt}</span>
-                {/each}
-              </div>
-              {#if rerollConfirmItem === eq}
-                <button class="cc-btn confirm-reroll {canRR ? '' : 'cant'}" onclick={() => { doReroll(eq); rerollConfirmItem = null }}>CONFIRM?</button>
-              {:else}
-                <button class="cc-btn {canRR ? '' : 'cant'}" onclick={() => {
-                  rerollConfirmItem = eq
-                  if (rerollConfirmTimeout) clearTimeout(rerollConfirmTimeout)
-                  rerollConfirmTimeout = setTimeout(() => { rerollConfirmItem = null }, 2000)
-                }}>REROLL</button>
-              {/if}
-            </div>
-          {/if}
-        {/each}
-
-        <div class="ptitle" style="margin-top:4px">▶ LOOT QUEUE</div>
-        {#if player.lootQueue.length === 0}
-          <div class="stub">NO PENDING LOOT</div>
-        {:else}
-          {#each sortedLootQueue as item, idx (item.instanceId ?? idx)}
-            <div class="lq-card">
-              <div class="lq-top">
-                <span class="lq-spr">{item.sprite}</span>
-                <div class="lq-inf">
-                  <div class="lq-nm" style="color:{rarityColor(item.rarity)}">{item.name}</div>
-                  <div class="lq-st">{formatStatBonuses(item)}</div>
-                  {#if item.rolledBonuses && item.rolledBonuses.length > 0}
-                    <div class="lq-rolls">{item.rolledBonuses.map(r => r.label).join(' ')}</div>
-                  {/if}
-                </div>
-              </div>
-              <div class="lq-btns">
-                <button class="lq-btn eq" onclick={() => equipFromLootQueue(item)}>EQUIP</button>
-                {#if ['rare', 'epic'].includes(item.rarity) && discardConfirmItem === item}
-                  <button class="lq-btn dc confirm" onclick={() => { discardFromLootQueue(item); discardConfirmItem = null }}>CONFIRM?</button>
-                {:else if ['rare', 'epic'].includes(item.rarity)}
-                  <button class="lq-btn dc" onclick={() => {
-                    discardConfirmItem = item
-                    if (discardConfirmTimeout) clearTimeout(discardConfirmTimeout)
-                    discardConfirmTimeout = setTimeout(() => { discardConfirmItem = null }, 2000)
-                  }}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+        {#if gearSubTab === 'loadout'}
+          <!-- Gear slots row -->
+          <div class="gs-row">
+            {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
+              {@const eq = player.gear[slot]}
+              <div class="gs-slot {eq ? 'filled' : ''}" onclick={() => equipModalSlot = slot} title={slot.toUpperCase()}>
+                {#if eq}
+                  <span class="gs-spr">{eq.sprite}</span>
+                  <div class="gs-rar" style="background:{rarityColor(eq.rarity)}"></div>
                 {:else}
-                  <button class="lq-btn dc" onclick={() => discardFromLootQueue(item)}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                  <span class="gs-empty">○</span>
+                {/if}
+                <div class="gs-lbl">{slot.slice(0, 3).toUpperCase()}</div>
+              </div>
+            {/each}
+          </div>
+          {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
+            {@const eq = player.gear[slot]}
+            {#if eq}
+              <div class="lq-card">
+                <div class="lq-top">
+                  <span class="lq-spr">{eq.sprite}</span>
+                  <div class="lq-inf">
+                    <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">{eq.name}{#if eq.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}</div>
+                    <div class="lq-st">{formatStatBonuses(eq)}</div>
+                    {#if eq.rolledBonuses && eq.rolledBonuses.length > 0}
+                      <div class="lq-rolls">{eq.rolledBonuses.map(r => r.label).join(' ')}</div>
+                    {/if}
+                    {#if eq.lore}<div class="item-lore">{eq.lore}</div>{/if}
+                  </div>
+                </div>
+              </div>
+            {:else}
+              <div class="stub">{slot.toUpperCase()} — EMPTY</div>
+            {/if}
+          {/each}
+
+        {:else if gearSubTab === 'loot'}
+          {#if player.lootQueue.length === 0}
+            <div class="stub">NO PENDING LOOT</div>
+          {:else}
+            {#each sortedLootQueue as item, idx (item.instanceId ?? idx)}
+              <div class="lq-card">
+                <div class="lq-top">
+                  <span class="lq-spr">{item.sprite}</span>
+                  <div class="lq-inf">
+                    <div class="lq-nm" style="color:{rarityColor(item.rarity)}">{item.name}{#if item.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}</div>
+                    <div class="lq-st">{formatStatBonuses(item)}</div>
+                    {#if item.rolledBonuses && item.rolledBonuses.length > 0}
+                      <div class="lq-rolls">{item.rolledBonuses.map(r => r.label).join(' ')}</div>
+                    {/if}
+                    {#if item.lore}<div class="item-lore">{item.lore}</div>{/if}
+                  </div>
+                </div>
+                <div class="lq-btns">
+                  <button class="lq-btn eq" onclick={() => equipFromLootQueue(item)}>EQUIP</button>
+                  {#if item.discardable !== false}
+                    {#if ['rare', 'epic'].includes(item.rarity) && discardConfirmItem === item}
+                      <button class="lq-btn dc confirm" onclick={() => { discardFromLootQueue(item); discardConfirmItem = null }}>CONFIRM?</button>
+                    {:else if ['rare', 'epic'].includes(item.rarity)}
+                      <button class="lq-btn dc" onclick={() => {
+                        discardConfirmItem = item
+                        if (discardConfirmTimeout) clearTimeout(discardConfirmTimeout)
+                        discardConfirmTimeout = setTimeout(() => { discardConfirmItem = null }, 2000)
+                      }}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                    {:else}
+                      <button class="lq-btn dc" onclick={() => discardFromLootQueue(item)}>+{DISCARD_GOLD[item.rarity] ?? 10}g</button>
+                    {/if}
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          {/if}
+
+        {:else if gearSubTab === 'crafting'}
+          <!-- Materials sidebar -->
+          <div class="mat-sidebar">
+            {#each Object.entries(MATERIAL_TIERS) as [mat, info]}
+              {@const qty = player.materials[mat] ?? 0}
+              <div class="mat-chip {qty === 0 ? 'zero' : ''}">
+                <span>{info.sprite}</span>
+                <span>{info.name}</span>
+                <span class="mat-qty">×{qty}</span>
+              </div>
+            {/each}
+          </div>
+          <div class="craft-luck-hint">🍀 LUCK BONUS: +{luckBonusPct()}% — CHANCE OF BONUS ROLLS</div>
+          {#each CRAFT_RECIPES.filter(r => player.level >= r.unlockLevel) as recipe}
+            {@const item = ITEMS[recipe.itemId]}
+            {@const affordable = canAffordCraft(recipe)}
+            {#if item}
+              <div class="craft-card {affordable ? '' : 'ca'}">
+                <div class="cc-top">
+                  <span class="cc-spr">{item.sprite}</span>
+                  <div class="cc-inf">
+                    <div class="cc-nm" style="color:{rarityColor(item.rarity)}">{item.name}</div>
+                    <div class="cc-st">{formatStatBonuses(item)}</div>
+                  </div>
+                </div>
+                <div class="cc-cost">
+                  {#each Object.entries(recipe.materials) as [mat, amt]}
+                    <span class="cc-mat {(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{matLabel(mat)}:{amt}</span>
+                  {/each}
+                  <span class="cc-mat {player.gold >= recipe.gold ? '' : 'miss'}">🪙{recipe.gold}</span>
+                </div>
+                <button class="cc-btn {affordable ? '' : 'cant'}" onclick={() => doCraft(recipe)}>CRAFT</button>
+              </div>
+            {/if}
+          {:else}
+            <div class="stub">REACH LVL 1 TO UNLOCK</div>
+          {/each}
+
+        {:else if gearSubTab === 'reroll'}
+          {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
+            {@const eq = player.gear[slot]}
+            {#if eq}
+              {@const cost = rerollCost(eq)}
+              {@const canRR = canAffordReroll(eq)}
+              <div class="lq-card">
+                <div class="lq-top">
+                  <span class="lq-spr">{eq.sprite}</span>
+                  <div class="lq-inf">
+                    <div class="lq-nm" style="color:{rarityColor(eq.rarity)}">{eq.name}{#if (eq.rerollCount ?? 0) > 0}<span class="reroll-badge"> REROLLED x{eq.rerollCount}</span>{/if}</div>
+                    <div class="lq-st">{formatStatBonuses(eq)}</div>
+                    {#if eq.rolledBonuses && eq.rolledBonuses.length > 0}
+                      <div class="lq-rolls">{eq.rolledBonuses.map(r => r.label).join(' ')}</div>
+                    {/if}
+                  </div>
+                </div>
+                <div class="reroll-cost">
+                  <span>REROLL: 🪙{cost.gold}</span>
+                  {#each Object.entries(cost.materials) as [mat, amt]}
+                    <span class="{(player.materials[mat] ?? 0) >= amt ? '' : 'miss'}">{matLabel(mat)}:{amt}</span>
+                  {/each}
+                </div>
+                {#if eq.rarity !== 'boss_unique'}
+                  {#if rerollConfirmItem === eq}
+                    <button class="cc-btn confirm-reroll {canRR ? '' : 'cant'}" onclick={() => { doReroll(eq); rerollConfirmItem = null }}>CONFIRM?</button>
+                  {:else}
+                    <button class="cc-btn {canRR ? '' : 'cant'}" onclick={() => {
+                      rerollConfirmItem = eq
+                      if (rerollConfirmTimeout) clearTimeout(rerollConfirmTimeout)
+                      rerollConfirmTimeout = setTimeout(() => { rerollConfirmItem = null }, 2000)
+                    }}>REROLL</button>
+                  {/if}
                 {/if}
               </div>
-            </div>
+            {/if}
           {/each}
+          {#if !Object.values(player.gear).some(Boolean)}
+            <div class="stub">NO GEAR EQUIPPED</div>
+          {/if}
         {/if}
 
       {:else}
@@ -1321,8 +1393,8 @@
       <div class="cr-name" style="color:{rarityColor(cr.item.rarity)}">{cr.item.name}</div>
       <div class="cr-quality-badge" style="color:{QUALITY_COLOR[cr.rollQuality]}">{cr.rollQuality.toUpperCase()}</div>
       <div class="cr-base">
-        {#each Object.entries(cr.item.statBonuses) as [stat, val]}
-          <div class="cr-stat-row base-stat">+{val} {stat.toUpperCase()}</div>
+        {#each Object.entries(cr.item.statBonuses).filter(([, v]) => v?.flat) as [stat, bonus]}
+          <div class="cr-stat-row base-stat">+{bonus!.flat} {stat.toUpperCase()}</div>
         {/each}
       </div>
       {#if cr.bonusRolls.length > 0}
@@ -2199,4 +2271,21 @@
   .tut-body { font-size: 7px; color: #aaa; line-height: 2.2; }
   .tut-diagram { font-size: 14px; margin: 8px 0; letter-spacing: 2px; }
   .tut-btn { width: 100%; margin-top: 8px; }
+
+  /* ── HYBRID STATS ─────────────────────────────────────────────────── */
+  .sgear-pct { color: #f0c030; font-size: 6px; }
+  .seff { color: #ffffff; font-size: 7px; font-weight: bold; }
+
+  /* ── GEAR SUB-TABS ────────────────────────────────────────────────── */
+  .gear-subtabs { display:flex; gap:2px; margin-bottom:4px; }
+  .gsub { flex:1; padding:3px 0; font-size:6px; font-family:inherit; background:#111; color:#555; border:1px solid #222; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
+  .gsub.active { background:#1a1a1a; color:#f0c030; border-color:#f0c030; }
+  .unique-badge { color:#ff9000; font-size:5px; }
+  .item-lore { color:#555; font-size:5px; font-style:italic; margin-top:2px; }
+
+  /* ── MATERIALS ────────────────────────────────────────────────────── */
+  .mat-sidebar { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:6px; padding:4px; background:#0a0a0a; border:1px solid #1a1a1a; }
+  .mat-chip { display:flex; align-items:center; gap:2px; padding:2px 4px; background:#111; border:1px solid #222; font-size:6px; color:#ccc; }
+  .mat-chip.zero { opacity:0.35; }
+  .mat-qty { color:#f0c030; font-weight:bold; }
 </style>

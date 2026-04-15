@@ -1,13 +1,13 @@
 import { untrack } from 'svelte'
 import {
-  player, damagePlayer, healPlayer, gainGold, gainXp, respawnPlayer, advanceToZone,
+  player, damagePlayer, healPlayer, gainGold, gainXp, gainMaterial, respawnPlayer, advanceToZone,
   addToLootQueue, setOnLevelUp, checkAchievements, savePlayer, submitLeaderboard,
   type Stats, type PlayerState,
 } from './player.svelte'
 import { ENEMIES } from './enemies'
 import { BOSS_MECHANICS, BOSS_DEATH_TEXTS, type BossMechanic, type CombatEvent, type BossContext } from './bosses'
 import { ZONES } from './zones'
-import { ITEMS, type Item } from './items'
+import { ITEMS, MATERIAL_TIERS, type Item } from './items'
 import { ACTIVITIES } from './timers.svelte'
 import { dropRoll } from './crafting'
 import {
@@ -101,17 +101,28 @@ let fraserDrainDoubled = false
 
 export function getEffectiveStats(p: PlayerState): Stats {
   const base = { ...p.stats }
+  const flatBonus: Partial<Stats> = {}
+  const percentBonus: Partial<Stats> = {}
+
   for (const item of Object.values(p.gear)) {
     if (!item) continue
-    for (const [key, val] of Object.entries(item.statBonuses)) {
-      base[key as StatKey] = (base[key as StatKey] ?? 0) + (val ?? 0)
+    for (const [key, bonus] of Object.entries(item.statBonuses)) {
+      const k = key as StatKey
+      if (bonus?.flat) flatBonus[k] = (flatBonus[k] ?? 0) + bonus.flat
     }
-    // Include rolled bonuses from crafting/drops
     for (const roll of item.rolledBonuses ?? []) {
-      base[roll.stat] = (base[roll.stat] ?? 0) + roll.value
+      percentBonus[roll.stat] = (percentBonus[roll.stat] ?? 0) + roll.percent
     }
   }
-  return base
+
+  const result: Stats = {} as Stats
+  for (const key of Object.keys(base) as StatKey[]) {
+    const b = base[key] ?? 0
+    const pct = percentBonus[key] ?? 0
+    const flat = flatBonus[key] ?? 0
+    result[key] = Math.floor(b * (1 + pct / 100)) + flat
+  }
+  return result
 }
 
 function rollDrops(enemy: (typeof ENEMIES)[string], luckStat: number, zoneIndex: number, isBoss: boolean): Item[] {
@@ -707,6 +718,77 @@ function handleEnemyDeath(): void {
     player.lifetimeStats.itemsLooted++
     addLog('sys', `▶ ${enemy.name} dropped ${item.name}!`)
     addFloater(`${item.sprite}`, 'gold', 'enemy')
+  }
+
+  // Boss unique item drops
+  const uniqueCandidates = Object.values(ITEMS).filter(
+    item => item.rarity === 'boss_unique' && (item.dropSource ?? []).includes(combatState.enemyId)
+  )
+  if (uniqueCandidates.length > 0) {
+    const isFirstKill = !player.firstBossKills.includes(combatState.enemyId)
+    for (const baseItem of uniqueCandidates) {
+      const guaranteed = isFirstKill && baseItem.id === 'wolton-lanyard'
+      if (guaranteed || Math.random() < (baseItem.dropChance ?? 0.25)) {
+        const uitem: Item = {
+          ...baseItem,
+          instanceId: crypto.randomUUID(),
+          rolledBonuses: [...(baseItem.rolledBonuses ?? [])],
+          rerollCount: 0,
+        }
+        addToLootQueue(uitem)
+        player.lifetimeStats.itemsLooted++
+        addLog('sys', `★ ${enemy.name} dropped ${uitem.name}! [UNIQUE]`)
+        addFloater(`${uitem.sprite}`, 'gold', 'enemy')
+      }
+    }
+    if (isFirstKill) {
+      player.firstBossKills = [...player.firstBossKills, combatState.enemyId]
+    }
+  }
+
+  // Tiered material drops (T2 zones 4-6, T3 zones 7-9)
+  if (zoneIdx >= 3 && zoneIdx <= 5) {
+    if (enemy.isElite || enemy.isMiniboss) {
+      if (Math.random() < 0.20) {
+        const mat = Math.random() < 0.5 ? 'hardwood' : 'steel'
+        gainMaterial(mat, 1)
+        addLog('sys', `▶ Found 1x ${MATERIAL_TIERS[mat].name}!`)
+      }
+    }
+    if (enemy.isBoss) {
+      const zMats: Record<number, string> = { 3: 'hardwood', 4: 'steel', 5: 'rare_herbs' }
+      const mat = zMats[zoneIdx] ?? 'steel'
+      gainMaterial(mat, 2)
+      addLog('sys', `▶ Boss dropped 2x ${MATERIAL_TIERS[mat].name}!`)
+    }
+  }
+  if (zoneIdx >= 6) {
+    if (enemy.isElite || enemy.isMiniboss) {
+      if (Math.random() < 0.15) {
+        const mat = Math.random() < 0.5 ? 'darkwood' : 'wolton_alloy'
+        gainMaterial(mat, 1)
+        addLog('sys', `▶ Found 1x ${MATERIAL_TIERS[mat].name}!`)
+      }
+    }
+    if (enemy.isBoss) {
+      const zMats: Record<number, string> = { 6: 'darkwood', 7: 'wolton_alloy', 8: 'void_essence' }
+      const mat = zMats[zoneIdx] ?? 'wolton_alloy'
+      const amt = 2 + (Math.random() < 0.5 ? 1 : 0)
+      gainMaterial(mat, amt)
+      addLog('sys', `▶ Boss dropped ${amt}x ${MATERIAL_TIERS[mat].name}!`)
+    }
+  }
+  if (enemy.isBoss) {
+    const fraserIds = ['the-ceo', 'fraser']
+    if (fraserIds.includes(combatState.enemyId)) {
+      if (Math.random() < 0.50) {
+        gainMaterial('void_essence', 2)
+        addLog('sys', `▶ Found 2x ${MATERIAL_TIERS.void_essence.name}!`)
+      }
+    } else if (Math.random() < 0.10) {
+      gainMaterial('void_essence', 1)
+      addLog('sys', `▶ Found 1x ${MATERIAL_TIERS.void_essence.name}!`)
+    }
   }
 
   // Check achievements after kill

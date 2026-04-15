@@ -5,8 +5,8 @@ import type { Item, ItemSlot } from './items'
 
 export type StatRoll = {
   stat: StatKey
-  value: number
-  label: string    // e.g. "+3 ATK (ROLLED)"
+  percent: number     // percentage bonus against player's base upgrade stat
+  label: string       // e.g. "+8% ATK (ROLLED)"
 }
 
 export type RollQuality = 'normal' | 'good' | 'great' | 'perfect'
@@ -38,11 +38,11 @@ const ROLLABLE_STATS: Record<ItemSlot, StatKey[]> = {
 }
 
 // Roll value ranges per rarity
-const ROLL_RANGES: Record<Item['rarity'], [number, number]> = {
-  common:   [1, 3],
-  uncommon: [2, 5],
-  rare:     [3, 8],
-  epic:     [5, 15],
+const ROLL_RANGES: Record<string, [number, number]> = {
+  common:   [2, 6],
+  uncommon: [4, 10],
+  rare:     [6, 16],
+  epic:     [10, 25],
 }
 
 // ── Core roll function ────────────────────────────────────────────────────
@@ -76,12 +76,12 @@ export function craftRoll(item: Item, luckStat: number): CraftResult {
     const available = eligible.filter(s => !usedStats.has(s))
     if (!available.length) break
     const stat = available[Math.floor(Math.random() * available.length)]
-    const value = rand(min, max)
+    const pct = rand(min, max)
     usedStats.add(stat)
     bonusRolls.push({
       stat,
-      value,
-      label: `+${value} ${stat.toUpperCase()} (ROLLED)`,
+      percent: pct,
+      label: `+${pct}% ${stat.toUpperCase()} (ROLLED)`,
     })
   }
 
@@ -118,11 +118,11 @@ export function dropRoll(item: Item, luckStat: number, zoneIndex: number, isBoss
 
 // ── Reroll cost ────────────────────────────────────────────────────────────
 
-const BASE_GOLD: Record<Item['rarity'], number> = {
+const BASE_GOLD: Record<string, number> = {
   common: 50, uncommon: 150, rare: 400, epic: 1000,
 }
 
-const BASE_MATS: Record<Item['rarity'], Record<string, number>> = {
+const BASE_MATS: Record<string, Record<string, number>> = {
   common:   { wood: 3 },
   uncommon: { iron: 3 },
   rare:     { iron: 5, herbs: 2 },

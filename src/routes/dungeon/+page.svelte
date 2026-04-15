@@ -218,6 +218,26 @@
     return n.toLocaleString()
   }
 
+  function formatStat(value: number, key: StatKey): string {
+    switch (key) {
+      case 'attack':
+      case 'defence':
+      case 'vitality':
+      case 'luck':
+        return String(Math.round(value))
+      case 'speed':
+      case 'hpRegen':
+      case 'goldFind':
+      case 'xpBoost':
+      case 'lifesteal':
+        return parseFloat(value.toFixed(1)).toString()
+      case 'critDmg':
+        return (value / 100).toFixed(2) + 'x'
+      default:
+        return String(Math.round(value))
+    }
+  }
+
   // ── Item / loot helpers ───────────────────────────────────────────────────
   function rarityColor(rarity: string): string {
     const c: Record<string, string> = { common: '#808080', uncommon: '#40a040', rare: '#4080ff', epic: '#c040ff', boss_unique: '#ff9000' }
@@ -918,8 +938,8 @@
 <svelte:head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <title>{zone ? zone.label + ' — Wolton Dungeon' : 'Wolton Dungeon — Monkey Barrel'}</title>
-  <meta property="og:title" content="Wolton Dungeon">
+  <title>{zone ? zone.label + ' — The Dungeon' : 'The Dungeon — Monkey Barrel'}</title>
+  <meta property="og:title" content="The Dungeon">
   <meta property="og:description" content="A pixel art idle RPG. Fight through Brisbane. Take down Fraser. Ascend.">
 </svelte:head>
 
@@ -930,7 +950,7 @@
   <!-- TOP BAR -->
   <div class="topbar">
     <a href="/" class="back-btn" title="Back to Arcade">← HUB</a>
-    <div class="logo">⚔ WOLTON <span>DUNGEON</span></div>
+    <div class="logo">⚔ THE <span>DUNGEON</span></div>
     <div class="res-bar">
       <div class="res"><span class="res-ico">🪙</span><span class="res-lbl">GLD</span><span class="rv">{fmtNum(player.gold)}</span></div>
       <div class="res"><span class="res-ico">🪵</span><span class="res-lbl">WOOD</span><span class="rv">{player.materials.wood ?? 0}</span></div>
@@ -1485,9 +1505,9 @@
             <div class="mn">{row.name}</div>
             <div class="mv">
               {#if row.key === 'critDmg'}
-                {(cur/100).toFixed(2)}x <span>→</span> <span class="mnxt">{(nxt/100).toFixed(2)}x</span>
+                {formatStat(cur, row.key)} <span>→</span> <span class="mnxt">{formatStat(nxt, row.key)}</span>
               {:else}
-                {cur}{row.unit} <span>→</span> <span class="mnxt">{nxt}{row.unit}</span>
+                {formatStat(cur, row.key)}{row.unit} <span>→</span> <span class="mnxt">{formatStat(nxt, row.key)}{row.unit}</span>
               {/if}
             </div>
           </div>
@@ -1507,7 +1527,7 @@
           <span class="micon">{row.icon}</span>
           <div class="minfo">
             <div class="mn">{row.name}</div>
-            <div class="mv">{cur}{row.unit} <span>→</span> <span class="mnxt">{nxt}{row.unit}</span></div>
+            <div class="mv">{formatStat(cur, row.key)}{row.unit} <span>→</span> <span class="mnxt">{formatStat(nxt, row.key)}{row.unit}</span></div>
           </div>
           <span class="mcost">🪙 {cost.toLocaleString()}</span>
           <button class="mbtn {can ? '' : 'cant'}" onclick={() => upgradeStats(row.key)}>{isUnlock ? 'UNLOCK' : 'UP'}</button>
@@ -1818,7 +1838,7 @@
 {#if showVictoryScreen}
   <div class="victory-overlay" onclick={() => showVictoryScreen = false}>
     <div class="vic-box">
-      <div class="vic-title">WOLTON DUNGEON</div>
+      <div class="vic-title">THE DUNGEON</div>
       <div class="vic-sub">COMPLETE</div>
       <div class="vic-line">Fraser closes his laptop for the last time.</div>
       <div class="vic-line">Wolton Industries stock price: $0.00</div>
@@ -1859,7 +1879,7 @@
   <div class="moverlay tutorial-overlay" role="dialog" aria-modal="true">
     <div class="mbox tutorial-box" onclick={(e) => e.stopPropagation()}>
       {#if tutorialSlide === 0}
-        <div class="tut-title">WOLTON DUNGEON</div>
+        <div class="tut-title">THE DUNGEON</div>
         <div class="tut-body">Fraser has gone full villain.<br>Fight your way through Brisbane to take him down.</div>
         <button class="mbtn tut-btn" onclick={() => tutorialSlide = 1}>NEXT ▶</button>
       {:else if tutorialSlide === 1}

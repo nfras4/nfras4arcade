@@ -92,7 +92,7 @@
       <button
         class="category-card rpg-card"
         onclick={() => goto('/dungeon')}
-        aria-label="RPG – Wolton Dungeon"
+        aria-label="RPG – The Dungeon"
       >
         <div class="cat-glyph rpg-glyph" aria-hidden="true">
           <svg viewBox="0 0 40 40" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -106,7 +106,7 @@
         <div class="cat-text">
           <h2 class="cat-title geo-title">RPG</h2>
           <p class="cat-desc">Quests, dungeons, and adventure</p>
-          <p class="cat-count geo-title">Wolton Dungeon</p>
+          <p class="cat-count geo-title">The Dungeon</p>
         </div>
         <span class="cat-arrow rpg-arrow" aria-hidden="true">→</span>
         <div class="card-shine" aria-hidden="true"></div>
@@ -116,9 +116,9 @@
 
     <!-- Dungeon Leaderboard Widget -->
     {#if lbData}
-      <section class="lb-widget" aria-label="Wolton Dungeon leaderboard">
+      <section class="lb-widget" aria-label="The Dungeon leaderboard">
         <div class="lb-widget-hdr">
-          <span class="lb-widget-title">WOLTON DUNGEON — TOP PLAYERS</span>
+          <span class="lb-widget-title">THE DUNGEON — TOP PLAYERS</span>
           <a href="/dungeon" class="lb-play-link">PLAY NOW →</a>
         </div>
         <div class="lb-cols">

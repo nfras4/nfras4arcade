@@ -859,7 +859,7 @@ function handleEnemyDeath(): void {
         spawnEnemy()
       }, 1500)
     } else {
-      addLog('sys', '▶ ALL ZONES CLEARED! You have beaten Wolton Dungeon!')
+      addLog('sys', '▶ ALL ZONES CLEARED! You have beaten The Dungeon!')
       combatState.isVictory = true
     }
   } else {

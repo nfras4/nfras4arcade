@@ -36,6 +36,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   }
 
   const name = playerName.trim().slice(0, 32)
+  const BLOCKED_NAMES = new Set(['PLAYER', 'NICK', 'player', 'nick'])
+  if (BLOCKED_NAMES.has(name)) return json({ ok: true, skipped: 'blocked_name' })
   const now = Math.floor(Date.now() / 1000)
 
   // Rate limit: check last submit time

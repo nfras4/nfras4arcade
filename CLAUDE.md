@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-15** - Deployed to nfras4arcade. Summary: 7-bug QA pass — firstBossKills guaranteed drop, materials deep-merge on load, goldFind applied to patrol gold, added monkey-barrel-token + prime-core boss uniques, 🔒 KEEP label, rerollCost NaN guard. Branch: `main`, commit: `cb9536b`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Fix NaN damage (Number.isFinite guards in getEffectiveStats) and boss_unique drop crash (craftRoll early-return). Branch: `main`, commit: `7ed8c14`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Add 5 new dungeon stats (critDmg, hpRegen, goldFind, xpBoost, lifesteal) - wired into combat engine, UI split into COMBAT/PASSIVE groups with units and UNLOCK buttons. Branch: `main`, commit: `7c99394`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon 3-stage RPG upgrade - hybrid flat+percent stats, MATERIAL_TIERS, 10 boss uniques, tiered mat drops, gear tab redesigned to 4 sub-tabs (LOADOUT/LOOT/CRAFTING/REROLL). Branch: `main`, commit: `0941f7b`.

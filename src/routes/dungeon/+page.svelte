@@ -106,6 +106,110 @@
     }, 3000)
   })
 
+  // ── Split log state ────────────────────────────────────────────────────────
+  type EventCategory = 'drop' | 'heal' | 'system' | 'boss'
+  type EventEntry = { msg: string; cat: EventCategory; ts: number; id: number }
+  let eventFeed     = $state<EventEntry[]>([])
+  let filterDrops   = $state(true)
+  let filterHeals   = $state(true)
+  let filterSystem  = $state(true)
+  let _evCtr        = 0
+
+  type TickerEntry = { msg: string; kind: 'crit' | 'incoming' | 'status'; ts: number; id: number }
+  let combatTicker  = $state<TickerEntry[]>([])
+  let tickerLastMs  = $state(0)
+  let tickerProg    = $state(0)   // 100→0 over 4 seconds
+
+  let _logSnap: Array<{ type: string; message: string }> = []
+
+  function routeLogEntry(entry: { type: string; message: string }): void {
+    const { type, message } = entry
+    // Suppress basic outgoing hits (floaters cover these)
+    if (type === 'dmg' && !message.includes('hit you')) return
+
+    if (type === 'crit') {
+      combatTicker = [{ msg: message, kind: 'crit', ts: Date.now(), id: ++_evCtr }, ...combatTicker].slice(0, 40)
+      tickerLastMs = Date.now(); tickerProg = 100; return
+    }
+    if (type === 'dmg') { // only reaches here if 'hit you'
+      combatTicker = [{ msg: message, kind: 'incoming', ts: Date.now(), id: ++_evCtr }, ...combatTicker].slice(0, 40)
+      tickerLastMs = Date.now(); tickerProg = 100; return
+    }
+    if (type === 'sys' && message.includes('attacks you')) {
+      combatTicker = [{ msg: message, kind: 'status', ts: Date.now(), id: ++_evCtr }, ...combatTicker].slice(0, 40)
+      tickerLastMs = Date.now(); tickerProg = 100; return
+    }
+
+    let cat: EventCategory = 'system'
+    if (type === 'heal') {
+      cat = 'heal'
+    } else if (type === 'gold') {
+      cat = 'drop'
+    } else if (type === 'sys') {
+      if (message.includes('dropped') || message.includes('★') || message.includes('Found') || message.includes('Dropped')) {
+        cat = 'drop'
+      } else if (message.includes('LEVEL UP') || message.includes('unlocked') || message.includes('ZONE') || message.includes('BOSS DEFEATED') || message.includes('cleared') || message.includes('New activity')) {
+        cat = 'system'
+      } else {
+        cat = 'boss'
+        // Trigger cast bar for boss ability warnings
+        if (_castTimer) clearTimeout(_castTimer)
+        bossCurrentCast = message.replace(/^▶\s*/, '')
+        _castTimer = setTimeout(() => { bossCurrentCast = null }, 3200)
+      }
+    }
+    eventFeed = [{ msg: message, cat, ts: Date.now(), id: ++_evCtr }, ...eventFeed].slice(0, 200)
+  }
+
+  $effect(() => {
+    const log = combatState.log
+    untrack(() => {
+      if (log.length === 0) { _logSnap = []; return }
+      let nc = 0
+      for (let i = 0; i < log.length; i++) {
+        if (_logSnap.length > 0 && log[i].type === _logSnap[0].type && log[i].message === _logSnap[0].message) break
+        nc++; if (nc > 25) break
+      }
+      if (nc > 0) {
+        const ne = log.slice(0, nc)
+        for (const e of [...ne].reverse()) routeLogEntry(e)
+      }
+      _logSnap = [...log]
+    })
+  })
+
+  $effect(() => {
+    const id = setInterval(() => {
+      if (tickerLastMs === 0) return
+      const rem = Math.max(0, 4000 - (Date.now() - tickerLastMs))
+      tickerProg = (rem / 4000) * 100
+      if (rem === 0) { combatTicker = []; tickerLastMs = 0; tickerProg = 0 }
+    }, 100)
+    return () => clearInterval(id)
+  })
+
+  // Boss cast bar (cosmetic, derived from log)
+  let bossCurrentCast = $state<string | null>(null)
+  let _castTimer: ReturnType<typeof setTimeout> | null = null
+
+  // Static maps
+  const SLOT_ICONS: Record<string, string> = {
+    weapon: '⚔️', armour: '🛡️', helmet: '⛑️', ring: '💍', amulet: '📿'
+  }
+  const STAT_COLORS: Record<string, string> = {
+    attack: '#e04040', defence: '#4080ff', speed: '#f0c030',
+    vitality: '#40c060', critDmg: '#f0a020',
+    luck: '#70c080', hpRegen: '#40b060', goldFind: '#f0c030',
+    xpBoost: '#5090d0', lifesteal: '#c040c0',
+  }
+
+  function startAllActivities(): void {
+    const t = Date.now()
+    for (const act of ACTIVITIES) {
+      if (!isRunning(act.id, t) && !isReady(act.id, t) && canStart(act)) startActivity(act.id)
+    }
+  }
+
   // Number formatting helpers
   function fmtNum(n: number): string {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'm'
@@ -825,11 +929,11 @@
     <a href="/" class="back-btn" title="Back to Arcade">← HUB</a>
     <div class="logo">⚔ WOLTON <span>DUNGEON</span></div>
     <div class="res-bar">
-      <div class="res"><span>🪙</span><span class="res-label">GLD</span><span class="rv">{fmtNum(player.gold)}</span></div>
-      <div class="res"><span>🪵</span><span class="res-label">WOOD</span><span class="rv">{player.materials.wood ?? 0}</span></div>
-      <div class="res"><span>⛏️</span><span class="res-label">IRON</span><span class="rv">{player.materials.iron ?? 0}</span></div>
-      <div class="res"><span>🧪</span><span class="res-label">POT</span><span class="rv">{player.materials.potion ?? 0}</span></div>
-      <div class="res"><span>🌿</span><span class="res-label">HERB</span><span class="rv">{player.materials.herbs ?? 0}</span></div>
+      <div class="res"><span class="res-ico">🪙</span><span class="res-lbl">GLD</span><span class="rv">{fmtNum(player.gold)}</span></div>
+      <div class="res"><span class="res-ico">🪵</span><span class="res-lbl">WOOD</span><span class="rv">{player.materials.wood ?? 0}</span></div>
+      <div class="res"><span class="res-ico">⛏️</span><span class="res-lbl">IR</span><span class="rv">{player.materials.iron ?? 0}</span></div>
+      <div class="res"><span class="res-ico">🧪</span><span class="res-lbl">POT</span><span class="rv">{player.materials.potion ?? 0}</span></div>
+      <div class="res"><span class="res-ico">🌿</span><span class="res-lbl">HERB</span><span class="rv">{player.materials.herbs ?? 0}</span></div>
     </div>
     <div class="zone-tag">ZONE {player.currentZone + 1} -- {zone.label}</div>
     {#if player.prestigeTokens > 0}
@@ -880,11 +984,11 @@
       <div class="pclass">CONSULTANT LVL {player.level}</div>
 
       <div class="bgrp">
-        <div class="blbl"><span>HP</span><span style="color:#40c060">{player.hp}/{player.maxHp}</span></div>
+        <div class="blbl"><span class="blbl-key">HP</span><span class="blbl-vals" style="color:#40c060">{player.hp.toLocaleString()} / {player.maxHp.toLocaleString()}</span></div>
         <div class="btrack"><div class="bfill hpf" style="width:{hpPct}%"></div></div>
       </div>
       <div class="bgrp">
-        <div class="blbl"><span>XP</span><span style="color:var(--z-accent2)">{player.xp}/{player.xpToNext}</span></div>
+        <div class="blbl"><span class="blbl-key">XP</span><span class="blbl-vals" style="color:var(--z-accent2)">{player.xp.toLocaleString()} / {player.xpToNext.toLocaleString()}</span></div>
         <div class="btrack"><div class="bfill xpf" style="width:{xpPct}%"></div></div>
       </div>
 
@@ -896,7 +1000,7 @@
             {#if equipped}
               {equipped.sprite}
             {:else}
-              <span class="gem">○</span>
+              <span class="gem-empty" title={slot}>{SLOT_ICONS[slot]}</span>
             {/if}
           </div>
         {/each}
@@ -910,9 +1014,8 @@
           {@const pct = gearPercentBonus(row.key)}
           {@const eff = getEffectiveStats(player)[row.key]}
           <div class="sbox" title={row.desc}>
-            <span class="si">{row.icon}</span>
             <span class="sn">{row.short}</span>
-            <span class="sv">
+            <span class="sv" style="color:{STAT_COLORS[row.key] ?? 'var(--z-accent)'}">
               {row.key === 'critDmg' ? `${eff}%` : `${eff}${row.unit}`}
               {#if flat > 0}<span class="sgear"> +{flat}</span>{/if}
               {#if pct > 0}<span class="sgear-pct"> +{pct}%</span>{/if}
@@ -927,9 +1030,8 @@
           {@const pct = gearPercentBonus(row.key)}
           {@const eff = getEffectiveStats(player)[row.key]}
           <div class="sbox" title={row.desc}>
-            <span class="si">{row.icon}</span>
             <span class="sn">{row.short}</span>
-            <span class="sv">
+            <span class="sv" style="color:{STAT_COLORS[row.key] ?? 'var(--z-accent)'}">
               {eff}{row.unit}
               {#if flat > 0}<span class="sgear"> +{flat}</span>{/if}
               {#if pct > 0}<span class="sgear-pct"> +{pct}%</span>{/if}
@@ -1009,6 +1111,19 @@
           <div class="fsprite en-spr" class:boss-spawning={bossJustSpawned}>{combatState.enemySprite}</div>
         </div>
 
+        {#if isAnyBoss && bossCurrentCast}
+          <div class="boss-cast-wrap">
+            <div class="boss-cast-name">{bossCurrentCast}</div>
+            <div class="boss-cast-track"><div class="boss-cast-fill"></div></div>
+          </div>
+        {/if}
+        {#if isAnyBoss && combatState.bossStatusIcons.length > 0}
+          <div class="boss-fx-strip">
+            {#each combatState.bossStatusIcons.slice(0, 4) as icon, fi (icon + fi)}
+              <span class="boss-fx-pill">{icon}</span>
+            {/each}
+          </div>
+        {/if}
         <div class="zlabel" class:boss-label={isAnyBoss}>{isAnyBoss ? combatState.enemyName : zone.label}</div>
 
         <!-- Hidden door -- appears after zone 9 boss defeated -->
@@ -1022,33 +1137,17 @@
         </button>
       </div>
 
-      <!-- Combat log -->
-      <div class="clog">
-        {#each combatState.log as entry}
-          <div class="ll {entry.type}">{entry.message}</div>
-        {/each}
-      </div>
-
-      <!-- Stage bar -->
-      <div class="stagebar">
-        <div class="stagebar-top">
-          <span class="slbl">ZONE PROGRESS</span>
-          <div class="strack"><div class="sfill" style="width:{stagePct}%"></div></div>
-          <span class="scnt">{player.currentStage} / {STAGES_PER_ZONE}</span>
+      <!-- Zone section (unified) -->
+      <div class="zzone">
+        <div class="zzone-r1">
+          <span class="zzone-lbl">ZONE PROGRESS</span>
+          <span class="zzone-name">ZONE {player.currentZone + 1} — {zone.label}</span>
         </div>
-        <div class="zone-dots">
-          {#each ZONES as _z, i}
-            {#if i <= player.unlockedZones + 1}
-              <div class="zdot {player.currentZone === i ? 'zd-active' : (i < player.currentZone ? 'zd-done' : 'zd-locked')}" title="Z{i+1}: {ZONES[i].label}"></div>
-            {/if}
-          {/each}
+        <div class="zzone-r2">
+          <div class="zzone-track"><div class="zzone-fill" style="width:{stagePct}%"></div></div>
+          <span class="zzone-cnt">{player.currentStage} / {STAGES_PER_ZONE}</span>
         </div>
-      </div>
-
-      <!-- Zone navigator -->
-      <div class="znav">
-        <span class="znlbl">ZONES</span>
-        <div class="zn-scroll">
+        <div class="zzone-r3">
           {#each ZONES as z, i}
             {#if i <= player.unlockedZones + 1}
               {@const bossLocked = i > player.unlockedZones}
@@ -1056,17 +1155,56 @@
               {@const lvlLocked = player.level < lvlReq}
               {@const locked = bossLocked || lvlLocked}
               {@const active = player.currentZone === i}
+              {@const done = i < player.unlockedZones}
               <button
-                class="zn-btn {active ? 'active' : ''} {locked ? 'locked' : ''}"
+                class="zn-btn2 {active ? 'active' : ''} {locked ? 'locked' : ''} {done ? 'done' : ''}"
                 onclick={() => doTravelToZone(i)}
                 title={locked ? (lvlLocked ? `LV${lvlReq} required` : '🔒 LOCKED') : z.label}
-              >{#if locked}{#if lvlLocked && !bossLocked}LV{lvlReq}{:else}🔒{/if}{:else}{i + 1}{/if}</button>
+                disabled={locked}
+              >{#if done}<span class="zn2-check">✓</span>{/if}{#if locked}{#if lvlLocked && !bossLocked}LV{lvlReq}{:else}🔒{/if}{:else}{i + 1}{/if}</button>
             {/if}
           {/each}
+          {#if zoneLockMsg}<span class="zone-lock-msg">{zoneLockMsg}</span>{/if}
         </div>
-        {#if zoneLockMsg}
-          <div class="zone-lock-msg">{zoneLockMsg}</div>
-        {/if}
+      </div>
+
+      <!-- Split log -->
+      <div class="splitlog">
+        <div class="sl-col el-col">
+          <div class="sl-hdr">
+            <span class="sl-hdr-lbl">EVENT FEED</span>
+            <div class="sl-pills">
+              <button class="sl-pill {filterDrops ? 'active drop' : ''}" onclick={() => filterDrops = !filterDrops}>DROPS</button>
+              <button class="sl-pill {filterHeals ? 'active heal' : ''}" onclick={() => filterHeals = !filterHeals}>HEALS</button>
+              <button class="sl-pill {filterSystem ? 'active sys' : ''}" onclick={() => filterSystem = !filterSystem}>SYSTEM</button>
+            </div>
+          </div>
+          <div class="sl-body">
+            {#each eventFeed.filter(e => {
+              if (e.cat === 'boss') return true
+              if (e.cat === 'drop' && !filterDrops) return false
+              if (e.cat === 'heal' && !filterHeals) return false
+              if (e.cat === 'system' && !filterSystem) return false
+              return true
+            }) as entry (entry.id)}
+              <div class="sl-entry ef-{entry.cat}">{entry.msg}</div>
+            {/each}
+          </div>
+        </div>
+        <div class="sl-col ct-col">
+          <div class="sl-hdr">
+            <span class="sl-hdr-lbl">COMBAT</span>
+            <span class="ct-hint">crits &amp; incoming</span>
+            {#if tickerProg > 0}
+              <div class="ct-clear-bar"><div class="ct-clear-fill" style="width:{tickerProg}%"></div></div>
+            {/if}
+          </div>
+          <div class="sl-body">
+            {#each combatTicker as entry (entry.id)}
+              <div class="sl-entry ct-{entry.kind}">{entry.msg}</div>
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1098,11 +1236,11 @@
             <div class="sit">
               <span class="sii">{row.icon}</span>
               <div class="sinf"><div class="sn">{row.name}</div><div class="sd">{row.desc}</div></div>
-              <span class="slv">LV{player.statLevels[row.key]}</span>
+              <span class="slv-pill">LV{player.statLevels[row.key]}</span>
             </div>
             <div class="sic">
               <span class="sprice">🪙 {cost.toLocaleString()}</span>
-              <button class="sbuy {can ? '' : 'cant'}" onclick={() => upgradeStats(row.key)}>BUY</button>
+              <button class="sbuy-green {can ? '' : 'cant'}" onclick={() => upgradeStats(row.key)}>BUY</button>
             </div>
           </div>
         {/each}
@@ -1282,12 +1420,12 @@
 
     <!-- TIMER BAR -->
     <div class="panel tbar" class:mobile-hidden={mobileTab !== 'timers'}>
-      <span class="tlbl">ACTIVITIES ▶</span>
+      <span class="tlbl">ACTIVITIES</span>
       <button
         class="auto-btn {autoCollect ? 'on' : ''}"
         onclick={() => autoCollect = !autoCollect}
         title="Auto-collect timers"
-      >AUTO: {autoCollect ? 'ON' : 'OFF'}</button>
+      >AUTO{#if autoCollect}<span class="auto-on-dot">●</span>{/if}</button>
       {#each ACTIVITIES as act}
         {@const d = td(act.id, now)}
         {@const locked = player.level < act.unlockLevel}
@@ -1301,8 +1439,10 @@
           {#if d.rdy}<span class="cbadge">!</span>{/if}
           <div class="ttop">
             <span class="tic">{act.sprite}</span>
-            <span class="tn">{act.name}</span>
-            <span class="tr">+{act.reward.amount} {act.reward.material}</span>
+            <div class="tinfo">
+              <span class="tn">{act.name}</span>
+              <span class="tr">+{act.reward.amount} {act.reward.material}</span>
+            </div>
           </div>
           <div class="ttrack"><div class="tfill {d.rdy ? 'done' : ''}" style="width:{d.prog}%"></div></div>
           <div class="ttime {d.rdy ? 'd' : ''}">
@@ -1314,6 +1454,7 @@
           </div>
         </div>
       {/each}
+      <button class="start-all-btn" onclick={startAllActivities} title="Start all available activities">START ALL</button>
     </div>
 
   </div><!-- /mgrid -->
@@ -1754,9 +1895,11 @@
   .back-btn:hover { color: #fff; border-color: var(--z-border-hi); }
   .logo { color: var(--z-accent); font-size: 12px; text-shadow: 2px 2px 0 #000; white-space: nowrap; }
   .logo span { color: #fff; }
-  .res-bar { display: flex; gap: 9px; }
-  .res { display: flex; align-items: center; gap: 6px; background: var(--z-panel2); padding: 5px 10px; border: 1px solid var(--z-border); }
-  .rv { color: var(--z-accent); }
+  .res-bar { display: flex; gap: 6px; }
+  .res { display: flex; align-items: center; gap: 4px; background: var(--z-panel2); padding: 4px 8px; border: 1px solid var(--z-border); }
+  .res-ico { font-size: 13px; line-height: 1; }
+  .res-lbl { font-size: 7px; color: #555; letter-spacing: 0.5px; }
+  .rv { font-size: 10px; color: var(--z-accent); font-weight: bold; }
   .zone-tag { background: var(--z-panel2); border: 1px solid var(--z-accent2); padding: 5px 10px; color: var(--z-accent2); font-size: 9px; white-space: nowrap; }
 
   /* ── MAIN GRID ────────────────────────────────────────────────────── */
@@ -1797,8 +1940,10 @@
   .pname  { text-align: center; font-size: 11px; color: #fff; }
   .pclass { text-align: center; font-size: 9px; color: var(--z-accent2); }
   .bgrp { display: flex; flex-direction: column; gap: 4px; }
-  .blbl { display: flex; justify-content: space-between; font-size: 10px; color: #999; }
-  .btrack { height: 13px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
+  .blbl { display: flex; justify-content: space-between; align-items: baseline; }
+  .blbl-key { font-size: 8px; color: #666; }
+  .blbl-vals { font-size: 9px; font-weight: bold; }
+  .btrack { height: 10px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
   .bfill  { height: 100%; transition: width 0.3s; }
   .bfill::after { content: ''; display: block; height: 3px; background: rgba(255,255,255,0.15); }
   .hpf { background: #40c060; }
@@ -1811,15 +1956,15 @@
   }
   .gslot:hover { border-color: var(--z-accent); }
   .gem { color: #333; font-size: 13px; }
+  .gem-empty { font-size: 16px; opacity: 0.18; display: block; filter: grayscale(1); }
   .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
   .sgrp-lbl { font-size: 8px; color: #777; padding: 7px 0 4px; letter-spacing: 1px; border-bottom: 1px solid var(--z-border); margin-bottom: 1px; }
   .sbox {
     background: var(--z-panel2); border: 1px solid var(--z-border);
-    padding: 8px 7px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 7px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px;
   }
-  .si { font-size: 15px; }
-  .sn { font-size: 8px; color: #555; }
-  .sv { font-size: 11px; color: var(--z-accent); }
+  .sn { font-size: 8px; color: #555; letter-spacing: 0.5px; }
+  .sv { font-size: 14px; font-weight: bold; color: var(--z-accent); line-height: 1.1; }
   .upbtn {
     background: color-mix(in srgb, var(--z-accent) 25%, #000);
     border: none; color: var(--z-accent);
@@ -1830,7 +1975,7 @@
 
   /* ── COMBAT PANEL ─────────────────────────────────────────────────── */
   .cpanel { display: flex; flex-direction: column; }
-  .scene  { flex: 1; position: relative; overflow: hidden; min-height: 0; max-height: 250px; }
+  .scene  { flex-shrink: 0; height: 220px; position: relative; overflow: hidden; }
   canvas.scene-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
   .particles { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
   .particle  { position: absolute; border-radius: 50%; animation: drift linear infinite; }
@@ -1898,35 +2043,83 @@
     z-index: 4; white-space: nowrap;
   }
 
-  .clog {
-    flex-shrink: 0; background: rgba(0,0,0,0.85); border-top: 2px solid var(--z-border);
-    padding: 8px 14px; height: 85px; overflow: hidden; display: flex; flex-direction: column; gap: 5px;
-  }
-  .ll       { font-size: 9px; color: #686878; line-height: 1.7; }
-  .ll.dmg   { color: #d04040; }
-  .ll.crit  { color: var(--z-accent2); }
-  .ll.heal  { color: #40c060; }
-  .ll.gold  { color: var(--z-accent); }
-  .ll.sys   { color: #5090d0; }
+  /* Legacy log classes kept for compatibility (not rendered) */
+  .ll { display: none; }
 
-  .stagebar {
+  /* ── ZONE SECTION (unified) ───────────────────────────────────────── */
+  .zzone {
     flex-shrink: 0; background: var(--z-panel); border-top: 2px solid var(--z-border);
-    padding: 8px 14px; display: flex; flex-direction: column; gap: 6px;
+    padding: 6px 12px; display: flex; flex-direction: column; gap: 4px;
   }
-  .stagebar-top { display: flex; align-items: center; gap: 11px; }
-  .zone-dots { display: flex; gap: 6px; align-items: center; padding: 0 4px; }
-  .zdot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--z-border); flex-shrink: 0; transition: background 0.3s, border-color 0.3s, box-shadow 0.3s; }
-  .zdot.zd-active { background: var(--z-accent); border-color: var(--z-accent); box-shadow: 0 0 5px var(--z-accent); }
-  .zdot.zd-done { background: color-mix(in srgb, var(--z-accent2) 50%, #000); border-color: var(--z-accent2); }
-  .zdot.zd-locked { background: transparent; opacity: 0.3; }
-  .slbl  { font-size: 9px; color: #666; white-space: nowrap; }
-  .strack{ flex: 1; height: 14px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
-  .sfill {
+  .zzone-r1 { display: flex; justify-content: space-between; align-items: center; }
+  .zzone-lbl  { font-size: 7px; color: #444; letter-spacing: 1px; }
+  .zzone-name { font-size: 8px; color: var(--z-accent2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+  .zzone-r2 { display: flex; align-items: center; gap: 9px; }
+  .zzone-track { flex: 1; height: 12px; background: #050508; border: 1px solid var(--z-border); overflow: hidden; }
+  .zzone-fill {
     height: 100%;
     background: repeating-linear-gradient(90deg, var(--z-accent2) 0, var(--z-accent2) 10px, color-mix(in srgb, var(--z-accent2) 55%, #000) 10px, color-mix(in srgb, var(--z-accent2) 55%, #000) 20px);
     background-size: 20px 100%; animation: march 0.8s linear infinite; transition: width 0.3s;
   }
-  .scnt  { font-size: 9px; color: var(--z-accent2); white-space: nowrap; }
+  .zzone-cnt { font-size: 8px; color: var(--z-accent2); white-space: nowrap; flex-shrink: 0; }
+  .zzone-r3 { display: flex; gap: 4px; overflow-x: auto; align-items: center; }
+  .zzone-r3::-webkit-scrollbar { height: 3px; }
+  .zzone-r3::-webkit-scrollbar-thumb { background: var(--z-border); }
+  .zn-btn2 {
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    color: #555; font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 4px 7px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .zn-btn2.active  { background: color-mix(in srgb, #4080ff 15%, #000); color: #6090ff; border-color: #4080ff; font-weight: bold; }
+  .zn-btn2.done    { background: color-mix(in srgb, #20a040 12%, #000); color: #40c060; border-color: #20a040; }
+  .zn-btn2.locked  { opacity: 0.3; cursor: not-allowed; }
+  .zn-btn2:not(.locked):not(.active):not(.done):hover { border-color: var(--z-border-hi); color: #999; }
+  .zn2-check { color: #40c060; font-size: 9px; }
+
+  /* ── SPLIT LOG ────────────────────────────────────────────────────── */
+  .splitlog {
+    flex: 1; min-height: 0; display: flex; border-top: 2px solid var(--z-border);
+    background: rgba(0,0,0,0.7);
+  }
+  .sl-col { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .el-col { border-right: 1px solid var(--z-border); }
+  .sl-hdr {
+    flex-shrink: 0; padding: 5px 9px; border-bottom: 1px solid var(--z-border);
+    display: flex; align-items: center; gap: 7px; background: rgba(0,0,0,0.3);
+    min-height: 26px;
+  }
+  .sl-hdr-lbl { font-size: 7px; color: #555; letter-spacing: 1px; white-space: nowrap; }
+  .sl-pills { display: flex; gap: 4px; margin-left: auto; }
+  .sl-pill {
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    background: transparent; border: 1px solid #2a2a2a; color: #444;
+    padding: 2px 5px; cursor: pointer;
+  }
+  .sl-pill.active.drop  { border-color: #8040c0; color: #a060e0; }
+  .sl-pill.active.heal  { border-color: #20a040; color: #40c060; }
+  .sl-pill.active.sys   { border-color: #3060c0; color: #5090d0; }
+  .sl-body {
+    flex: 1; overflow-y: auto; padding: 5px 9px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .sl-body::-webkit-scrollbar { width: 4px; }
+  .sl-body::-webkit-scrollbar-thumb { background: var(--z-border); }
+  .sl-entry { font-size: 8px; line-height: 1.7; color: #555; }
+  .ef-drop   { color: #a060e0; }
+  .ef-heal   { color: #40c060; }
+  .ef-system { color: #5090d0; }
+  .ef-boss   {
+    color: var(--z-accent2); background: rgba(255,160,0,0.06);
+    padding: 2px 5px; margin: 1px -9px; border-left: 2px solid var(--z-accent2);
+    font-weight: bold;
+  }
+  .ct-hint { font-size: 6px; color: #333; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ct-clear-bar  { height: 3px; width: 48px; background: #1a1a1a; flex-shrink: 0; }
+  .ct-clear-fill { height: 100%; background: #404050; transition: width 0.1s linear; }
+  .ct-crit     { color: #f0c030; }
+  .ct-incoming { color: #e04040; }
+  .ct-status   { color: var(--z-accent2); }
 
   /* ── SHOP PANEL ───────────────────────────────────────────────────── */
   .rpanel { padding: 14px; display: flex; flex-direction: column; gap: 9px; overflow-y: auto; }
@@ -1950,6 +2143,13 @@
   .sn   { font-size: 9px; color: #ccc; }
   .sd   { font-size: 8px; color: #666; margin-top: 2px; }
   .slv  { font-size: 8px; color: #555; background: #1a1a1a; padding: 4px 5px; flex-shrink: 0; }
+  .slv-pill { font-size: 7px; color: #f0a020; background: #1a0e00; border: 1px solid #3a2800; padding: 3px 6px; flex-shrink: 0; white-space: nowrap; }
+  .sbuy-green {
+    background: #0a1a0a; border: 1px solid #206020; color: #40c060;
+    font-family: 'Press Start 2P', monospace; font-size: 8px; padding: 5px 9px; cursor: pointer;
+  }
+  .sbuy-green:hover { background: #0d2a0d; border-color: #30a050; }
+  .sbuy-green.cant  { background: #111; border-color: #222; color: #333; cursor: not-allowed; }
   .sic  { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
   .sprice { font-size: 9px; color: var(--z-accent); }
   .sbuy {
@@ -1976,10 +2176,11 @@
   .tcard.run { border-color: #40c060; }
   .tcard.rdy { border-color: var(--z-accent); }
   .tcard.lck { opacity: 0.4; cursor: not-allowed; }
-  .ttop { display: flex; align-items: center; gap: 6px; }
-  .tic  { font-size: 15px; }
-  .tn   { font-size: 8px; color: #ccc; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tr   { font-size: 8px; color: var(--z-accent); white-space: nowrap; }
+  .ttop  { display: flex; align-items: center; gap: 6px; }
+  .tic   { font-size: 15px; flex-shrink: 0; }
+  .tinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .tn    { font-size: 8px; color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tr    { font-size: 7px; color: var(--z-accent); white-space: nowrap; }
   .ttrack { height: 10px; background: #050508; border: 1px solid #1a1a1a; overflow: hidden; border-radius: 1px; }
   .tfill  { height: 100%; background: color-mix(in srgb, var(--z-accent2) 80%, #000); }
   .tfill.done { background: var(--z-accent); animation: glow 0.5s ease-in-out infinite alternate; }
@@ -2259,6 +2460,27 @@
 
   .boss-label { color: var(--z-accent) !important; animation: boss-pulse 1.2s ease-in-out infinite; }
 
+  /* ── BOSS CAST BAR ────────────────────────────────────────────────── */
+  .boss-cast-wrap {
+    position: absolute; bottom: 44px; left: 45%; right: 4%;
+    background: rgba(0,0,0,0.85); border: 1px solid #604010; padding: 4px 8px; z-index: 12;
+  }
+  .boss-cast-name { font-size: 7px; color: #f0a020; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .boss-cast-track { height: 5px; background: #1a1000; border: 1px solid #3a2800; overflow: hidden; }
+  .boss-cast-fill  { height: 100%; background: #f0a020; width: 0%; animation: cast-fill 3s linear forwards; }
+  @keyframes cast-fill { from { width: 0% } to { width: 100% } }
+
+  /* ── ACTIVE EFFECTS STRIP ─────────────────────────────────────────── */
+  .boss-fx-strip {
+    position: absolute; bottom: 28px; left: 45%; right: 4%;
+    display: flex; gap: 5px; z-index: 12; flex-wrap: nowrap; overflow: hidden;
+  }
+  .boss-fx-pill {
+    background: rgba(0,0,0,0.8); border: 1px solid #3a2a50;
+    font-size: 14px; padding: 3px 6px; animation: fx-pulse 2s ease-in-out infinite;
+  }
+  @keyframes fx-pulse { 0%,100% { border-color: #3a2a50; } 50% { border-color: #7040a0; } }
+
   .boss-icons {
     position: absolute; top: -20px; right: 0;
     font-size: 18px; display: flex; gap: 5px;
@@ -2433,10 +2655,11 @@
   @media (max-width: 600px) {
     .sgrid { grid-template-columns: 1fr 1fr 1fr; }
     .tcard { width: 100%; flex-basis: 100%; min-width: 160px; }
-    .res .res-label { display: none; }
+    .res .res-lbl { display: none; }
   }
 
   .res-label { font-size: 8px; color: #555; }
+  /* .res-lbl already defined above in topbar section */
 
   /* ── ANIMATIONS ───────────────────────────────────────────────────── */
   @keyframes zone-fadein { from { opacity: 0; } to { opacity: 1; } }
@@ -2485,9 +2708,16 @@
   .auto-btn {
     background: var(--z-panel2); border: 1px solid var(--z-border);
     color: #444; font-family: 'Press Start 2P', monospace; font-size: 8px;
-    padding: 7px 9px; cursor: pointer; white-space: nowrap;
+    padding: 7px 9px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px;
   }
-  .auto-btn.on { color: var(--z-accent); border-color: var(--z-accent); }
+  .auto-btn.on { background: color-mix(in srgb, #20a040 15%, var(--z-panel2)); color: #40c060; border-color: #20a040; }
+  .auto-on-dot { color: #40c060; font-size: 10px; animation: bb 0.5s ease-in-out infinite alternate; }
+  .start-all-btn {
+    background: color-mix(in srgb, var(--z-accent2) 12%, #000); border: 1px solid color-mix(in srgb, var(--z-accent2) 40%, #000);
+    color: var(--z-accent2); font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 7px 10px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  }
+  .start-all-btn:hover { background: color-mix(in srgb, var(--z-accent2) 22%, #000); }
 
   /* ── MUTE BUTTON ──────────────────────────────────────────────────── */
   .mute-btn {

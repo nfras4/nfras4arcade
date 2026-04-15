@@ -11,7 +11,7 @@ export const STAT_BASE_COSTS: Record<StatKey, number> = {
  *  speed = 0 means no attack-speed bonus; calcAttackInterval uses (1 + speed). */
 export const STAT_BASE_VALUES: Record<StatKey, number> = {
   attack: 5, defence: 3, speed: 0, luck: 2, vitality: 10,
-  critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0,
+  critDmg: 200, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0,
 }
 
 /**
@@ -127,6 +127,58 @@ export function calcEnemyDmg(baseDmg: number, zoneIndex: number, stageNumber: nu
 
 export function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+// ── Skills ────────────────────────────────────────────────────────────────
+
+export type SkillId =
+  | 'woodcutting'
+  | 'mining'
+  | 'herbalism'
+  | 'brewing'
+  | 'patrol'
+
+export type SkillState = {
+  level: number       // 0-60
+  xp: number
+  xpToNext: number
+}
+
+/** Skill XP needed to go from `level` to `level+1`. */
+export function skillXpToNext(level: number): number {
+  return Math.floor(200 * Math.pow(1.3, level))
+}
+
+/** Maps skill id → level thresholds → material keys unlocked at that level */
+export const SKILL_TIER_UNLOCKS: Record<SkillId, Record<number, string[]>> = {
+  woodcutting: {
+     1: ['wood'],           10: ['hardwood'],       20: ['darkwood'],
+    30: ['shadowwood'],     40: ['abysswood'],       50: ['voidwood'],
+    60: ['etherwood'],
+  },
+  mining: {
+     1: ['iron'],           10: ['steel'],           20: ['wolton_alloy'],
+    30: ['refined_alloy'],  40: ['wolton_core'],     50: ['fractured_steel'],
+    60: ['wolton_fragment'],
+  },
+  herbalism: {
+     1: ['herbs'],          10: ['rare_herbs'],      20: ['void_essence'],
+    30: ['cursed_herbs'],   40: ['ancient_essence'], 50: ['primordial_dust'],
+    60: ['ascendant_shard'],
+  },
+  brewing: {
+     1: ['potion'],         10: ['strong_potion'],   20: ['mega_potion'],
+  },
+  patrol: {},
+}
+
+/** Passive combat bonus each skill grants per level */
+export const SKILL_COMBAT_BONUSES: Record<SkillId, { stat: StatKey; perLevel: number }> = {
+  woodcutting: { stat: 'defence',  perLevel: 0.25  },  // max +15% at 60
+  mining:      { stat: 'attack',   perLevel: 0.25  },  // max +15% at 60
+  herbalism:   { stat: 'hpRegen',  perLevel: 0.167 },  // max +10/s at 60
+  brewing:     { stat: 'vitality', perLevel: 0.083 },  // max +5% at 60
+  patrol:      { stat: 'goldFind', perLevel: 0.167 },  // max +10% at 60
 }
 
 // ── Achievements ──────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ import {
   calcZoneReward,
   BASE_XP_NORMAL, BASE_XP_ELITE, BASE_XP_MINIBOSS, BASE_XP_BOSS,
   BASE_GOLD_NORMAL, BASE_GOLD_ELITE, BASE_GOLD_MINIBOSS, BASE_GOLD_BOSS,
-  type StatKey,
+  type StatKey, SKILL_COMBAT_BONUSES, type SkillId,
 } from './constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -111,10 +111,21 @@ export function getEffectiveStats(p: PlayerState): Stats {
     if (!item) continue
     for (const [key, bonus] of Object.entries(item.statBonuses)) {
       const k = key as StatKey
-      if (bonus?.flat) flatBonus[k] = (flatBonus[k] ?? 0) + bonus.flat
+      if (bonus?.flat)    flatBonus[k]    = (flatBonus[k]    ?? 0) + bonus.flat
+      if (bonus?.percent) percentBonus[k] = (percentBonus[k] ?? 0) + bonus.percent
     }
     for (const roll of item.rolledBonuses ?? []) {
       percentBonus[roll.stat] = (percentBonus[roll.stat] ?? 0) + roll.percent
+    }
+  }
+
+  // Skill combat bonuses (percent contribution per level)
+  if (p.skills) {
+    for (const [sid, bonus] of Object.entries(SKILL_COMBAT_BONUSES) as [SkillId, { stat: StatKey; perLevel: number }][]) {
+      const level = p.skills[sid]?.level ?? 0
+      if (level > 0) {
+        percentBonus[bonus.stat] = (percentBonus[bonus.stat] ?? 0) + level * bonus.perLevel
+      }
     }
   }
 
@@ -273,6 +284,12 @@ function processEvents(events: CombatEvent[]): void {
         } else {
           dmg = Math.max(1, Math.floor(baseDmg * ev.multiplier * zone9Mult - def * 0.5))
         }
+        // Boss special attack cap at 65% player maxHp
+        if (enemy?.isBoss && ev.multiplier < 9999) {
+          const maxSpecialHit = Math.floor(untrack(() => player.maxHp) * 0.65)
+          dmg = Math.min(dmg, maxSpecialHit)
+        }
+
         // Special: Nick's MONKEY BARREL — deals exactly 9999 damage (not scaled)
         // 3-second delay gives the warning logs time to display before the hit lands
         if (ev.multiplier >= 9999) {
@@ -579,7 +596,7 @@ export function playerAttack(): void {
   const eff        = untrack(() => getEffectiveStats(player))
   const atk        = eff.attack
   const lck        = eff.luck
-  const critChance = Math.min(0.5, lck * 0.02)
+  const critChance = Math.min(0.80, Math.sqrt(lck) * 0.06)
   const isCrit     = Math.random() < critChance
 
   let dmg = Math.floor(atk * (1 + Math.random() * 0.3))
@@ -682,6 +699,12 @@ export function enemyAttack(): void {
   }
 
   dmg = Math.max(1, dmg)
+
+  // Boss regular hits capped at 35% player maxHp
+  if (enemy.isBoss) {
+    const maxBossHit = Math.floor(untrack(() => player.maxHp) * 0.35)
+    dmg = Math.min(dmg, maxBossHit)
+  }
 
   damagePlayer(dmg)
   addLog('dmg', `▶ ${combatState.enemyName} hit you for ${dmg}.`)

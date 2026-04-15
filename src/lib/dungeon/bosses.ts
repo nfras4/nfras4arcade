@@ -315,6 +315,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         onEnter: () => [
           { type: 'log', message: "▶ Seb stops vibing. This is bad. [UNLINKED -- assign a mechanic to this phase or remove]", logType: 'sys' },
         ],
+        attackModifier: (base: number) => Math.floor(base * 1.15),
       },
     ],
     specialTimers: [
@@ -345,8 +346,8 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         castBarName: 'CHARGING DOWN',
         description: 'Charge Down: SEB charges through all defences, dealing 3x damage that ignores your defence stat.',
         action: () => [
-          { type: 'log', message: "▶ CHARGE DOWN. [SEB is charging -- 3x damage hit that bypasses your defence]", logType: 'dmg' },
-          { type: 'damage-player', multiplier: 3.0, ignoreDefence: true },
+          { type: 'log', message: "▶ CHARGE DOWN. [SEB is charging -- 1.8x damage hit incoming]", logType: 'dmg' },
+          { type: 'damage-player', multiplier: 1.8, ignoreDefence: false },
           { type: 'set-status-icon', icon: '🏆', durationMs: 1000 },
         ],
       },

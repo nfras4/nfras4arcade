@@ -1,15 +1,16 @@
 import { untrack } from 'svelte'
 import {
-  player, damagePlayer, healPlayer, gainGold, gainXp, gainMaterial, respawnPlayer, advanceToZone,
-  addToLootQueue, setOnLevelUp, checkAchievements, savePlayer, submitLeaderboard,
+  player, damagePlayer, healPlayer, gainGold, gainXp, gainItemXp, gainMaterial, respawnPlayer, advanceToZone,
+  addToLootQueue, setOnLevelUp, setOnItemLevelUp, checkAchievements, savePlayer, submitLeaderboard,
+  itemXpToNext,
   type Stats, type PlayerState,
 } from './player.svelte'
 import { ENEMIES } from './enemies'
-import { BOSS_MECHANICS, BOSS_DEATH_TEXTS, type BossMechanic, type CombatEvent, type BossContext } from './bosses'
+import { BOSS_MECHANICS, BOSS_DEATH_TEXTS, headCoachState, type BossMechanic, type CombatEvent, type BossContext } from './bosses'
 import { ZONES } from './zones'
 import { ITEMS, MATERIAL_TIERS, type Item } from './items'
 import { ACTIVITIES } from './timers.svelte'
-import { dropRoll } from './crafting'
+import { dropRoll, rollModifier } from './crafting'
 import {
   calcEnemyHp, calcEnemyDmg, ELITE_HP_MULT, MINIBOSS_HP_MULT, BOSS_HP_MULT,
   STAGES_PER_ZONE, MAX_LOG_ENTRIES, randInt, prestigeMultiplier,
@@ -109,12 +110,16 @@ export function getEffectiveStats(p: PlayerState): Stats {
 
   for (const item of Object.values(p.gear)) {
     if (!item) continue
+    const lvlMult = 1 + ((item.itemLevel ?? 1) - 1) * 0.08
     for (const [key, bonus] of Object.entries(item.statBonuses)) {
       const k = key as StatKey
-      if (bonus?.flat)    flatBonus[k]    = (flatBonus[k]    ?? 0) + bonus.flat
-      if (bonus?.percent) percentBonus[k] = (percentBonus[k] ?? 0) + bonus.percent
+      if (bonus?.flat)    flatBonus[k]    = (flatBonus[k]    ?? 0) + bonus.flat * lvlMult
+      if (bonus?.percent) percentBonus[k] = (percentBonus[k] ?? 0) + bonus.percent * lvlMult
     }
     for (const roll of item.rolledBonuses ?? []) {
+      percentBonus[roll.stat] = (percentBonus[roll.stat] ?? 0) + roll.percent
+    }
+    for (const roll of item.modifier?.bonuses ?? []) {
       percentBonus[roll.stat] = (percentBonus[roll.stat] ?? 0) + roll.percent
     }
   }
@@ -153,6 +158,10 @@ function rollDrops(enemy: (typeof ENEMIES)[string], luckStat: number, zoneIndex:
         instanceId: crypto.randomUUID(),
         rolledBonuses: result.bonusRolls,
         rerollCount: 0,
+        itemLevel: 1,
+        itemXp: 0,
+        itemXpToNext: itemXpToNext(1),
+        modifier: rollModifier(baseItem.tier ?? 1, luckStat, false),
       }
       drops.push(item)
     }
@@ -202,6 +211,10 @@ setOnLevelUp((level: number) => {
     }
   }
   checkAchievements()
+})
+
+setOnItemLevelUp((item) => {
+  addLog('sys', `▶ ${item.name} reached Lv${item.itemLevel}!`)
 })
 
 // ── Boss mechanics ────────────────────────────────────────────────────────
@@ -464,6 +477,7 @@ function applyPhaseAdjustments(enemyId: string, phaseId: string): void {
       break
     case 'head-coach:focused':
       phaseTimerOverrides['dunk'] = 8000
+      headCoachState.clumsyChance = 0.3
       break
     case 'zone-manager:tilted':
       phaseTimerOverrides['bet365'] = 10000
@@ -746,6 +760,7 @@ function handleEnemyDeath(): void {
   const xpBoostMult = 1 + (untrack(() => getEffectiveStats(player).xpBoost) / 100)
   const xp = Math.floor(baseXp * pMult * xpBoostMult)
   gainXp(xp)
+  gainItemXp(Math.ceil(xp * 0.15))
 
   // Lifetime stats
   player.lifetimeStats.enemiesKilled++
@@ -782,6 +797,10 @@ function handleEnemyDeath(): void {
           instanceId: crypto.randomUUID(),
           rolledBonuses: [...(baseItem.rolledBonuses ?? [])],
           rerollCount: 0,
+          itemLevel: 1,
+          itemXp: 0,
+          itemXpToNext: itemXpToNext(1),
+          modifier: rollModifier(baseItem.tier ?? 1, luck, true),
         }
         addToLootQueue(uitem)
         player.lifetimeStats.itemsLooted++

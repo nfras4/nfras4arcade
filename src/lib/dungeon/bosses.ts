@@ -117,6 +117,9 @@ function fraserMechanic(enemyId: string): BossMechanic {
 
 // ── Boss Mechanics ────────────────────────────────────────────────────────
 
+// Mutable state updated by combat when head-coach phase changes
+export const headCoachState = { clumsyChance: 0.5 }
+
 export const BOSS_MECHANICS: Record<string, BossMechanic> = {
 
   'johno': {
@@ -313,7 +316,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'focused',
         hpThreshold: 0.5,
         onEnter: () => [
-          { type: 'log', message: "▶ Seb stops vibing. This is bad. [UNLINKED -- assign a mechanic to this phase or remove]", logType: 'sys' },
+          { type: 'log', message: "▶ Seb stops vibing. This is bad. [SEB is focused -- attacks +15%, dunk frequency increased]", logType: 'sys' },
         ],
         attackModifier: (base: number) => Math.floor(base * 1.15),
       },
@@ -325,7 +328,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         castBarName: 'FOOTWORK FAILURE',
         description: 'Clumsy: SEB trips over nothing, skipping his next attack (50% chance every 4 seconds).',
         action: () => {
-          if (Math.random() < 0.5) {
+          if (Math.random() < headCoachState.clumsyChance) {
             const lines = [
               "Seb trips over nothing. [SEB stumbles -- skips his next attack]",
               "Somehow both feet left the ground wrong. [SEB stumbles -- skips his next attack]",
@@ -342,7 +345,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       },
       {
         id: 'dunk',
-        intervalMs: 12000,
+        intervalMs: 15000,
         castBarName: 'CHARGING DOWN',
         description: 'Charge Down: SEB charges through all defences, dealing 3x damage that ignores your defence stat.',
         action: () => [

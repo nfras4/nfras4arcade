@@ -245,10 +245,12 @@
   }
 
   function formatStatBonuses(item: Item): string {
-    return Object.entries(item.statBonuses)
+    const base = Object.entries(item.statBonuses)
       .filter(([, v]) => v?.flat)
       .map(([k, v]) => `+${v!.flat} ${k.slice(0, 3).toUpperCase()}`)
       .join(' ')
+    if (base) return base
+    return (item.rolledBonuses ?? []).map(r => r.label).join(' ')
   }
 
   function gearFlatBonus(stat: StatKey): number {
@@ -1554,6 +1556,9 @@
           <div class="lq-inf">
             <div class="lq-nm" style="color:{rarityColor(equipped.rarity)}">{equipped.name}</div>
             <div class="lq-st">{formatStatBonuses(equipped)}</div>
+            {#if equipped.rolledBonuses && equipped.rolledBonuses.length > 0 && Object.keys(equipped.statBonuses).length > 0}
+              <div class="lq-rolls">{equipped.rolledBonuses.map(r => r.label).join(' ')}</div>
+            {/if}
           </div>
         </div>
       {:else}
@@ -1567,6 +1572,9 @@
           <div class="lq-inf">
             <div class="lq-nm" style="color:{rarityColor(item.rarity)}">{item.name}</div>
             <div class="lq-st">{formatStatBonuses(item)}</div>
+            {#if item.rolledBonuses && item.rolledBonuses.length > 0 && Object.keys(item.statBonuses).length > 0}
+              <div class="lq-rolls">{item.rolledBonuses.map(r => r.label).join(' ')}</div>
+            {/if}
           </div>
           <span class="eequip-hint">EQUIP</span>
         </div>

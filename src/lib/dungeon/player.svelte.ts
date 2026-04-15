@@ -37,6 +37,7 @@ export type PlayerState = {
   firstBossKills: string[]
   lifetimeStats: LifetimeStats
   lastSaveTimestamp: number
+  saveVersion: number     // increments on each cloud save for conflict resolution
 }
 
 const SAVE_KEY = 'wolton-dungeon-player'
@@ -74,6 +75,7 @@ function freshState(): PlayerState {
       fraserKills: 0,
     },
     lastSaveTimestamp: Date.now(),
+    saveVersion: 0,
   }
 }
 
@@ -89,26 +91,38 @@ export function savePlayer(): void {
   localStorage.setItem(SAVE_KEY, JSON.stringify(player))
 }
 
+export function applyPlayerData(saved: Partial<PlayerState>): void {
+  const defaults = freshState()
+  Object.assign(player, defaults, saved)
+  player.lifetimeStats = { ...defaults.lifetimeStats, ...(saved.lifetimeStats ?? {}) }
+  player.stats      = { ...defaults.stats,      ...(saved.stats      ?? {}) }
+  player.statLevels = { ...defaults.statLevels, ...(saved.statLevels ?? {}) }
+  player.materials  = { ...defaults.materials,  ...(saved.materials  ?? {}) }
+  if (!player.achievements) player.achievements = []
+  if (player.fraserDefeated === undefined) player.fraserDefeated = false
+  if (!player.firstVisit) player.firstVisit = []
+  if (!player.firstBossKills) player.firstBossKills = []
+  if (player.nickDefeated === undefined) player.nickDefeated = false
+  if (!player.lastSaveTimestamp) player.lastSaveTimestamp = Date.now()
+}
+
+function mergeWithDefaults(saved: Partial<PlayerState>): PlayerState {
+  const d = freshState()
+  return {
+    ...d, ...saved,
+    lifetimeStats: { ...d.lifetimeStats, ...(saved.lifetimeStats ?? {}) },
+    stats:         { ...d.stats,         ...(saved.stats         ?? {}) },
+    statLevels:    { ...d.statLevels,    ...(saved.statLevels    ?? {}) },
+    materials:     { ...d.materials,     ...(saved.materials     ?? {}) },
+  } as PlayerState
+}
+
 export function loadPlayer(): void {
   if (typeof localStorage === 'undefined') return
   const raw = localStorage.getItem(SAVE_KEY)
   if (!raw) return
   try {
-    const saved = JSON.parse(raw) as Partial<PlayerState>
-    // Merge with defaults so new fields are always present
-    const defaults = freshState()
-    Object.assign(player, defaults, saved)
-    // Ensure nested objects have all keys
-    player.lifetimeStats = { ...defaults.lifetimeStats, ...(saved.lifetimeStats ?? {}) }
-    player.stats      = { ...defaults.stats,      ...(saved.stats      ?? {}) }
-    player.statLevels = { ...defaults.statLevels, ...(saved.statLevels ?? {}) }
-    player.materials  = { ...defaults.materials,  ...(saved.materials  ?? {}) }
-    if (!player.achievements) player.achievements = []
-    if (player.fraserDefeated === undefined) player.fraserDefeated = false
-    if (!player.firstVisit) player.firstVisit = []
-    if (!player.firstBossKills) player.firstBossKills = []
-    if (player.nickDefeated === undefined) player.nickDefeated = false
-    if (!player.lastSaveTimestamp) player.lastSaveTimestamp = Date.now()
+    applyPlayerData(JSON.parse(raw) as Partial<PlayerState>)
   } catch {
     // corrupt save -- start fresh
   }
@@ -246,6 +260,27 @@ export function prestige(): void {
   player.lifetimeStats = lifetimeStats
   player.lastSaveTimestamp = Date.now()
   savePlayer()
+}
+
+// ── CLOUD SAVE ───────────────────────────────────────────────────────────────
+
+export async function loadFromCloud(): Promise<{ save: PlayerState | null; loggedIn: boolean }> {
+  try {
+    const res = await fetch('/api/dungeon/save')
+    if (res.status === 401) return { save: null, loggedIn: false }
+    if (!res.ok) return { save: null, loggedIn: false }
+    const data = await res.json() as { save: { saveData: string } | null }
+    if (!data.save) return { save: null, loggedIn: true }
+    return { save: mergeWithDefaults(JSON.parse(data.save.saveData) as Partial<PlayerState>), loggedIn: true }
+  } catch {
+    return { save: null, loggedIn: false }
+  }
+}
+
+export async function deleteCloudSave(): Promise<void> {
+  try {
+    await fetch('/api/dungeon/save', { method: 'DELETE' })
+  } catch { /* silent fail */ }
 }
 
 export async function submitLeaderboard(p: PlayerState): Promise<void> {

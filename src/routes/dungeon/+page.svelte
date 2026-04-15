@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import {
-    player, loadPlayer, savePlayer, upgradeStats,
+    player, loadPlayer, savePlayer, upgradeStats, applyPlayerData, loadFromCloud, deleteCloudSave,
     travelToZone, equipFromLootQueue, discardFromLootQueue,
     prestige, canPrestige, setOnAchievement, checkAchievements,
     submitLeaderboard,
@@ -46,6 +46,15 @@
   let showBossDeathOverlay = $state(false)
   let showVictoryScreen    = $state(false)
   let showNickVictory      = $state(false)
+
+  // Cloud save sync
+  type SyncStatus = 'synced' | 'saving' | 'offline' | 'guest'
+  let syncStatus      = $state<SyncStatus>('guest')
+  let showGuestBanner = $state(false)
+
+  // Reset save flow
+  let resetConfirmText = $state('')
+  let showResetConfirm = $state(false)
 
   // Mobile layout
   let mobileTab = $state<'player' | 'shop' | 'timers'>('shop')
@@ -334,15 +343,34 @@
     spawnEnemy()
   }
 
-  function doPrestige(): void {
+  async function doPrestige(): Promise<void> {
     submitLeaderboard(player)
     playSound('prestige')
     prestigeFlash = true
-    setTimeout(() => {
-      prestige()
+    // Snapshot the pre-prestige state to cloud before wiping
+    if (syncStatus !== 'guest') {
+      try {
+        player.saveVersion++
+        await fetch('/api/dungeon/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            saveData: JSON.stringify(player),
+            saveVersion: player.saveVersion,
+            savedAt: Date.now(),
+          }),
+        })
+      } catch { /* local save still safe */ }
+    }
+    setTimeout(async () => {
+      prestige()              // resets player (including saveVersion → 0) and calls savePlayer()
       showPrestigeModal = false
       spawnEnemy()
       checkAchievements()
+      if (syncStatus !== 'guest') {
+        await deleteCloudSave() // wipe old record so version 0 won't be rejected as stale
+        scheduleCloudSave()   // upload fresh prestige state
+      }
     }, 200)
     setTimeout(() => { prestigeFlash = false }, 600)
   }
@@ -413,6 +441,59 @@
     if (ctx) ZONES[zi].drawBg(ctx, canvas.width, canvas.height)
   }
 
+  // ── Cloud save helpers ────────────────────────────────────────────────────
+  let _cloudSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+  function scheduleCloudSave(): void {
+    if (_cloudSaveTimer) clearTimeout(_cloudSaveTimer)
+    syncStatus = 'saving'
+    _cloudSaveTimer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/dungeon/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            saveData: JSON.stringify(player),
+            saveVersion: player.saveVersion,
+            savedAt: Date.now(),
+          }),
+        })
+        if (!res.ok) { syncStatus = 'offline'; return }
+        const result = await res.json() as { ok: boolean; reason?: string }
+        if (result.ok) {
+          syncStatus = 'synced'
+        } else if (result.reason === 'stale') {
+          // Server has a newer save — pull it down
+          const { save } = await loadFromCloud()
+          if (save && save.saveVersion > player.saveVersion) {
+            untrack(() => { applyPlayerData(save); savePlayer() })
+          }
+          syncStatus = 'synced'
+        } else {
+          syncStatus = 'offline'
+        }
+      } catch {
+        syncStatus = 'offline'
+      }
+    }, 5000)
+  }
+
+  async function syncFromCloud(): Promise<void> {
+    const localVersion = player.saveVersion ?? -1
+    const { save, loggedIn } = await loadFromCloud()
+    if (!loggedIn) {
+      syncStatus = 'guest'
+      if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('dungeon-guest-dismissed')) {
+        showGuestBanner = true
+      }
+      return
+    }
+    syncStatus = 'synced'
+    if (save && save.saveVersion > localVersion) {
+      untrack(() => { applyPlayerData(save); savePlayer() })
+    }
+  }
+
   // ── Effects ───────────────────────────────────────────────────────────────
   // Init: onMount so it runs AFTER the first Svelte flush. This prevents the
   // massive player.$state write-storm from firing inside the effect queue and
@@ -430,6 +511,7 @@
       if (isFirstTime) showTutorial = true
       playerLoaded = true
     })
+    syncFromCloud()
   })
 
   $effect(() => {
@@ -501,9 +583,25 @@
       saveTimers()
       submitLeaderboard(player)
     }
-    const id = setInterval(save, AUTOSAVE_INTERVAL_MS)
-    window.addEventListener('beforeunload', save)
-    return () => { clearInterval(id); window.removeEventListener('beforeunload', save) }
+    const cloudSave = () => {
+      player.saveVersion++
+      savePlayer()
+      scheduleCloudSave()
+    }
+    const id = setInterval(() => { save(); cloudSave() }, AUTOSAVE_INTERVAL_MS)
+    const onUnload = () => {
+      save()
+      if (syncStatus !== 'guest') {
+        const blob = new Blob([JSON.stringify({
+          saveData: JSON.stringify(player),
+          saveVersion: player.saveVersion,
+          savedAt: Date.now(),
+        })], { type: 'application/json' })
+        navigator.sendBeacon('/api/dungeon/save', blob)
+      }
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => { clearInterval(id); window.removeEventListener('beforeunload', onUnload) }
   })
 
   $effect(() => {
@@ -733,7 +831,28 @@
     }} title={soundMuted ? 'Unmute' : 'Mute'}>
       {soundMuted ? '🔇' : '🔊'}
     </button>
+    {#if syncStatus !== 'guest'}
+      <div class="sync-indicator sync-{syncStatus}" title={
+        syncStatus === 'synced'  ? 'Save synced to cloud' :
+        syncStatus === 'saving'  ? 'Saving to cloud...' :
+        'Cloud save unavailable — saved locally'
+      }>
+        {syncStatus === 'offline' ? '☁✕' : '☁'}
+      </div>
+    {/if}
   </div>
+
+  <!-- GUEST BANNER -->
+  {#if showGuestBanner}
+    <div class="guest-banner">
+      <span>LOG IN TO SAVE YOUR PROGRESS ACROSS DEVICES —</span>
+      <a href="/login" class="guest-login-link">LOG IN</a>
+      <button class="guest-dismiss" onclick={() => {
+        showGuestBanner = false
+        sessionStorage.setItem('dungeon-guest-dismissed', '1')
+      }}>✕</button>
+    </div>
+  {/if}
 
   <!-- MAIN GRID -->
   <div class="mgrid">
@@ -1352,6 +1471,39 @@
         <div class="stat-row"><span>Times prestige'd</span><span>{player.lifetimeStats.timesPrestiged}</span></div>
         <div class="stat-row"><span>Total playtime</span><span>{formatDuration(player.lifetimeStats.totalPlaytime)}</span></div>
         <div class="stat-row snarky"><span>Times Fraser has been embarrassed</span><span>{player.lifetimeStats.fraserKills}</span></div>
+      </div>
+
+      <!-- RESET SAVE -->
+      <div class="reset-section">
+        {#if !showResetConfirm}
+          <button class="reset-btn" onclick={() => { showResetConfirm = true; resetConfirmText = '' }}>
+            RESET SAVE
+          </button>
+        {:else}
+          <div class="reset-confirm">
+            <div class="reset-warn">Type RESET to confirm — this cannot be undone.</div>
+            <input
+              class="reset-input"
+              type="text"
+              placeholder="RESET"
+              bind:value={resetConfirmText}
+            />
+            <div class="reset-actions">
+              <button class="reset-cancel" onclick={() => { showResetConfirm = false; resetConfirmText = '' }}>CANCEL</button>
+              <button
+                class="reset-confirm-btn"
+                disabled={resetConfirmText !== 'RESET'}
+                onclick={async () => {
+                  if (resetConfirmText !== 'RESET') return
+                  await deleteCloudSave()
+                  localStorage.removeItem('wolton-dungeon-player')
+                  localStorage.removeItem('wolton-dungeon-timers')
+                  location.reload()
+                }}
+              >CONFIRM RESET</button>
+            </div>
+          </div>
+        {/if}
       </div>
     </div>
   </div>
@@ -2314,6 +2466,65 @@
     font-size: 12px; padding: 3px 6px; cursor: pointer; line-height: 1;
   }
   .mute-btn:hover { border-color: var(--z-accent); }
+
+  /* ── CLOUD SYNC INDICATOR ─────────────────────────────────────────────── */
+  .sync-indicator {
+    font-size: 6px; padding: 2px 5px; cursor: default;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .sync-synced  { color: #555; }
+  .sync-saving  { color: var(--z-accent2); animation: sync-pulse 1.2s ease-in-out infinite; }
+  .sync-offline { color: #c04040; border-color: #602020; }
+  @keyframes sync-pulse { 0%,100% { opacity: 0.5 } 50% { opacity: 1 } }
+
+  /* ── GUEST BANNER ─────────────────────────────────────────────────────── */
+  .guest-banner {
+    background: var(--z-panel); border-bottom: 1px solid var(--z-accent);
+    padding: 5px 12px; display: flex; align-items: center; gap: 8px;
+    font-size: 6px; color: var(--z-accent); letter-spacing: 1px;
+  }
+  .guest-login-link {
+    color: #fff; text-decoration: underline; font-size: 6px; cursor: pointer;
+  }
+  .guest-dismiss {
+    margin-left: auto; background: none; border: none; color: #555;
+    font-size: 8px; cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .guest-dismiss:hover { color: #ccc; }
+
+  /* ── RESET SAVE ───────────────────────────────────────────────────────── */
+  .reset-section {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--z-border);
+  }
+  .reset-btn {
+    font-family: 'Press Start 2P', monospace; font-size: 5px;
+    background: transparent; border: 1px solid #603030; color: #804040;
+    padding: 5px 10px; cursor: pointer; width: 100%;
+  }
+  .reset-btn:hover { border-color: #c04040; color: #e04040; }
+  .reset-confirm { display: flex; flex-direction: column; gap: 6px; }
+  .reset-warn { font-size: 5px; color: #c04040; }
+  .reset-input {
+    font-family: 'Press Start 2P', monospace; font-size: 6px;
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    color: #fff; padding: 5px 8px; width: 100%; outline: none;
+  }
+  .reset-input:focus { border-color: #c04040; }
+  .reset-actions { display: flex; gap: 6px; }
+  .reset-cancel {
+    font-family: 'Press Start 2P', monospace; font-size: 5px;
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    color: #999; padding: 5px 10px; cursor: pointer; flex: 1;
+  }
+  .reset-cancel:hover { border-color: var(--z-border-hi); color: #fff; }
+  .reset-confirm-btn {
+    font-family: 'Press Start 2P', monospace; font-size: 5px;
+    background: color-mix(in srgb, #e04040 15%, #000);
+    border: 1px solid #e04040; color: #e04040;
+    padding: 5px 10px; cursor: pointer; flex: 1;
+  }
+  .reset-confirm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .reset-confirm-btn:not(:disabled):hover { background: color-mix(in srgb, #e04040 28%, #000); }
 
   /* zone lock feedback */
   .zone-lock-msg {

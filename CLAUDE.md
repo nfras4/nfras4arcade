@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon balance pass — zone XP/gold via calcZoneReward (1.35^tier), front-loaded upgrade curves (diminishing returns), calcUpgradeCost (1.4^level), starting gold 3500, save migration on load. Branch: `main`, commit: `51a05e4`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon UI redesign — split combat log (event feed + ticker), unified zone section, stat color coding, per-slot gear icons, boss cast bar + effects strip, green shop BUY, amber level badges, Start All activities. Branch: `main`, commit: `f02efad`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon UI readability pass — GLD label in topbar, taller HP/XP bars, brighter log colors, crit log type, shop single-row layout, zone dot indicators, activity progress %. Branch: `main`, commit: `2965fd6`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Cloud saves for dungeon — D1 dungeon_saves table, GET/POST/DELETE /api/dungeon/save, dual-write with 5s debounce, cloud-first load, sendBeacon on unload, sync indicator, guest banner, RESET SAVE modal. Migration 0013 needs manual apply. Branch: `main`, commit: `29e3e5f`.

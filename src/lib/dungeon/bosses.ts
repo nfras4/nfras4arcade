@@ -350,7 +350,7 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         description: 'Charge Down: SEB charges through all defences, dealing 3x damage that ignores your defence stat.',
         action: () => [
           { type: 'log', message: "▶ CHARGE DOWN. [SEB is charging -- 1.8x damage hit incoming]", logType: 'dmg' },
-          { type: 'damage-player', multiplier: 1.8, ignoreDefence: false },
+          { type: 'damage-player', multiplier: 1.17, ignoreDefence: false },
           { type: 'set-status-icon', icon: '🏆', durationMs: 1000 },
         ],
       },

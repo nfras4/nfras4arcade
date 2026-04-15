@@ -367,12 +367,17 @@
   }
 
   // ── Stat rows ────────────────────────────────────────────────────────────
-  const STAT_ROWS: { key: StatKey; icon: string; name: string; desc: string }[] = [
-    { key: 'attack',   icon: '⚔️',  name: 'ATTACK UP',   desc: '+3 atk dmg' },
-    { key: 'defence',  icon: '🛡️',  name: 'DEFENCE UP',  desc: '+2 dmg reduction' },
-    { key: 'speed',    icon: '⚡',   name: 'SPEED UP',    desc: 'faster attacks' },
-    { key: 'luck',     icon: '🍀',  name: 'LUCK UP',     desc: '+2% crit chance' },
-    { key: 'vitality', icon: '❤️',  name: 'VITALITY UP', desc: '+200 max HP' },
+  const STAT_ROWS: { key: StatKey; icon: string; name: string; desc: string; short: string; unit: string; group: 'combat' | 'passive' }[] = [
+    { key: 'attack',    icon: '⚔️',  name: 'ATTACK',     desc: '+3 atk dmg',                  short: 'ATK',   unit: '',   group: 'combat'  },
+    { key: 'defence',   icon: '🛡️',  name: 'DEFENCE',    desc: '+2 dmg reduction',             short: 'DEF',   unit: '',   group: 'combat'  },
+    { key: 'speed',     icon: '⚡',   name: 'SPEED',      desc: 'faster attacks',               short: 'SPD',   unit: '',   group: 'combat'  },
+    { key: 'vitality',  icon: '❤️',  name: 'VITALITY',   desc: '+200 max HP',                  short: 'VIT',   unit: '',   group: 'combat'  },
+    { key: 'critDmg',   icon: '💥',  name: 'CRIT DMG',   desc: 'crit multiplier +0.1x',        short: 'CRIT',  unit: '%',  group: 'combat'  },
+    { key: 'luck',      icon: '🍀',  name: 'LUCK',       desc: '+2% crit chance',              short: 'LCK',   unit: '',   group: 'passive' },
+    { key: 'hpRegen',   icon: '💚',  name: 'HP REGEN',   desc: '+1 HP/sec passively',          short: 'REGEN', unit: '/s', group: 'passive' },
+    { key: 'goldFind',  icon: '🪙',  name: 'GOLD FIND',  desc: '+3% gold from all sources',    short: 'GFND',  unit: '%',  group: 'passive' },
+    { key: 'xpBoost',   icon: '📈',  name: 'XP BOOST',   desc: '+3% XP from all kills',        short: 'XP',    unit: '%',  group: 'passive' },
+    { key: 'lifesteal', icon: '🩸',  name: 'LIFESTEAL',  desc: '+1% dmg as HP (cap 30%)',      short: 'LS',    unit: '%',  group: 'passive' },
   ]
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -472,6 +477,16 @@
   $effect(() => {
     const spd = combatSpeed
     const id = setInterval(enemyAttack, Math.floor(ENEMY_ATTACK_INTERVAL / spd))
+    return () => clearInterval(id)
+  })
+
+  $effect(() => {
+    const id = setInterval(() => {
+      const regen = untrack(() => getEffectiveStats(player).hpRegen)
+      if (regen > 0 && player.hp < player.maxHp) {
+        player.hp = Math.min(player.maxHp, player.hp + regen)
+      }
+    }, 1000)
     return () => clearInterval(id)
   })
 
@@ -757,19 +772,36 @@
       </div>
 
       <div class="ptitle">▶ STATS</div>
+      <div class="sgrp-lbl">▶ COMBAT</div>
       <div class="sgrid">
-        {#each ([['attack','⚔️','ATK','Damage per hit'],['defence','🛡️','DEF','Reduces incoming damage'],['speed','⚡','SPD','Attack interval'],['luck','🍀','LCK','Drop rate and craft quality']] as [string,string,string,string][]) as [sk, icon, label, tip]}
-          {@const flat = gearFlatBonus(sk as StatKey)}
-          {@const pct = gearPercentBonus(sk as StatKey)}
-          {@const eff = getEffectiveStats(player)[sk as StatKey]}
-          <div class="sbox" title={tip}>
-            <span class="si">{icon}</span>
-            <span class="sn">{label}</span>
+        {#each STAT_ROWS.filter(r => r.group === 'combat') as row}
+          {@const flat = gearFlatBonus(row.key)}
+          {@const pct = gearPercentBonus(row.key)}
+          {@const eff = getEffectiveStats(player)[row.key]}
+          <div class="sbox" title={row.desc}>
+            <span class="si">{row.icon}</span>
+            <span class="sn">{row.short}</span>
             <span class="sv">
-              {player.stats[sk as StatKey]}
+              {row.key === 'critDmg' ? `${eff}%` : `${eff}${row.unit}`}
               {#if flat > 0}<span class="sgear"> +{flat}</span>{/if}
               {#if pct > 0}<span class="sgear-pct"> +{pct}%</span>{/if}
-              {#if flat > 0 || pct > 0}<span class="seff"> ={eff}</span>{/if}
+            </span>
+          </div>
+        {/each}
+      </div>
+      <div class="sgrp-lbl">▶ PASSIVE</div>
+      <div class="sgrid">
+        {#each STAT_ROWS.filter(r => r.group === 'passive') as row}
+          {@const flat = gearFlatBonus(row.key)}
+          {@const pct = gearPercentBonus(row.key)}
+          {@const eff = getEffectiveStats(player)[row.key]}
+          <div class="sbox" title={row.desc}>
+            <span class="si">{row.icon}</span>
+            <span class="sn">{row.short}</span>
+            <span class="sv">
+              {eff}{row.unit}
+              {#if flat > 0}<span class="sgear"> +{flat}</span>{/if}
+              {#if pct > 0}<span class="sgear-pct"> +{pct}%</span>{/if}
             </span>
           </div>
         {/each}
@@ -1152,7 +1184,8 @@
         <span class="mgold">🪙 {fmtNum(player.gold)}</span>
         <button class="mclose" onclick={() => showUpgradeModal = false}>✕</button>
       </div>
-      {#each STAT_ROWS as row}
+      <div class="mgrp-lbl">▶ COMBAT</div>
+      {#each STAT_ROWS.filter(r => r.group === 'combat') as row}
         {@const lvl  = player.statLevels[row.key]}
         {@const cur  = player.stats[row.key]}
         {@const nxt  = statValue(row.key, lvl + 1)}
@@ -1161,11 +1194,35 @@
         <div class="mrow">
           <span class="micon">{row.icon}</span>
           <div class="minfo">
-            <div class="mn">{row.key.toUpperCase()}</div>
-            <div class="mv">{cur} <span>→</span> <span class="mnxt">{nxt}</span></div>
+            <div class="mn">{row.name}</div>
+            <div class="mv">
+              {#if row.key === 'critDmg'}
+                {(cur/100).toFixed(2)}x <span>→</span> <span class="mnxt">{(nxt/100).toFixed(2)}x</span>
+              {:else}
+                {cur}{row.unit} <span>→</span> <span class="mnxt">{nxt}{row.unit}</span>
+              {/if}
+            </div>
           </div>
           <span class="mcost">🪙 {cost.toLocaleString()}</span>
           <button class="mbtn {can ? '' : 'cant'}" onclick={() => upgradeStats(row.key)}>UP</button>
+        </div>
+      {/each}
+      <div class="mgrp-lbl">▶ PASSIVE</div>
+      {#each STAT_ROWS.filter(r => r.group === 'passive') as row}
+        {@const lvl  = player.statLevels[row.key]}
+        {@const cur  = player.stats[row.key]}
+        {@const nxt  = statValue(row.key, lvl + 1)}
+        {@const cost = upgradeCost(row.key, lvl)}
+        {@const can  = player.gold >= cost}
+        {@const isUnlock = lvl === 0 && cur === 0}
+        <div class="mrow">
+          <span class="micon">{row.icon}</span>
+          <div class="minfo">
+            <div class="mn">{row.name}</div>
+            <div class="mv">{cur}{row.unit} <span>→</span> <span class="mnxt">{nxt}{row.unit}</span></div>
+          </div>
+          <span class="mcost">🪙 {cost.toLocaleString()}</span>
+          <button class="mbtn {can ? '' : 'cant'}" onclick={() => upgradeStats(row.key)}>{isUnlock ? 'UNLOCK' : 'UP'}</button>
         </div>
       {/each}
     </div>
@@ -1576,6 +1633,7 @@
   .gslot:hover { border-color: var(--z-accent); }
   .gem { color: #333; font-size: 10px; }
   .sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+  .sgrp-lbl { font-size: 5px; color: #555; padding: 3px 0 1px; letter-spacing: 1px; }
   .sbox {
     background: var(--z-panel2); border: 1px solid var(--z-border);
     padding: 5px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;
@@ -1762,6 +1820,7 @@
   .mgold  { font-size: 7px; color: #f0c030; }
   .mclose { background: none; border: 1px solid var(--z-border); color: #555; font-family: 'Press Start 2P', monospace; font-size: 7px; padding: 3px 6px; cursor: pointer; }
   .mclose:hover { color: #fff; border-color: #fff; }
+  .mgrp-lbl { font-size: 6px; color: #555; padding: 6px 0 2px; letter-spacing: 1px; }
   .mrow   { display: flex; align-items: center; gap: 8px; background: var(--z-panel2); border: 1px solid var(--z-border); padding: 7px; }
   .micon  { font-size: 15px; }
   .minfo  { flex: 1; display: flex; flex-direction: column; gap: 3px; }

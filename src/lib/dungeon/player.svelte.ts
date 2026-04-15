@@ -50,8 +50,8 @@ function freshState(): PlayerState {
     hp: 100,
     maxHp: 100,
     gold: 5000,
-    stats:      { attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10 },
-    statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0 },
+    stats:      { attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10, critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
+    statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0, critDmg: 0, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
     gear: { weapon: null, armour: null, helmet: null, ring: null, amulet: null },
     currentZone: 0,
     currentStage: 1,
@@ -100,6 +100,8 @@ export function loadPlayer(): void {
     Object.assign(player, defaults, saved)
     // Ensure nested objects have all keys
     player.lifetimeStats = { ...defaults.lifetimeStats, ...(saved.lifetimeStats ?? {}) }
+    player.stats      = { ...defaults.stats,      ...(saved.stats      ?? {}) }
+    player.statLevels = { ...defaults.statLevels, ...(saved.statLevels ?? {}) }
     if (!player.achievements) player.achievements = []
     if (player.fraserDefeated === undefined) player.fraserDefeated = false
     if (!player.firstVisit) player.firstVisit = []

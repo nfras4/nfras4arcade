@@ -1,13 +1,18 @@
-export type StatKey = 'attack' | 'defence' | 'speed' | 'luck' | 'vitality'
+export type StatKey =
+  | 'attack' | 'defence' | 'speed' | 'luck' | 'vitality'
+  | 'critDmg' | 'hpRegen' | 'goldFind' | 'xpBoost' | 'lifesteal'
 
 export const STAT_BASE_COSTS: Record<StatKey, number> = {
   attack: 50, defence: 40, speed: 80, luck: 30, vitality: 35,
+  critDmg: 90, hpRegen: 60, goldFind: 70, xpBoost: 65, lifesteal: 85,
 }
 export const STAT_BASE_VALUES: Record<StatKey, number> = {
   attack: 5, defence: 3, speed: 3, luck: 2, vitality: 10,
+  critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0,
 }
 export const STAT_INCREMENTS: Record<StatKey, number> = {
   attack: 3, defence: 2, speed: 1, luck: 1, vitality: 20,
+  critDmg: 10, hpRegen: 1, goldFind: 3, xpBoost: 3, lifesteal: 1,
 }
 
 export const UPGRADE_COST_SCALE = 1.14

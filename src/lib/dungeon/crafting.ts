@@ -30,11 +30,11 @@ function rand(min: number, max: number): number {
 
 // Which stats can roll per slot
 const ROLLABLE_STATS: Record<ItemSlot, StatKey[]> = {
-  weapon:  ['attack', 'speed', 'luck'],
-  armour:  ['defence', 'vitality', 'luck'],
-  helmet:  ['defence', 'luck', 'vitality'],
-  ring:    ['luck', 'attack', 'speed'],
-  amulet:  ['attack', 'defence', 'luck'],
+  weapon:  ['attack', 'speed', 'luck', 'critDmg', 'lifesteal'],
+  armour:  ['defence', 'vitality', 'luck', 'hpRegen', 'lifesteal'],
+  helmet:  ['defence', 'luck', 'vitality', 'xpBoost', 'goldFind'],
+  ring:    ['luck', 'attack', 'speed', 'goldFind', 'xpBoost'],
+  amulet:  ['attack', 'defence', 'luck', 'critDmg', 'hpRegen'],
 }
 
 // Roll value ranges per rarity

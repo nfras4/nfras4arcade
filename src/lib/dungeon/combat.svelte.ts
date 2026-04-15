@@ -580,7 +580,7 @@ export function playerAttack(): void {
   const isCrit     = Math.random() < critChance
 
   let dmg = Math.floor(atk * (1 + Math.random() * 0.3))
-  if (isCrit) dmg = Math.floor(dmg * 2)
+  if (isCrit) dmg = Math.floor(dmg * (eff.critDmg / 100))
   dmg = Math.max(1, dmg)
 
   // Apply player damage bonus window (reels, phone-check)
@@ -608,6 +608,16 @@ export function playerAttack(): void {
 
   dmg = Math.max(1, dmg)
   combatState.enemyHp = Math.max(0, combatState.enemyHp - dmg)
+
+  // Lifesteal
+  const lifestealPct = Math.min(eff.lifesteal, 30)
+  if (lifestealPct > 0 && dmg > 0) {
+    const heal = Math.floor(dmg * lifestealPct / 100)
+    if (heal > 0) {
+      player.hp = Math.min(player.maxHp, player.hp + heal)
+      if (heal >= 5) addLog('heal', `Lifesteal: +${heal} HP`)
+    }
+  }
 
   if (isCrit) {
     addLog('dmg', `▶ CRIT! You hit ${combatState.enemyName} for ${dmg}!`)
@@ -687,17 +697,19 @@ function handleEnemyDeath(): void {
   const pMult = prestigeMultiplier(untrack(() => player.prestigeTokens))
   const zoneIdx = untrack(() => player.currentZone)
 
-  // Gold drop (with prestige multiplier)
+  // Gold drop (with prestige multiplier + goldFind)
   const baseGold = randInt(enemy.goldDrop[0], enemy.goldDrop[1])
-  const gold = Math.floor(baseGold * pMult)
+  const goldFindMult = 1 + (untrack(() => getEffectiveStats(player).goldFind) / 100)
+  const gold = Math.floor(baseGold * pMult * goldFindMult)
   gainGold(gold)
   player.lifetimeStats.goldEarned += gold
   addLog('gold', `▶ ${combatState.enemyName} dropped ${gold} gold.`)
   addFloater(`+${gold}g`, 'gold', 'enemy')
 
-  // XP (new formula with prestige multiplier)
+  // XP (with prestige multiplier + xpBoost)
   const baseXp = xpPerKill(enemy.baseHp, zoneIdx)
-  const xp = Math.floor(baseXp * pMult)
+  const xpBoostMult = 1 + (untrack(() => getEffectiveStats(player).xpBoost) / 100)
+  const xp = Math.floor(baseXp * pMult * xpBoostMult)
   gainXp(xp)
 
   // Lifetime stats

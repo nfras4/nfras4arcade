@@ -29,7 +29,11 @@ export function applyWound(p: PlayerState, damage: number, hitType: HitType): vo
     normal:       0.40,
     boss_special: 0.70,
   }
-  const woundAmount = Math.floor(damage * woundRates[hitType])
+  const isVulnerable = p.maxHp < 500
+  const effectiveRate = hitType === 'boss_special' && isVulnerable
+    ? woundRates[hitType] * 0.5
+    : woundRates[hitType]
+  const woundAmount = Math.floor(damage * effectiveRate)
   if (woundAmount > 0) {
     p.woundedHp = Math.min(
       p.woundedHp + woundAmount,
@@ -349,13 +353,19 @@ function processEvents(events: CombatEvent[]): void {
         }
         // Boss special attack cap — post-game zones scale higher
         if (enemy?.isBoss && ev.multiplier < 9999) {
-          function getBossSpecialCap(zoneIndex: number): number {
-            if (zoneIndex < 6)   return 0.65
-            if (zoneIndex <= 12) return 0.90 + (zoneIndex - 6) * 0.01   // 90%→96%
-            if (zoneIndex <= 18) return 0.96 + (zoneIndex - 12) * 0.005 // 96%→99%
-            return 0.99
+          function getBossSpecialCap(zoneIndex: number, maxHp: number): number {
+            const pct = (() => {
+              if (zoneIndex < 6)   return 0.65
+              if (zoneIndex <= 12) return 0.90 + (zoneIndex - 6) * 0.01
+              if (zoneIndex <= 18) return 0.96 + (zoneIndex - 12) * 0.005
+              return 0.99
+            })()
+            const isVulnerable = maxHp < 500
+            const safePct = isVulnerable ? Math.min(pct, 0.70) : pct
+            return Math.floor(maxHp * safePct)
           }
-          const maxSpecialHit = Math.floor(untrack(() => player.maxHp) * getBossSpecialCap(zoneIdx))
+          const currentMaxHp = untrack(() => player.maxHp)
+          const maxSpecialHit = getBossSpecialCap(zoneIdx, currentMaxHp)
           dmg = Math.min(dmg, maxSpecialHit)
         }
 
@@ -788,14 +798,18 @@ export function enemyAttack(): void {
 
   // Boss regular hits capped — post-game zones scale higher
   if (enemy.isBoss) {
-    function getBossHitCap(zoneIndex: number): number {
-      if (zoneIndex <= 6)  return Math.min(0.50, 0.35 + 0.025 * zoneIndex)
-      if (zoneIndex <= 12) return 0.50 + (zoneIndex - 6) * 0.008   // 50%→55%
-      if (zoneIndex <= 18) return 0.55 + (zoneIndex - 12) * 0.012  // 55%→62%
-      if (zoneIndex <= 24) return 0.62 + (zoneIndex - 18) * 0.015  // 62%→71%
-      return Math.min(0.85, 0.71 + (zoneIndex - 24) * 0.02)        // 71%→85%
+    function getBossHitCap(zoneIndex: number, maxHp: number): number {
+      const pct = (() => {
+        if (zoneIndex <= 6)  return Math.min(0.50, 0.35 + 0.025 * zoneIndex)
+        if (zoneIndex <= 12) return 0.50 + (zoneIndex - 6) * 0.008
+        if (zoneIndex <= 18) return 0.55 + (zoneIndex - 12) * 0.012
+        if (zoneIndex <= 24) return 0.62 + (zoneIndex - 18) * 0.015
+        return Math.min(0.85, 0.71 + (zoneIndex - 24) * 0.02)
+      })()
+      const safePct = Math.min(pct, 0.60)
+      return Math.floor(maxHp * safePct)
     }
-    const maxBossHit = Math.floor(player.maxHp * getBossHitCap(zoneIdx))
+    const maxBossHit = getBossHitCap(zoneIdx, player.maxHp)
     dmg = Math.min(dmg, maxBossHit)
   }
 

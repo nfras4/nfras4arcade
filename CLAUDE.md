@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-16** - Deployed to nfras4arcade. Summary: Add 20 post-game zones (Wolton Deep Labs, Corruption, Void Descent, Deep Void, The Remnant, Null Space, The End) — 88 enemies, boss cap scaling to 85%, stat caps removed, DESCENT leaderboard tab, The First Slime + The End bosses, dungeonComplete overlay, migration 0014. Branch: `main`, commit: `ccab0b5`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Dungeon balance fixes — T5/T6/T7 hybrid gear stats, boss wound rate fix, healPlayer wound ceiling, luck quality caps doubled, skill XP level scaling, patrol gold direct bonus, T2 steel-ring, critDmg init 200. Branch: `main`, commit: `d5a58cd`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Add 5 new dungeon stats (critDmg, hpRegen, goldFind, xpBoost, lifesteal) - wired into combat engine, UI split into COMBAT/PASSIVE groups with units and UNLOCK buttons. Branch: `main`, commit: `7c99394`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon 3-stage RPG upgrade - hybrid flat+percent stats, MATERIAL_TIERS, 10 boss uniques, tiered mat drops, gear tab redesigned to 4 sub-tabs (LOADOUT/LOOT/CRAFTING/REROLL). Branch: `main`, commit: `0941f7b`.

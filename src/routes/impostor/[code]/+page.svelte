@@ -4,7 +4,7 @@
   import { tick } from 'svelte';
   import { socket } from '$lib/ws';
   import {
-    gameState, playerId, chatMessages, error, connected, votesIn,
+    gameState, playerId, chatMessages, error, connected, votesIn, votedPlayerIds,
     isHost, myTurn, currentTurnPlayer, isSpectator,
     initSocketListeners, resetStores
   } from '$lib/stores';
@@ -565,6 +565,17 @@
                 </div>
                 <p class="vote-progress-text">{$votesIn} of {$gameState.players.length} voted</p>
               </div>
+              <div class="who-voted">
+                <div class="who-voted-title">WHO'S VOTED</div>
+                {#each $gameState.players as p}
+                  {@const hasVoted = $votedPlayerIds.includes(p.id)}
+                  <div class="who-voted-row" class:voted={hasVoted}>
+                    <span class="who-voted-box" aria-hidden="true">{hasVoted ? '☑' : '☐'}</span>
+                    <span class="who-voted-name">{p.name}</span>
+                    {#if !hasVoted}<span class="who-voted-waiting">waiting...</span>{/if}
+                  </div>
+                {/each}
+              </div>
             </div>
           {/if}
         </div>
@@ -589,7 +600,7 @@
 
             <div class="reveal-card reveal-entrance" class:caught={result.impostorCaught} class:escaped={!result.impostorCaught}>
               <div class="reveal-headline">
-                <span class="reveal-icon">{result.impostorCaught ? '&#10003;' : '&#10007;'}</span>
+                <span class="reveal-icon">{result.impostorCaught ? '✓' : '✗'}</span>
                 <h2>{result.impostorCaught ? 'Impostor Caught!' : 'Impostor Escaped!'}</h2>
               </div>
 
@@ -650,7 +661,7 @@
 
             <div class="reveal-card postgame-card" class:caught={result.impostorCaught} class:escaped={!result.impostorCaught}>
               <div class="reveal-headline">
-                <span class="reveal-icon">{result.impostorCaught ? '&#10003;' : '&#10007;'}</span>
+                <span class="reveal-icon">{result.impostorCaught ? '✓' : '✗'}</span>
                 {#if result.impostorCaught}
                   <h3>Impostor Caught!</h3>
                 {:else}
@@ -1423,6 +1434,73 @@
     text-align: center;
     font-size: 0.85rem;
     color: var(--text-muted);
+  }
+
+  /* ─── Who's voted checklist ──────────────────────────── */
+
+  .who-voted {
+    margin-top: 1.25rem;
+    width: 100%;
+    max-width: 240px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .who-voted-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .who-voted-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border);
+    opacity: 0.5;
+    transition: opacity 0.25s ease;
+  }
+
+  .who-voted-row:last-child {
+    border-bottom: none;
+  }
+
+  .who-voted-row.voted {
+    opacity: 1;
+  }
+
+  .who-voted-box {
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--green);
+    flex-shrink: 0;
+    width: 1.1rem;
+    text-align: center;
+  }
+
+  .who-voted-row:not(.voted) .who-voted-box {
+    color: var(--text-subtle);
+  }
+
+  .who-voted-name {
+    flex: 1;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .who-voted-waiting {
+    font-size: 0.7rem;
+    color: var(--text-subtle);
+    font-style: italic;
+    animation: pulse 1.5s ease-in-out infinite;
   }
 
   /* ─── Reveal card ────────────────────────────────────── */

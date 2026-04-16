@@ -8,6 +8,7 @@ export const chatMessages = writable<Array<{ name: string; text: string; timesta
 export const error = writable<string | null>(null);
 export const connected = writable(false);
 export const votesIn = writable(0);
+export const votedPlayerIds = writable<string[]>([]);
 export const isSpectator = writable(false);
 
 export const isHost = derived(
@@ -48,6 +49,7 @@ export function initSocketListeners(): () => void {
         gameState.update(prev => {
           if (prev?.phase !== 'voting' && msg.state.phase === 'voting') {
             votesIn.set(0);
+            votedPlayerIds.set([]);
           }
           return msg.state;
         });
@@ -75,6 +77,7 @@ export function initSocketListeners(): () => void {
 
       case 'vote_cast':
         votesIn.update(n => n + 1);
+        votedPlayerIds.update(ids => ids.includes(msg.voterId) ? ids : [...ids, msg.voterId]);
         break;
 
       case 'lobby_dissolved':
@@ -95,5 +98,6 @@ export function resetStores(): void {
   error.set(null);
   connected.set(false);
   votesIn.set(0);
+  votedPlayerIds.set([]);
   isSpectator.set(false);
 }

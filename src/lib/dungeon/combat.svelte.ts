@@ -129,6 +129,22 @@ let fraserVillainActive = false
 let fraserDrainDoubled = false
 let specialTimerLastFired = new Map<string, number>()
 
+// ── Farm mode ─────────────────────────────────────────────────────────────
+let farmMode = false
+
+export function setFarmMode(val: boolean): void {
+  farmMode = val
+}
+
+function getNextStage(currentStage: number): number {
+  if (farmMode) {
+    const next = currentStage + 1
+    if (next >= 10) return 1
+    return next
+  }
+  return currentStage + 1
+}
+
 // ── Gear / effective stats ────────────────────────────────────────────────
 
 export function getEffectiveStats(p: PlayerState): Stats {
@@ -1039,7 +1055,7 @@ function handleEnemyDeath(): void {
     // Post-game zones beyond index 8 handled separately
   } else {
     // Advance stage
-    player.currentStage = stage + 1
+    player.currentStage = getNextStage(stage)
     spawnEnemy()
   }
 }

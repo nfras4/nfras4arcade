@@ -6,7 +6,7 @@
     prestige, canPrestige, setOnAchievement, checkAchievements,
     submitLeaderboard, itemXpToNext,
   } from '$lib/dungeon/player.svelte'
-  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound } from '$lib/dungeon/combat.svelte'
+  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound, setFarmMode } from '$lib/dungeon/combat.svelte'
   import { ENEMIES } from '$lib/dungeon/enemies'
   import {
     loadTimers, saveTimers, startActivity, collectActivity,
@@ -71,6 +71,9 @@
 
   // Sound
   let soundMuted = $state(typeof localStorage !== 'undefined' ? localStorage.getItem('wdMuted') === '1' : true)
+
+  // Farm mode
+  let farmMode = $state(typeof localStorage !== 'undefined' && localStorage.getItem('wdFarmMode') === 'true')
 
   // Transition / animation state
   let zoneTransitioning  = $state(false)
@@ -781,7 +784,7 @@
   const hpPct        = $derived(player.maxHp > 0 ? (player.hp / player.maxHp) * 100 : 0)
   const woundedHpPct = $derived(player.maxHp > 0 ? (player.woundedHp / player.maxHp) * 100 : 0)
   const xpPct      = $derived(player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0)
-  const stagePct   = $derived(((player.currentStage - 1) / STAGES_PER_ZONE) * 100)
+  const stagePct   = $derived(farmMode ? ((player.currentStage - 1) / 9) * 100 : ((player.currentStage - 1) / STAGES_PER_ZONE) * 100)
   const enmHpPct   = $derived(combatState.enemyMaxHp > 0 ? (combatState.enemyHp / combatState.enemyMaxHp) * 100 : 0)
   const zone       = $derived(ZONES[player.currentZone])
   const currentEnemy  = $derived(ENEMIES[combatState.enemyId])
@@ -1049,6 +1052,14 @@
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('wdAutoCollect', autoCollect ? '1' : '0')
     }
+  })
+
+  // Sync farm mode to combat and localStorage
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('wdFarmMode', String(farmMode))
+    }
+    setFarmMode(farmMode)
   })
 
   // Auto-collect effect
@@ -1436,7 +1447,11 @@
         </div>
         <div class="zzone-r2">
           <div class="zzone-track"><div class="zzone-fill" style="width:{stagePct}%"></div></div>
-          <span class="zzone-cnt">{player.currentStage} / {STAGES_PER_ZONE}</span>
+          <span class="zzone-cnt">{farmMode ? `${player.currentStage} / 9 loop` : `${player.currentStage} / ${STAGES_PER_ZONE}`}</span>
+          <label class="farm-toggle" title="Skip bosses and loop stages 1-9">
+            <input type="checkbox" bind:checked={farmMode} />
+            FARM MODE
+          </label>
         </div>
         <div class="zzone-r3">
           {#each ZONES.slice(0, 9) as z, i}
@@ -2701,6 +2716,9 @@
     background-size: 20px 100%; animation: march 0.8s linear infinite; transition: width 0.3s;
   }
   .zzone-cnt { font-size: 8px; color: var(--z-accent2); white-space: nowrap; flex-shrink: 0; }
+  .farm-toggle { display: flex; align-items: center; gap: 6px; font-family: 'Press Start 2P', monospace; font-size: 7px; color: #444; cursor: pointer; user-select: none; flex-shrink: 0; }
+  .farm-toggle:has(input:checked) { color: var(--z-accent); }
+  .farm-toggle input[type="checkbox"] { width: 10px; height: 10px; accent-color: var(--z-accent); cursor: pointer; }
   .zzone-r3 { display: flex; gap: 4px; overflow-x: auto; align-items: center; }
   .zzone-r3::-webkit-scrollbar { height: 3px; }
   .zzone-r3::-webkit-scrollbar-thumb { background: var(--z-border); }

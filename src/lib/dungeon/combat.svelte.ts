@@ -27,7 +27,7 @@ export type HitType = 'normal' | 'boss_special'
 export function applyWound(p: PlayerState, damage: number, hitType: HitType, enemy?: Enemy): void {
   const woundRates: Record<HitType, number> = {
     normal:       0.40,
-    boss_special: 0.70,
+    boss_special: 0.45,
   }
   let effectiveRate = woundRates[hitType]
   const isVulnerable = p.maxHp < 500
@@ -78,6 +78,7 @@ export type CombatState = {
   nickVictory: boolean
   isVictory: boolean
   dungeonComplete: boolean
+  lastSpecialHitAt: number
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -101,6 +102,7 @@ export const combatState: CombatState = $state({
   nickVictory: false,
   isVictory: false,
   dungeonComplete: false,
+  lastSpecialHitAt: 0,
 })
 
 let floaterSeq = 0
@@ -302,6 +304,7 @@ function clearBossState(): void {
   combatState.activeBossBuffs = []
   combatState.currentPhase = null
   combatState.bossStatusIcons = []
+  combatState.lastSpecialHitAt = 0
 }
 
 function getBossContext(): BossContext {
@@ -359,14 +362,15 @@ function processEvents(events: CombatEvent[]): void {
         if (enemy?.isBoss && ev.multiplier < 9999) {
           function getBossSpecialCap(zoneIndex: number, maxHp: number): number {
             const pct = (() => {
-              if (zoneIndex < 6)   return 0.65
-              if (zoneIndex <= 8)  return 0.72
-              if (zoneIndex <= 12) return 0.80 + (zoneIndex - 9) * 0.01
-              if (zoneIndex <= 18) return 0.90 + (zoneIndex - 12) * 0.005
-              return 0.99
+              if (zoneIndex < 6)   return 0.45
+              if (zoneIndex <= 8)  return 0.50
+              if (zoneIndex <= 12) return 0.55
+              if (zoneIndex <= 18) return 0.60
+              if (zoneIndex <= 24) return 0.65
+              return 0.70
             })()
             const isVulnerable = maxHp < 500
-            const safePct = isVulnerable ? Math.min(pct, 0.65) : pct
+            const safePct = isVulnerable ? Math.min(pct, 0.40) : pct
             return Math.floor(maxHp * safePct)
           }
           const currentMaxHp = untrack(() => player.maxHp)
@@ -396,6 +400,7 @@ function processEvents(events: CombatEvent[]): void {
           return
         }
         damagePlayer(dmg)
+        combatState.lastSpecialHitAt = now
         applyWound(player, dmg, 'boss_special', enemy)
         addFloater(`-${dmg}`, 'hit', 'player')
         if (player.hp <= 0) handlePlayerDeath()
@@ -779,6 +784,9 @@ export function enemyAttack(): void {
     enemySkipAttacks--
     return
   }
+
+  // Mutual exclusion: suppress regular hit within 800ms of a special timer hit
+  if (now - combatState.lastSpecialHitAt < 800) return
 
   const zoneIdx  = untrack(() => player.currentZone)
   const stage    = untrack(() => player.currentStage)

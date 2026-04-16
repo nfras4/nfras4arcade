@@ -202,6 +202,8 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-16** - Deployed to nfras4arcade. Summary: Nerf Chief Surgeon — big-hit 2.5x → 2.0x, warmed-up interval 5000ms → 6500ms, warmed-up back-injury chance 20% → 30%. Branch: `main`, commit: `7a8549b`.
+- **2026-04-16** - Deployed to nfras4arcade. Summary: Fix Chief Surgeon boss damage pipeline — wound protection extended to all boss hits, summon cap 25% maxHp, story zone special cap 72%, big-hit 3s cooldown. Branch: `main`, commit: `2748c46`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Fix post-prestige one-shot bug — boss special cap clamped to 70% maxHp when maxHp < 500, regular cap clamped to 60%, boss_special wound rate halved for vulnerable players. Branch: `main`, commit: `d66b2cf`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Add 20 post-game zones (Wolton Deep Labs, Corruption, Void Descent, Deep Void, The Remnant, Null Space, The End) — 88 enemies, boss cap scaling to 85%, stat caps removed, DESCENT leaderboard tab, The First Slime + The End bosses, dungeonComplete overlay, migration 0014. Branch: `main`, commit: `ccab0b5`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Dungeon balance fixes — T5/T6/T7 hybrid gear stats, boss wound rate fix, healPlayer wound ceiling, luck quality caps doubled, skill XP level scaling, patrol gold direct bonus, T2 steel-ring, critDmg init 200. Branch: `main`, commit: `d5a58cd`.
@@ -210,8 +212,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Rename 'Wolton Dungeon' to 'The Dungeon' in all player-visible text; add formatStat() to fix decimal display in upgrade modals. Branch: `main`, commit: `fcc9f44`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Allow concurrent timer activities — 2 base slots, +1 per prestige token (max 5). Branch: `main`, commit: `0ccd7cd`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Leaderboard — swap Fraser Kills column for Highest Level, reformat zone display to 'Zone N SN'. Branch: `main`, commit: `0194180`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Block default names (PLAYER, NICK) from leaderboard submissions to prevent test entries reappearing. Branch: `main`, commit: `5f55cb0`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Fix dungeon gear modal — boss_unique items now show stats, rolled bonuses shown for all items in equip slot modal. Branch: `main`, commit: `46ec5e9`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Gear UI restructure — left panel slots display-only with tooltip, right panel opens equip modal, 2x2 sub-tab grid, clear all loot queue with confirm. Branch: `main`, commit: `17fc325`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Balance fixes (zone-scaled boss caps, lifesteal cap, per-hit wound recovery, Nick HP 55k) + Dodge Arena minigame (Undertale-style canvas). Branch: `main`, commit: `16f20d2`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Remove dodge arena and QTE system from dungeon; wound system fully intact. Branch: `main`, commit: `adfcaa9`.

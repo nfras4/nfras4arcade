@@ -21,9 +21,15 @@
           fetch('/api/dungeon/leaderboard?sort=level&limit=5').then(r => r.json()),
         ])
         lbData = {
-          zone:    zone.entries?.slice(0, 5)    ?? [],
-          prestige: prestige.entries?.slice(0, 5) ?? [],
-          level:   level.entries?.slice(0, 5)   ?? [],
+          zone:    zone.entries?.slice(0, 5).map((e: any) => ({
+            player_name: e.playerName, highest_zone: e.highestZone, highest_stage: e.highestStage,
+          })) ?? [],
+          prestige: prestige.entries?.slice(0, 5).map((e: any) => ({
+            player_name: e.playerName, prestige_tokens: e.prestigeTokens,
+          })) ?? [],
+          level:   level.entries?.slice(0, 5).map((e: any) => ({
+            player_name: e.playerName, player_level: e.playerLevel,
+          })) ?? [],
         }
       } catch { /* keep showing existing data */ }
     }, 120_000)

@@ -480,10 +480,10 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
         id: 'big-hit',
         intervalMs: 7000,
         castBarName: 'SCALPEL STRIKE',
-        description: 'Surgical Strike: BURGO delivers a precise 2.5x damage hit (defence applies).',
+        description: 'Surgical Strike: BURGO delivers a precise 2.0x damage hit (defence applies).',
         action: () => [
-          { type: 'log', message: "▶ When Burgo is healthy, he is genuinely terrifying. [BURGO is striking -- 2.5x damage hit incoming, defence applies]", logType: 'dmg' },
-          { type: 'damage-player', multiplier: 2.5, ignoreDefence: false },
+          { type: 'log', message: "▶ When Burgo is healthy, he is genuinely terrifying. [BURGO is striking -- 2.0x damage hit incoming, defence applies]", logType: 'dmg' },
+          { type: 'damage-player', multiplier: 2.0, ignoreDefence: false },
           { type: 'set-status-icon', icon: '💥', durationMs: 1000 },
         ],
       },

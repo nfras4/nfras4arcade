@@ -567,8 +567,8 @@ function applyPhaseAdjustments(enemyId: string, phaseId: string): void {
       phaseTimerOverrides['bet365'] = 10000
       break
     case 'chief-surgeon:warmed-up':
-      phaseTimerOverrides['big-hit'] = 5000
-      bossBackInjuryChance = 0.20
+      phaseTimerOverrides['big-hit'] = 6500
+      bossBackInjuryChance = 0.30
       break
     case 'chief-surgeon:pain':
       phaseTimerOverrides['big-hit'] = 8000

@@ -586,6 +586,107 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
       { type: 'log', message: "▶ He bills you anyway.", logType: 'sys' },
     ],
   },
+
+  'the-first-slime': {
+    enemyId: 'the-first-slime',
+    phases: [
+      {
+        id: 'just-a-slime',
+        hpThreshold: 1.0,
+        onEnter: () => [
+          { type: 'log', message: "It's just a slime.", logType: 'sys' },
+        ],
+      },
+      {
+        id: 'always-was',
+        hpThreshold: 0.5,
+        onEnter: () => [
+          { type: 'log', message: "It was here before Wolton.", logType: 'sys' },
+          { type: 'log', message: "It will be here after.", logType: 'sys', delayMs: 800 },
+        ],
+        attackModifier: (base) => Math.floor(base * 1.5),
+      },
+      {
+        id: 'the-truth',
+        hpThreshold: 0.1,
+        onEnter: () => [
+          { type: 'log', message: ".", logType: 'sys' },
+        ],
+        attackModifier: (base) => Math.floor(base * 2.5),
+      },
+    ],
+    specialTimers: [
+      {
+        id: 'ancient-pulse',
+        intervalMs: 8000,
+        castBarName: 'ANCIENT PULSE',
+        description: 'Ancient Pulse: The First Slime pulses with ancient energy, dealing 45% of your max HP as damage.',
+        action: () => [
+          { type: 'log', message: "The slime pulses. You feel very old.", logType: 'dmg' },
+          { type: 'damage-player', multiplier: 3.5, ignoreDefence: false },
+        ],
+      },
+    ],
+    onDeath: () => [
+      { type: 'log', message: "The first slime is defeated.", logType: 'sys' },
+      { type: 'log', message: "Nothing changes.", logType: 'sys', delayMs: 1000 },
+      { type: 'log', message: "Everything changes.", logType: 'sys', delayMs: 2000 },
+    ],
+  },
+
+  'the-end': {
+    enemyId: 'the-end',
+    phases: [
+      {
+        id: 'beginning',
+        hpThreshold: 1.0,
+        onEnter: () => [
+          { type: 'log', message: "...", logType: 'sys' },
+        ],
+        attackModifier: (base) => Math.floor(base * 1.0),
+      },
+      {
+        id: 'middle',
+        hpThreshold: 0.75,
+        onEnter: () => [
+          { type: 'log', message: "..", logType: 'sys' },
+        ],
+        attackModifier: (base) => Math.floor(base * 1.3),
+      },
+      {
+        id: 'end',
+        hpThreshold: 0.5,
+        onEnter: () => [
+          { type: 'log', message: ".", logType: 'sys' },
+        ],
+        attackModifier: (base) => Math.floor(base * 1.8),
+      },
+      {
+        id: 'after',
+        hpThreshold: 0.25,
+        onEnter: () => [
+          { type: 'log', message: "", logType: 'sys' },
+        ],
+        attackModifier: (base) => Math.floor(base * 2.5),
+      },
+    ],
+    specialTimers: [
+      {
+        id: 'everything',
+        intervalMs: 6000,
+        castBarName: 'EVERYTHING',
+        description: 'Everything: The End deals 55% of your max HP as unavoidable damage.',
+        action: () => [
+          { type: 'log', message: "", logType: 'dmg' },
+          { type: 'damage-player', multiplier: 4.5, ignoreDefence: false },
+        ],
+      },
+    ],
+    onDeath: () => [
+      { type: 'log', message: "You have reached the end.", logType: 'sys' },
+      { type: 'log', message: "Well done.", logType: 'sys', delayMs: 1500 },
+    ],
+  },
 }
 
 // ── Boss Death Texts ──────────────────────────────────────────────────────
@@ -601,5 +702,7 @@ export const BOSS_DEATH_TEXTS: Record<string, string[]> = {
   'the-ceo':        ['The Wolton Industries board meeting is cancelled.', 'Fraser is escorted out by slimes.'],
   'wolton-prime':   ['Fraser closes his laptop for the last time.', 'Wolton Industries stock price: $0.00'],
   'fraser':         ['Fraser closes his laptop for the last time.', 'Wolton Industries stock price: $0.00'],
-  'nick':           ['YOU BEAT THE GUY WHO MADE THIS GAME.', "He's not happy about it."],
+  'nick':              ['YOU BEAT THE GUY WHO MADE THIS GAME.', "He's not happy about it."],
+  'the-first-slime':   ['The first slime is defeated.', 'Nothing changes. Everything changes.'],
+  'the-end':           ['You have reached the end.', 'Well done.'],
 }

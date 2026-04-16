@@ -78,14 +78,8 @@ export function upgradeCost(stat: StatKey, currentLevel: number): number {
   return calcUpgradeCost(stat, currentLevel)
 }
 
-/** Hard caps to guard against runaway stat inflation. */
-const STAT_SANITY_CAPS: Partial<Record<StatKey, number>> = {
-  attack:   2000,
-  defence:   800,
-  vitality: 50000,
-  critDmg:  1500,
-  speed:     150,
-}
+/** Hard cap for luck only (crit already capped at 80% in combat). */
+const STAT_SANITY_CAPS: Partial<Record<StatKey, number>> = {}
 
 /** Cumulative stat value at a given upgrade level, derived fresh from base each call. */
 export function statValue(stat: StatKey, level: number): number {
@@ -94,10 +88,7 @@ export function statValue(stat: StatKey, level: number): number {
     value += calcUpgradeGain(stat, i)
   }
   const cap = STAT_SANITY_CAPS[stat]
-  if (cap !== undefined && value > cap) {
-    console.warn(`[dungeon] ${stat} hit sanity cap (${value.toFixed(2)} > ${cap})`)
-    return cap
-  }
+  if (cap !== undefined && value > cap) return cap
   return value
 }
 
@@ -116,7 +107,16 @@ export function prestigeMultiplier(tokens: number): number {
 }
 
 /** Level requirement per zone index — both boss kill AND level needed */
-export const ZONE_LEVEL_REQUIREMENTS = [0, 5, 10, 15, 20, 25, 30, 35, 40]
+export const ZONE_LEVEL_REQUIREMENTS = [
+  0,  5,  10, 15, 20, 25, 30, 35, 40,  // zones 0-8 (story)
+  50, 55, 60,                            // zones 9-11 (Wolton Deep)
+  65, 70, 75,                            // zones 12-14 (Corruption)
+  80, 85, 90,                            // zones 15-17 (Void Descent)
+  95, 100, 105,                          // zones 18-20 (Deep Void)
+  110, 115, 120,                         // zones 21-23 (The Remnant)
+  125, 130, 135,                         // zones 24-26 (Null Space)
+  140, 145, 150,                         // zones 27-29 (The End)
+]
 
 /** Attack interval in ms. Exponential decay: 1500 * 0.978^speed, floor 250ms (200ms with 2x toggle). */
 export function calcAttackInterval(speed: number): number {
@@ -210,4 +210,5 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'fraser-3',       name: 'HE KEEPS COMING BACK',  sprite: '😤',  desc: 'Defeat Fraser 3 times' },
   { id: 'zone-9',         name: 'TOP FLOOR',             sprite: '🏢',  desc: 'Reach the 32nd floor' },
   { id: 'secret',         name: '???',                   sprite: '❓',  desc: '???' },
+  { id: 'the-end',        name: 'THE END',               sprite: '🌌', desc: 'Defeat the final boss of the dungeon.' },
 ]

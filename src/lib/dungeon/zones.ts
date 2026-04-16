@@ -541,4 +541,749 @@ export const ZONES: Zone[] = [
     stages: 20,
     storyText: ["You shouldn't be in here.", "You are in here anyway."],
   },
+
+  // ── ZONE 9: WOLTON DEEP LABS I ───────────────────────────────────────────
+  {
+    id: 9,
+    name: "ZONE 10 — WOLTON DEEP LABS",
+    label: "DEEP LABS I",
+    palette: {
+      bg: '#060e0a', panel: '#0c160e', panel2: '#101a12',
+      border: '#1a3020', borderHi: '#2a5030',
+      accent: '#40ff80', accent2: '#20c050',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#0c180e 0,#0c180e 16px,#0e1e10 16px,#0e1e10 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#050d07'); g.addColorStop(0.7, '#080f09'); g.addColorStop(1, '#0a120b')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Tile grid
+      ctx.strokeStyle = '#0f1e12'; ctx.lineWidth = 1
+      for (let y = 0; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
+      for (let x = 0; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke() }
+      // Overhead lights - bright rectangles
+      ctx.fillStyle = '#20ff6018'
+      for (let x = 20; x < w - 20; x += 60) {
+        ctx.fillRect(x, 2, 30, 6)
+        const lg = ctx.createLinearGradient(x, 8, x, h * 0.5)
+        lg.addColorStop(0, '#20ff6010'); lg.addColorStop(1, 'transparent')
+        ctx.fillStyle = lg; ctx.fillRect(x, 8, 30, h * 0.4)
+        ctx.fillStyle = '#20ff6018'
+      }
+      // Lab equipment silhouettes on walls
+      ctx.fillStyle = '#0e1c10'
+      for (let x = 10; x < w - 40; x += 50) {
+        const eh = 16 + (x % 3) * 8
+        ctx.fillRect(x, h * 0.12, 35, eh)
+        ctx.fillStyle = '#18ff5008'; ctx.fillRect(x + 4, h * 0.12 + 3, 10, 6)
+        ctx.fillStyle = '#0e1c10'
+      }
+    },
+    particles: [
+      { color: '#20ff5022', size: 1, count: 4, speedY: -0.3, speedX: 0.1, life: 3000 },
+    ],
+    enemyPool: ['corrupted-slime', 'rogue-drone', 'lab-specimen'],
+    elitePool: ['failed-clone', 'security-protocol'],
+    miniboss: 'containment-breach',
+    boss: 'dr-01',
+    stages: 20,
+    storyText: ["The labs beneath Wolton go deeper than the records show.", "Something was being grown down here."],
+  },
+
+  // ── ZONE 10: WOLTON DEEP LABS II ─────────────────────────────────────────
+  {
+    id: 10,
+    name: "ZONE 11 — WOLTON DEEP LABS II",
+    label: "DEEP LABS II",
+    palette: {
+      bg: '#080e06', panel: '#0e1608', panel2: '#121a0c',
+      border: '#203010', borderHi: '#305018',
+      accent: '#80ff40', accent2: '#50c020',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#0e1a08 0,#0e1a08 16px,#101e0c 16px,#101e0c 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#060c04'); g.addColorStop(0.6, '#080e06'); g.addColorStop(1, '#0a1208')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Cracked tile grid
+      ctx.strokeStyle = '#0f1c09'; ctx.lineWidth = 1
+      for (let y = 0; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() }
+      for (let x = 0; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke() }
+      // Cracks
+      ctx.strokeStyle = '#60ff2015'; ctx.lineWidth = 1
+      for (let i = 0; i < 6; i++) {
+        const cx = (i * 67 + 20) % w
+        const cy = (i * 43 + 10) % (h * 0.6)
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + 15, cy + 20); ctx.lineTo(cx + 8, cy + 35); ctx.stroke()
+      }
+      // Green fluid seeping from walls
+      for (let x = 0; x < w; x += 40) {
+        const fl = ctx.createLinearGradient(x, 0, x, h * 0.4)
+        fl.addColorStop(0, '#80ff2020'); fl.addColorStop(1, 'transparent')
+        ctx.fillStyle = fl; ctx.fillRect(x, 0, 8, h * 0.4)
+      }
+    },
+    particles: [
+      { color: '#60ff2030', size: 2, count: 5, speedY: -0.2, speedX: 0.05, life: 4000 },
+      { color: '#40c01020', size: 1, count: 3, speedY: 0.1, speedX: 0, life: 5000 },
+    ],
+    enemyPool: ['corrupted-slime', 'lab-specimen', 'failed-clone'],
+    elitePool: ['failed-clone', 'security-protocol'],
+    miniboss: 'alpha-specimen',
+    boss: 'the-specimen',
+    stages: 20,
+    storyText: ["The containment held. For a while.", "It doesn't hold anymore."],
+  },
+
+  // ── ZONE 11: WOLTON DEEP LABS III ────────────────────────────────────────
+  {
+    id: 11,
+    name: "ZONE 12 — WOLTON DEEP LABS III",
+    label: "DEEP LABS III",
+    palette: {
+      bg: '#0a0e04', panel: '#141804', panel2: '#181e06',
+      border: '#283008', borderHi: '#405010',
+      accent: '#c0ff20', accent2: '#80c010',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#141804 0,#141804 16px,#181e06 16px,#181e06 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#080c02'); g.addColorStop(0.5, '#0a0e04'); g.addColorStop(1, '#0c1006')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Fully corrupted - green everywhere
+      ctx.fillStyle = '#c0ff1008'
+      ctx.fillRect(0, 0, w, h)
+      // Corrupted walls
+      for (let x = 0; x < w; x += 16) {
+        for (let y = 0; y < h * 0.8; y += 16) {
+          if (Math.random() > 0.6) {
+            ctx.fillStyle = `rgba(180,255,${Math.floor(Math.random()*80)},0.06)`
+            ctx.fillRect(x, y, 14, 14)
+          }
+        }
+      }
+      // Pulsing green core light
+      const cl = ctx.createRadialGradient(w * 0.5, h * 0.3, 0, w * 0.5, h * 0.3, w * 0.4)
+      cl.addColorStop(0, '#80ff0010'); cl.addColorStop(1, 'transparent')
+      ctx.fillStyle = cl; ctx.fillRect(0, 0, w, h)
+    },
+    particles: [
+      { color: '#a0ff1040', size: 2, count: 8, speedY: -0.4, speedX: 0.2, life: 2500 },
+      { color: '#60c00820', size: 1, count: 4, speedY: -0.1, speedX: -0.1, life: 4000 },
+    ],
+    enemyPool: ['lab-specimen', 'failed-clone', 'security-protocol'],
+    elitePool: ['failed-clone', 'security-protocol'],
+    miniboss: 'core-guardian',
+    boss: 'nexus',
+    stages: 20,
+    storyText: ["The nexus was never meant to become conscious.", "It did anyway."],
+  },
+
+  // ── ZONE 12: WOLTON CORRUPTION I ─────────────────────────────────────────
+  {
+    id: 12,
+    name: "ZONE 13 — WOLTON CORRUPTION",
+    label: "CORRUPTION I",
+    palette: {
+      bg: '#0e0a04', panel: '#180e06', panel2: '#1e1408',
+      border: '#302008', borderHi: '#503010',
+      accent: '#f0c040', accent2: '#c09020',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#181006 0,#181006 16px,#1c1408 16px,#1c1408 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#0c0802'); g.addColorStop(0.6, '#0e0a04'); g.addColorStop(1, '#100c06')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Corporate Wolton HQ with subtle cracks
+      ctx.fillStyle = '#1a1008'
+      for (let y = h * 0.1; y < h * 0.6; y += 20) {
+        ctx.fillRect(10, y, w - 20, 14)
+      }
+      // Gold accents
+      ctx.strokeStyle = '#f0c04020'; ctx.lineWidth = 2
+      ctx.strokeRect(8, h * 0.08, w - 16, h * 0.55)
+      // Subtle cracks
+      ctx.strokeStyle = '#c0300010'; ctx.lineWidth = 1
+      for (let i = 0; i < 4; i++) {
+        const cx = i * w / 4 + 20
+        ctx.beginPath(); ctx.moveTo(cx, h * 0.1); ctx.lineTo(cx + 10, h * 0.3); ctx.stroke()
+      }
+      // Glitching signage
+      ctx.fillStyle = '#f0c04015'
+      ctx.fillRect(w * 0.3, h * 0.05, w * 0.4, 12)
+    },
+    particles: [
+      { color: '#f0c04025', size: 1, count: 3, speedY: -0.3, speedX: 0.1, life: 3000 },
+    ],
+    enemyPool: ['fractured-guard', 'void-intern', 'glitch-entity'],
+    elitePool: ['broken-construct', 'reality-tear'],
+    miniboss: 'the-fracture',
+    boss: 'shard',
+    stages: 20,
+    storyText: ["Wolton HQ looked different from the inside.", "From this side, it looks like it's coming apart."],
+  },
+
+  // ── ZONE 13: WOLTON CORRUPTION II ────────────────────────────────────────
+  {
+    id: 13,
+    name: "ZONE 14 — WOLTON CORRUPTION II",
+    label: "CORRUPTION II",
+    palette: {
+      bg: '#0e0608', panel: '#18080e', panel2: '#1c0c12',
+      border: '#301018', borderHi: '#501828',
+      accent: '#c04080', accent2: '#902060',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#18080c 0,#18080c 16px,#1c0c10 16px,#1c0c10 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#0c0406'); g.addColorStop(0.5, '#0e0608'); g.addColorStop(1, '#10080a')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Half Wolton, half void
+      ctx.fillStyle = '#180810'
+      for (let y = h * 0.1; y < h * 0.5; y += 20) {
+        ctx.fillRect(10, y, (w - 20) * 0.6, 14)
+      }
+      // Void seeping from right side
+      const vg = ctx.createLinearGradient(w * 0.5, 0, w, 0)
+      vg.addColorStop(0, 'transparent'); vg.addColorStop(1, '#c0204020')
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h)
+      // Corrupted gold shards
+      ctx.fillStyle = '#c04080' + '18'
+      for (let i = 0; i < 8; i++) {
+        const sx = (i * 53 + 15) % w; const sy = (i * 37) % (h * 0.7)
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 6, sy - 10); ctx.lineTo(sx + 12, sy); ctx.closePath(); ctx.fill()
+      }
+    },
+    particles: [
+      { color: '#c0204030', size: 2, count: 5, speedY: -0.3, speedX: -0.1, life: 3000 },
+      { color: '#f0c04015', size: 1, count: 2, speedY: -0.2, speedX: 0.1, life: 4000 },
+    ],
+    enemyPool: ['glitch-entity', 'broken-construct', 'reality-tear'],
+    elitePool: ['broken-construct', 'reality-tear'],
+    miniboss: 'void-architect',
+    boss: 'the-architect',
+    stages: 20,
+    storyText: ["The architecture of this place no longer makes sense.", "Rooms lead to other rooms that shouldn't exist."],
+  },
+
+  // ── ZONE 14: WOLTON CORRUPTION III ───────────────────────────────────────
+  {
+    id: 14,
+    name: "ZONE 15 — WOLTON CORRUPTION III",
+    label: "CORRUPTION III",
+    palette: {
+      bg: '#08040e', panel: '#0e0618', panel2: '#12081e',
+      border: '#200830', borderHi: '#381050',
+      accent: '#8020c0', accent2: '#5010a0',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#0e0818 0,#0e0818 16px,#120c1e 16px,#120c1e 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#060210'); g.addColorStop(0.5, '#08040e'); g.addColorStop(1, '#0a0612')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Barely recognisable corporate structure - mostly void
+      ctx.fillStyle = '#180830'
+      ctx.fillRect(10, h * 0.15, 40, h * 0.4)
+      ctx.fillRect(w - 50, h * 0.2, 40, h * 0.35)
+      // Purple void fill
+      const pvg = ctx.createRadialGradient(w * 0.5, h * 0.4, 0, w * 0.5, h * 0.4, w * 0.5)
+      pvg.addColorStop(0, '#6010a020'); pvg.addColorStop(1, 'transparent')
+      ctx.fillStyle = pvg; ctx.fillRect(0, 0, w, h)
+      // Echo reflection fragments
+      ctx.strokeStyle = '#8020c018'; ctx.lineWidth = 1
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath()
+        ctx.moveTo((i * 40 + 10) % w, h * 0.2)
+        ctx.lineTo(((i * 40 + 10) % w) + 30, h * 0.5)
+        ctx.stroke()
+      }
+    },
+    particles: [
+      { color: '#7020c035', size: 2, count: 6, speedY: -0.4, speedX: 0.15, life: 3500 },
+      { color: '#5010a020', size: 1, count: 3, speedY: -0.2, speedX: -0.1, life: 5000 },
+    ],
+    enemyPool: ['broken-construct', 'reality-tear', 'glitch-entity'],
+    elitePool: ['broken-construct', 'reality-tear'],
+    miniboss: 'mirror-shard',
+    boss: 'echo',
+    stages: 20,
+    storyText: ["You can hear your own footsteps coming from the wrong direction.", "Something is watching. It has your face."],
+  },
+
+  // ── ZONE 15: VOID DESCENT I ───────────────────────────────────────────────
+  {
+    id: 15,
+    name: "ZONE 16 — VOID DESCENT",
+    label: "VOID DESCENT I",
+    palette: {
+      bg: '#020a0c', panel: '#04100e', panel2: '#061412',
+      border: '#0c2820', borderHi: '#184038',
+      accent: '#20c0a0', accent2: '#10a080',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#040e0c 0,#040e0c 16px,#061210 16px,#061210 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#010608'); g.addColorStop(0.6, '#020a0c'); g.addColorStop(1, '#030c0e')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Floating geometric shapes - some structure remains
+      ctx.strokeStyle = '#10806020'; ctx.lineWidth = 1
+      for (let i = 0; i < 5; i++) {
+        const x = (i * 50 + 20) % w; const y = (i * 30 + 20) % (h * 0.5)
+        const s = 20 + i * 8
+        ctx.strokeRect(x, y, s, s)
+      }
+      // Thin light lines in distance
+      ctx.strokeStyle = '#20c0a012'; ctx.lineWidth = 1
+      for (let i = 0; i < 4; i++) {
+        const y = h * (0.3 + i * 0.15)
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+      }
+      // Void depth gradient
+      const vg = ctx.createLinearGradient(0, 0, 0, h)
+      vg.addColorStop(0, 'transparent'); vg.addColorStop(1, '#010608')
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h)
+    },
+    particles: [
+      { color: '#20c0a020', size: 1, count: 5, speedY: -0.3, speedX: 0.05, life: 4000 },
+      { color: '#10806015', size: 1, count: 3, speedY: -0.1, speedX: 0, life: 6000 },
+    ],
+    enemyPool: ['void-wisp', 'null-shard', 'the-forgotten'],
+    elitePool: ['echo-fragment', 'silence'],
+    miniboss: 'void-herald',
+    boss: 'vestige',
+    stages: 20,
+    storyText: ["There is no floor. There is no ceiling. There is only down.", "Keep going."],
+  },
+
+  // ── ZONE 16: VOID DESCENT II ──────────────────────────────────────────────
+  {
+    id: 16,
+    name: "ZONE 17 — VOID DESCENT II",
+    label: "VOID DESCENT II",
+    palette: {
+      bg: '#020608', panel: '#040a0c', panel2: '#060c0e',
+      border: '#0c1820', borderHi: '#183040',
+      accent: '#108060', accent2: '#086040',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#040a0c 0,#040a0c 16px,#060c0e 16px,#060c0e 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#010406'); g.addColorStop(0.5, '#020608'); g.addColorStop(1, '#03070a')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Almost nothing - faint geometry dissolving
+      ctx.strokeStyle = '#08604010'; ctx.lineWidth = 1
+      for (let i = 0; i < 3; i++) {
+        const x = (i * 70 + 30) % w; const y = (i * 40 + 15) % (h * 0.4)
+        const s = 15 + i * 6
+        ctx.strokeRect(x, y, s, s)
+        // Dissolving effect - dotted lines
+        ctx.beginPath(); ctx.setLineDash([2, 4])
+        ctx.moveTo(x + s, y); ctx.lineTo(x + s + 20, y + 10)
+        ctx.stroke(); ctx.setLineDash([])
+      }
+    },
+    particles: [
+      { color: '#10806015', size: 1, count: 4, speedY: -0.2, speedX: 0.03, life: 5000 },
+    ],
+    enemyPool: ['null-shard', 'the-forgotten', 'echo-fragment'],
+    elitePool: ['echo-fragment', 'silence'],
+    miniboss: 'null-prime',
+    boss: 'the-weight',
+    stages: 20,
+    storyText: ["This place has forgotten it existed.", "You have not forgotten. Not yet."],
+  },
+
+  // ── ZONE 17: VOID DESCENT III ─────────────────────────────────────────────
+  {
+    id: 17,
+    name: "ZONE 18 — VOID DESCENT III",
+    label: "VOID DESCENT III",
+    palette: {
+      bg: '#010406', panel: '#020608', panel2: '#03070a',
+      border: '#081220', borderHi: '#102030',
+      accent: '#084040', accent2: '#062828',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#020608 0,#020608 16px,#03070a 16px,#03070a 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#010304'); g.addColorStop(1, '#010406')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Single faint dissolving shape
+      ctx.strokeStyle = '#06303008'; ctx.lineWidth = 1
+      ctx.strokeRect(w * 0.35, h * 0.15, w * 0.3, h * 0.25)
+    },
+    particles: [
+      { color: '#08404010', size: 1, count: 2, speedY: -0.15, speedX: 0, life: 7000 },
+    ],
+    enemyPool: ['the-forgotten', 'echo-fragment', 'silence'],
+    elitePool: ['echo-fragment', 'silence'],
+    miniboss: 'unraveller',
+    boss: 'collapse',
+    stages: 20,
+    storyText: ["Geometry is a suggestion down here.", "It is not a very convincing one."],
+  },
+
+  // ── ZONE 18: DEEP VOID I ──────────────────────────────────────────────────
+  {
+    id: 18,
+    name: "ZONE 19 — DEEP VOID",
+    label: "DEEP VOID I",
+    palette: {
+      bg: '#030200', panel: '#060400', panel2: '#080500',
+      border: '#180c00', borderHi: '#2c1800',
+      accent: '#806010', accent2: '#604008',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#060400 0,#060400 16px,#080600 16px,#080600 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#020100'); g.addColorStop(1, '#030200')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Single light source - upper right
+      const light = ctx.createRadialGradient(w * 0.8, h * 0.15, 0, w * 0.8, h * 0.15, w * 0.35)
+      light.addColorStop(0, '#806010' + '14'); light.addColorStop(1, 'transparent')
+      ctx.fillStyle = light; ctx.fillRect(0, 0, w, h)
+      // Faint ancient symbols - triangles and circles
+      ctx.strokeStyle = '#60400808'; ctx.lineWidth = 1
+      const syms: [number, number][] = [[w*0.2,h*0.3],[w*0.6,h*0.2],[w*0.4,h*0.5]]
+      for (const [sx,sy] of syms) {
+        ctx.beginPath(); ctx.arc(sx, sy, 12, 0, Math.PI*2); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(sx, sy-10); ctx.lineTo(sx+9, sy+5); ctx.lineTo(sx-9, sy+5); ctx.closePath(); ctx.stroke()
+      }
+    },
+    particles: [
+      { color: '#80601010', size: 1, count: 2, speedY: -0.1, speedX: 0, life: 8000 },
+    ],
+    enemyPool: ['ancient-remnant', 'first-thing', 'void-prime'],
+    elitePool: ['the-nameless', 'origin-shard'],
+    miniboss: 'deep-remnant',
+    boss: 'origin',
+    stages: 20,
+    storyText: ["The darkness here has weight.", "Something in it predates Wolton. Predates Brisbane. Predates memory."],
+  },
+
+  // ── ZONE 19: DEEP VOID II ─────────────────────────────────────────────────
+  {
+    id: 19,
+    name: "ZONE 20 — DEEP VOID II",
+    label: "DEEP VOID II",
+    palette: {
+      bg: '#020100', panel: '#040200', panel2: '#060300',
+      border: '#100800', borderHi: '#201000',
+      accent: '#604008', accent2: '#402804',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#040200 0,#040200 16px,#060300 16px,#060300 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#020100'; ctx.fillRect(0, 0, w, h)
+      // Ancient symbols only - more numerous
+      ctx.strokeStyle = '#50300606'; ctx.lineWidth = 1
+      for (let i = 0; i < 7; i++) {
+        const sx = (i * 43 + 15) % w; const sy = (i * 31 + 20) % (h * 0.7)
+        if (i % 2 === 0) {
+          ctx.beginPath(); ctx.arc(sx, sy, 8, 0, Math.PI*2); ctx.stroke()
+        } else {
+          ctx.beginPath(); ctx.moveTo(sx, sy-8); ctx.lineTo(sx+7, sy+4); ctx.lineTo(sx-7, sy+4); ctx.closePath(); ctx.stroke()
+        }
+      }
+    },
+    particles: [
+      { color: '#50300608', size: 1, count: 2, speedY: -0.08, speedX: 0, life: 9000 },
+    ],
+    enemyPool: ['void-prime', 'the-nameless', 'origin-shard'],
+    elitePool: ['the-nameless', 'origin-shard'],
+    miniboss: 'void-sovereign',
+    boss: 'silence-absolute',
+    stages: 20,
+    storyText: ["There is no light here.", "There never was."],
+  },
+
+  // ── ZONE 20: DEEP VOID III — THE FIRST SLIME ─────────────────────────────
+  {
+    id: 20,
+    name: "ZONE 21 — DEEP VOID III",
+    label: "DEEP VOID III",
+    palette: {
+      bg: '#010100', panel: '#020200', panel2: '#030300',
+      border: '#080800', borderHi: '#101000',
+      accent: '#40c040', accent2: '#20a020',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#020200 0,#020200 16px,#030300 16px,#030300 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#010100'; ctx.fillRect(0, 0, w, h)
+      // Faint green pedestal light - callback to zone 1
+      const gl = ctx.createRadialGradient(w * 0.5, h * 0.65, 0, w * 0.5, h * 0.65, w * 0.2)
+      gl.addColorStop(0, '#20c02018'); gl.addColorStop(1, 'transparent')
+      ctx.fillStyle = gl; ctx.fillRect(0, 0, w, h)
+      // Simple pedestal shape
+      ctx.fillStyle = '#101800'; ctx.fillRect(w * 0.4, h * 0.62, w * 0.2, h * 0.06)
+    },
+    particles: [
+      { color: '#30c03020', size: 2, count: 3, speedY: -0.3, speedX: 0.05, life: 4000 },
+    ],
+    enemyPool: ['origin-shard', 'first-thing', 'the-nameless'],
+    elitePool: ['the-nameless', 'origin-shard'],
+    miniboss: 'the-penultimate',
+    boss: 'the-first-slime',
+    stages: 20,
+    storyText: ["It was here before everything.", "It will be here after."],
+  },
+
+  // ── ZONE 21: THE REMNANT I ────────────────────────────────────────────────
+  {
+    id: 21,
+    name: "ZONE 22 — THE REMNANT",
+    label: "THE REMNANT I",
+    palette: {
+      bg: '#040408', panel: '#080810', panel2: '#0c0c16',
+      border: '#181830', borderHi: '#282860',
+      accent: '#4040c0', accent2: '#2828a0',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#080810 0,#080810 16px,#0c0c16 16px,#0c0c16 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#020206'); g.addColorStop(0.6, '#040408'); g.addColorStop(1, '#05050a')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // Fragments of earlier zones floating - basement corner
+      ctx.fillStyle = '#0c1a0c'; ctx.fillRect(10, h*0.2, 50, 40)
+      ctx.fillStyle = '#1a140a'; ctx.fillRect(w-60, h*0.3, 50, 30)
+      // Void in between
+      const rg = ctx.createRadialGradient(w*0.5, h*0.4, 0, w*0.5, h*0.4, w*0.3)
+      rg.addColorStop(0, '#2020a015'); rg.addColorStop(1, 'transparent')
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h)
+    },
+    particles: [
+      { color: '#3030c025', size: 2, count: 5, speedY: -0.3, speedX: 0.1, life: 3500 },
+      { color: '#181870' + '15', size: 1, count: 3, speedY: -0.15, speedX: 0, life: 5000 },
+    ],
+    enemyPool: ['remnant-wisp', 'fractured-origin', 'null-sovereign'],
+    elitePool: ['void-colossus', 'the-between'],
+    miniboss: 'remnant-prime',
+    boss: 'the-remnant-boss',
+    stages: 20,
+    storyText: ["Fragments of the journey float here.", "The dungeon is eating its own history."],
+  },
+
+  // ── ZONE 22: THE REMNANT II ───────────────────────────────────────────────
+  {
+    id: 22,
+    name: "ZONE 23 — THE REMNANT II",
+    label: "THE REMNANT II",
+    palette: {
+      bg: '#040208', panel: '#080410', panel2: '#0c0616',
+      border: '#180830', borderHi: '#281060',
+      accent: '#6020c0', accent2: '#4010a0',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#080410 0,#080410 16px,#0c0616 16px,#0c0616 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#020106'); g.addColorStop(0.5, '#040208'); g.addColorStop(1, '#05030a')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // More fragmented - pieces smaller, more scattered
+      ctx.fillStyle = '#0c1608'; ctx.fillRect(20, h*0.25, 30, 20)
+      ctx.fillStyle = '#141010'; ctx.fillRect(w*0.5, h*0.15, 35, 25)
+      ctx.fillStyle = '#160e08'; ctx.fillRect(w-45, h*0.5, 35, 20)
+      // More void
+      const rg = ctx.createRadialGradient(w*0.5, h*0.45, 0, w*0.5, h*0.45, w*0.35)
+      rg.addColorStop(0, '#4010a015'); rg.addColorStop(1, 'transparent')
+      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h)
+    },
+    particles: [
+      { color: '#5018b025', size: 2, count: 6, speedY: -0.35, speedX: 0.12, life: 3000 },
+    ],
+    enemyPool: ['fractured-origin', 'null-sovereign', 'void-colossus'],
+    elitePool: ['void-colossus', 'the-between'],
+    miniboss: 'null-colossus',
+    boss: 'the-null',
+    stages: 20,
+    storyText: ["The pieces don't fit together.", "They never did."],
+  },
+
+  // ── ZONE 23: THE REMNANT III ──────────────────────────────────────────────
+  {
+    id: 23,
+    name: "ZONE 24 — THE REMNANT III",
+    label: "THE REMNANT III",
+    palette: {
+      bg: '#020208', panel: '#04040e', panel2: '#060614',
+      border: '#100830', borderHi: '#180c50',
+      accent: '#200880', accent2: '#14056a',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#04040e 0,#04040e 16px,#060614 16px,#060614 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#020208'; ctx.fillRect(0, 0, w, h)
+      // Barely visible fragments - just outlines
+      ctx.strokeStyle = '#18086015'; ctx.lineWidth = 1
+      ctx.strokeRect(15, h*0.3, 25, 15)
+      ctx.strokeRect(w-40, h*0.2, 30, 18)
+      ctx.strokeRect(w*0.4, h*0.5, 20, 12)
+      // Deep indigo void
+      const vg = ctx.createRadialGradient(w*0.5, h*0.5, 0, w*0.5, h*0.5, w*0.4)
+      vg.addColorStop(0, '#10047010'); vg.addColorStop(1, 'transparent')
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h)
+    },
+    particles: [
+      { color: '#18067020', size: 1, count: 4, speedY: -0.25, speedX: 0.08, life: 4500 },
+    ],
+    enemyPool: ['null-sovereign', 'void-colossus', 'the-between'],
+    elitePool: ['void-colossus', 'the-between'],
+    miniboss: 'final-guardian',
+    boss: 'the-nothing',
+    stages: 20,
+    storyText: ["Nothing is left.", "You are still here."],
+  },
+
+  // ── ZONE 24: NULL SPACE I ─────────────────────────────────────────────────
+  {
+    id: 24,
+    name: "ZONE 25 — NULL SPACE",
+    label: "NULL SPACE I",
+    palette: {
+      bg: '#0e0e10', panel: '#141416', panel2: '#181818',
+      border: '#303038', borderHi: '#505060',
+      accent: '#e0e0ff', accent2: '#c0c0e0',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#141414 0,#141414 16px,#181818 16px,#181818 32px)',
+    drawBg(ctx, w, h) {
+      const g = ctx.createLinearGradient(0, 0, 0, h)
+      g.addColorStop(0, '#0c0c0e'); g.addColorStop(0.7, '#0e0e10'); g.addColorStop(1, '#101012')
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+      // White elements on dark - feels inverted
+      ctx.fillStyle = '#e0e0ff12'
+      for (let y = 0; y < h * 0.6; y += 20) {
+        ctx.fillRect(8, y, w - 16, 12)
+      }
+      // White geometric shapes
+      ctx.strokeStyle = '#c0c0e020'; ctx.lineWidth = 1
+      for (let i = 0; i < 4; i++) {
+        const x = (i * 55 + 20) % w; const y = (i * 35 + 15) % (h * 0.5)
+        ctx.strokeRect(x, y, 30, 20)
+      }
+    },
+    particles: [
+      { color: '#c0c0ff20', size: 1, count: 5, speedY: -0.3, speedX: 0.1, life: 3500 },
+    ],
+    enemyPool: ['space-remnant', 'void-titan', 'null-ancient'],
+    elitePool: ['the-erased', 'space-sovereign'],
+    miniboss: 'space-colossus',
+    boss: 'null-prime-boss',
+    stages: 20,
+    storyText: ["Something about this place is wrong.", "It is too bright. Too clean. Too absent."],
+  },
+
+  // ── ZONE 25: NULL SPACE II ────────────────────────────────────────────────
+  {
+    id: 25,
+    name: "ZONE 26 — NULL SPACE II",
+    label: "NULL SPACE II",
+    palette: {
+      bg: '#080808', panel: '#0c0c0c', panel2: '#101010',
+      border: '#282828', borderHi: '#404040',
+      accent: '#c0c0e0', accent2: '#a0a0c0',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#0c0c0c 0,#0c0c0c 16px,#101010 16px,#101010 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, w, h)
+      // Half white, half dark panels alternating
+      ctx.fillStyle = '#e0e0ff0a'
+      for (let x = 0; x < w; x += 40) {
+        if (Math.floor(x / 40) % 2 === 0) {
+          ctx.fillRect(x, 0, 38, h)
+        }
+      }
+      // Thin separation lines
+      ctx.strokeStyle = '#a0a0c018'; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5); ctx.stroke()
+    },
+    particles: [
+      { color: '#a0a0e018', size: 1, count: 4, speedY: -0.25, speedX: 0.08, life: 4000 },
+    ],
+    enemyPool: ['null-ancient', 'the-erased', 'space-sovereign'],
+    elitePool: ['the-erased', 'space-sovereign'],
+    miniboss: 'void-ancient',
+    boss: 'the-vast',
+    stages: 20,
+    storyText: ["You can no longer tell what is real.", "You are not sure it matters."],
+  },
+
+  // ── ZONE 26: NULL SPACE III ───────────────────────────────────────────────
+  {
+    id: 26,
+    name: "ZONE 27 — NULL SPACE III",
+    label: "NULL SPACE III",
+    palette: {
+      bg: '#040404', panel: '#080808', panel2: '#0c0c0c',
+      border: '#181818', borderHi: '#282828',
+      accent: '#a0a0c0', accent2: '#808090',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#080808 0,#080808 16px,#0c0c0c 16px,#0c0c0c 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#040404'; ctx.fillRect(0, 0, w, h)
+      // White shapes on dark - reversed from zone 24
+      ctx.fillStyle = '#a0a0c010'
+      for (let i = 0; i < 6; i++) {
+        const x = (i * 40 + 15) % w; const y = (i * 28 + 10) % (h * 0.6)
+        ctx.fillRect(x, y, 25, 18)
+      }
+      ctx.strokeStyle = '#80809015'; ctx.lineWidth = 1
+      ctx.strokeRect(w * 0.25, h * 0.25, w * 0.5, h * 0.4)
+    },
+    particles: [
+      { color: '#808090' + '15', size: 1, count: 3, speedY: -0.2, speedX: 0.05, life: 5000 },
+    ],
+    enemyPool: ['the-erased', 'space-sovereign', 'null-ancient'],
+    elitePool: ['the-erased', 'space-sovereign'],
+    miniboss: 'space-prime',
+    boss: 'the-infinite',
+    stages: 20,
+    storyText: ["Infinity is not a place.", "You are in it anyway."],
+  },
+
+  // ── ZONE 27: THE END I ────────────────────────────────────────────────────
+  {
+    id: 27,
+    name: "ZONE 28 — THE END",
+    label: "THE END I",
+    palette: {
+      bg: '#020202', panel: '#040404', panel2: '#060606',
+      border: '#101010', borderHi: '#202020',
+      accent: '#808080', accent2: '#606060',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#040404 0,#040404 16px,#060606 16px,#060606 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#020202'; ctx.fillRect(0, 0, w, h)
+      ctx.strokeStyle = '#606060'; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(0, h * 0.5); ctx.lineTo(w, h * 0.5); ctx.stroke()
+    },
+    particles: [
+      { color: '#50505010', size: 1, count: 2, speedY: -0.1, speedX: 0, life: 6000 },
+    ],
+    enemyPool: ['end-remnant', 'final-wisp', 'end-sovereign'],
+    elitePool: ['the-last', 'end-ancient'],
+    miniboss: 'end-colossus',
+    boss: 'the-first',
+    stages: 20,
+    storyText: ["A line.", "That's all."],
+  },
+
+  // ── ZONE 28: THE END II — TRUE FINAL ─────────────────────────────────────
+  {
+    id: 28,
+    name: "ZONE 29 — THE END",
+    label: "THE END",
+    palette: {
+      bg: '#000000', panel: '#010101', panel2: '#020202',
+      border: '#080808', borderHi: '#141414',
+      accent: '#404040', accent2: '#282828',
+    },
+    groundPattern: 'repeating-linear-gradient(90deg,#010101 0,#010101 16px,#020202 16px,#020202 32px)',
+    drawBg(ctx, w, h) {
+      ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, w, h)
+    },
+    particles: [],
+    enemyPool: ['final-wisp', 'end-sovereign', 'the-last'],
+    elitePool: ['the-last', 'end-ancient'],
+    miniboss: 'the-last-guardian',
+    boss: 'the-end',
+    stages: 20,
+    storyText: [".", ""],
+  },
 ]

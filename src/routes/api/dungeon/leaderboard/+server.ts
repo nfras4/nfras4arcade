@@ -12,6 +12,7 @@ type LeaderboardRow = {
   prestigeTokens: number
   fraserKills: number
   nickDefeated: number
+  deepestPostGameZone: number
   updatedAt: number
 }
 
@@ -28,7 +29,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
   const {
     playerName, highestZone, highestStage, playerLevel,
-    prestigeTokens, fraserKills, nickDefeated, totalPlaytime,
+    prestigeTokens, fraserKills, nickDefeated, totalPlaytime, deepestPostGameZone,
   } = body as Record<string, unknown>
 
   if (typeof playerName !== 'string' || !playerName.trim()) {
@@ -67,6 +68,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
           fraser_kills = MAX(fraser_kills, ?),
           nick_defeated = MAX(nick_defeated, ?),
           total_playtime = MAX(total_playtime, ?),
+          deepest_post_game_zone = MAX(COALESCE(deepest_post_game_zone, 0), ?),
           last_submit = ?,
           updated_at = ?
           WHERE player_name = ?`)
@@ -76,6 +78,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
           Number(fraserKills) || 0,
           nickDefeated ? 1 : 0,
           Number(totalPlaytime) || 0,
+          Number(deepestPostGameZone) || 0,
           now, now, name,
         )
         .run()
@@ -87,18 +90,19 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   await db
     .prepare(`INSERT INTO dungeon_leaderboard
       (player_name, highest_zone, highest_stage, player_level, prestige_tokens,
-       fraser_kills, nick_defeated, total_playtime, last_submit, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       fraser_kills, nick_defeated, total_playtime, deepest_post_game_zone, last_submit, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(player_name) DO UPDATE SET
-        highest_zone    = excluded.highest_zone,
-        highest_stage   = excluded.highest_stage,
-        player_level    = MAX(player_level, excluded.player_level),
-        prestige_tokens = MAX(prestige_tokens, excluded.prestige_tokens),
-        fraser_kills    = MAX(fraser_kills, excluded.fraser_kills),
-        nick_defeated   = MAX(nick_defeated, excluded.nick_defeated),
-        total_playtime  = MAX(total_playtime, excluded.total_playtime),
-        last_submit     = excluded.last_submit,
-        updated_at      = excluded.updated_at`)
+        highest_zone           = excluded.highest_zone,
+        highest_stage          = excluded.highest_stage,
+        player_level           = MAX(player_level, excluded.player_level),
+        prestige_tokens        = MAX(prestige_tokens, excluded.prestige_tokens),
+        fraser_kills           = MAX(fraser_kills, excluded.fraser_kills),
+        nick_defeated          = MAX(nick_defeated, excluded.nick_defeated),
+        total_playtime         = MAX(total_playtime, excluded.total_playtime),
+        deepest_post_game_zone = MAX(COALESCE(deepest_post_game_zone, 0), excluded.deepest_post_game_zone),
+        last_submit            = excluded.last_submit,
+        updated_at             = excluded.updated_at`)
     .bind(
       name,
       newZone, newStage,
@@ -107,6 +111,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
       Number(fraserKills) || 0,
       nickDefeated ? 1 : 0,
       Number(totalPlaytime) || 0,
+      Number(deepestPostGameZone) || 0,
       now, now,
     )
     .run()
@@ -126,13 +131,16 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     prestige: 'prestige_tokens DESC, highest_zone DESC',
     level:   'player_level DESC, highest_zone DESC',
     fraser:  'fraser_kills DESC, highest_zone DESC',
+    descent: 'deepest_post_game_zone DESC, highest_zone DESC',
   }
   const orderBy = ORDER_BY[sort] ?? ORDER_BY.zone
 
   const rows = await db
     .prepare(`SELECT
         player_name, highest_zone, highest_stage, player_level,
-        prestige_tokens, fraser_kills, nick_defeated, updated_at
+        prestige_tokens, fraser_kills, nick_defeated,
+        COALESCE(deepest_post_game_zone, 0) as deepest_post_game_zone,
+        updated_at
       FROM dungeon_leaderboard
       ORDER BY ${orderBy}
       LIMIT ?`)
@@ -140,7 +148,7 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     .all<{
       player_name: string; highest_zone: number; highest_stage: number
       player_level: number; prestige_tokens: number; fraser_kills: number
-      nick_defeated: number; updated_at: number
+      nick_defeated: number; deepest_post_game_zone: number; updated_at: number
     }>()
 
   const entries: LeaderboardRow[] = (rows.results ?? []).map((r, i) => ({
@@ -152,6 +160,7 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     prestigeTokens: r.prestige_tokens,
     fraserKills: r.fraser_kills,
     nickDefeated: r.nick_defeated,
+    deepestPostGameZone: r.deepest_post_game_zone,
     updatedAt: r.updated_at,
   }))
 

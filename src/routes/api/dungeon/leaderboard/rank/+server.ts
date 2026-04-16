@@ -11,13 +11,14 @@ export const GET: RequestHandler = async ({ url, platform }) => {
   // Get player entry
   const entry = await db
     .prepare(`SELECT player_name, highest_zone, highest_stage, player_level,
-        prestige_tokens, fraser_kills, nick_defeated, updated_at
+        prestige_tokens, fraser_kills, nick_defeated,
+        COALESCE(deepest_post_game_zone, 0) as deepest_post_game_zone, updated_at
       FROM dungeon_leaderboard WHERE player_name = ?`)
     .bind(name)
     .first<{
       player_name: string; highest_zone: number; highest_stage: number
       player_level: number; prestige_tokens: number; fraser_kills: number
-      nick_defeated: number; updated_at: number
+      nick_defeated: number; deepest_post_game_zone: number; updated_at: number
     }>()
 
   if (!entry) return json({ found: false })
@@ -50,6 +51,13 @@ export const GET: RequestHandler = async ({ url, platform }) => {
     .bind(entry.fraser_kills)
     .first<{ cnt: number }>()
 
+  // Rank by deepest post-game zone
+  const descentRank = await db
+    .prepare(`SELECT COUNT(*) as cnt FROM dungeon_leaderboard
+      WHERE COALESCE(deepest_post_game_zone, 0) > COALESCE(?, 0)`)
+    .bind(entry.deepest_post_game_zone ?? 0)
+    .first<{ cnt: number }>()
+
   return json({
     found: true,
     playerName: entry.player_name,
@@ -65,6 +73,7 @@ export const GET: RequestHandler = async ({ url, platform }) => {
       prestige: (prestigeRank?.cnt ?? 0) + 1,
       level:   (levelRank?.cnt ?? 0) + 1,
       fraser:  (fraserRank?.cnt ?? 0) + 1,
+      descent: (descentRank?.cnt ?? 0) + 1,
     },
   })
 }

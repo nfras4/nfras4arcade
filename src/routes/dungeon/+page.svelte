@@ -48,6 +48,7 @@
   let showBossDeathOverlay = $state(false)
   let showVictoryScreen    = $state(false)
   let showNickVictory      = $state(false)
+  let showDungeonComplete  = $state(false)
 
   // Cloud save sync
   type SyncStatus = 'synced' | 'saving' | 'offline' | 'guest'
@@ -595,30 +596,32 @@
   type LbEntry = {
     rank: number; playerName: string; highestZone: number; highestStage: number
     playerLevel: number; prestigeTokens: number; fraserKills: number
-    nickDefeated: number; updatedAt: number
+    nickDefeated: number; deepestPostGameZone: number; updatedAt: number
   }
-  type LbTab = 'zone' | 'prestige' | 'level' | 'fraser'
+  type LbTab = 'zone' | 'prestige' | 'level' | 'fraser' | 'descent'
   const LB_TABS: { id: LbTab; label: string }[] = [
     { id: 'zone',    label: 'DEEPEST ZONE'   },
     { id: 'prestige',label: 'MOST PRESTIGE'  },
     { id: 'level',   label: 'HIGHEST LEVEL'  },
     { id: 'fraser',  label: 'FRASER KILLS'   },
+    { id: 'descent', label: 'DEEPEST DESCENT'},
   ]
   let lbTab       = $state<LbTab>('zone')
-  let lbData      = $state<Record<LbTab, LbEntry[]>>({ zone: [], prestige: [], level: [], fraser: [] })
+  let lbData      = $state<Record<LbTab, LbEntry[]>>({ zone: [], prestige: [], level: [], fraser: [], descent: [] })
   let lbLoading   = $state(false)
   let lbError     = $state(false)
-  let lbMyRank    = $state<Record<LbTab, number | null>>({ zone: null, prestige: null, level: null, fraser: null })
+  let lbMyRank    = $state<Record<LbTab, number | null>>({ zone: null, prestige: null, level: null, fraser: null, descent: null })
   let lbRefreshId: ReturnType<typeof setInterval> | null = null
 
   async function fetchLeaderboard(): Promise<void> {
     lbLoading = true; lbError = false
     try {
-      const [zone, prestige, level, fraser, rank] = await Promise.all([
+      const [zone, prestige, level, fraser, descent, rank] = await Promise.all([
         fetch('/api/dungeon/leaderboard?sort=zone&limit=20').then(r => r.json()),
         fetch('/api/dungeon/leaderboard?sort=prestige&limit=20').then(r => r.json()),
         fetch('/api/dungeon/leaderboard?sort=level&limit=20').then(r => r.json()),
         fetch('/api/dungeon/leaderboard?sort=fraser&limit=20').then(r => r.json()),
+        fetch('/api/dungeon/leaderboard?sort=descent&limit=20').then(r => r.json()),
         fetch(`/api/dungeon/leaderboard/rank?name=${encodeURIComponent(player.name)}`).then(r => r.json()),
       ])
       lbData = {
@@ -626,6 +629,7 @@
         prestige: prestige.entries ?? [],
         level:   level.entries   ?? [],
         fraser:  fraser.entries  ?? [],
+        descent: descent.entries ?? [],
       }
       if (rank.found && rank.ranks) {
         lbMyRank = rank.ranks
@@ -652,6 +656,11 @@
     if (tab === 'prestige') return `⚡${entry.prestigeTokens}`
     if (tab === 'level')   return `LV${entry.playerLevel}`
     if (tab === 'fraser')  return `${entry.fraserKills}x`
+    if (tab === 'descent') {
+      const d = entry.deepestPostGameZone ?? 0
+      if (d === 0) return 'NONE'
+      return `ZONE ${d + 9} — DEPTH ${d}`
+    }
     return ''
   }
 
@@ -668,6 +677,7 @@
 
   function zoneAccessible(i: number): boolean {
     if (i > player.unlockedZones) return false
+    if (i >= 9 && !(player.nickDefeated && player.level >= 50 && player.prestigeTokens >= 1)) return false
     const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0
     return player.level >= lvlReq
   }
@@ -675,8 +685,14 @@
   function doTravelToZone(i: number): void {
     if (!zoneAccessible(i)) {
       if (zoneLockTimeout) clearTimeout(zoneLockTimeout)
-      const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0
-      zoneLockMsg = player.level < lvlReq ? `Requires Level ${lvlReq}` : 'Defeat the boss first'
+      if (i >= 9 && !(player.nickDefeated && player.level >= 50 && player.prestigeTokens >= 1)) {
+        if (!player.nickDefeated) zoneLockMsg = 'Defeat Nick to descend'
+        else if (player.level < 50) zoneLockMsg = 'Requires Level 50'
+        else zoneLockMsg = 'Requires Prestige 1'
+      } else {
+        const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0
+        zoneLockMsg = player.level < lvlReq ? `Requires Level ${lvlReq}` : 'Defeat the boss first'
+      }
       zoneLockTimeout = setTimeout(() => { zoneLockMsg = '' }, 2000)
       return
     }
@@ -1017,8 +1033,9 @@
   })
 
   // Watch for victory states
-  $effect(() => { const v = combatState.isVictory;    untrack(() => { if (v) showVictoryScreen = true }) })
-  $effect(() => { const v = combatState.nickVictory;  untrack(() => { if (v) showNickVictory  = true }) })
+  $effect(() => { const v = combatState.isVictory;       untrack(() => { if (v) showVictoryScreen   = true }) })
+  $effect(() => { const v = combatState.nickVictory;     untrack(() => { if (v) showNickVictory     = true }) })
+  $effect(() => { const v = combatState.dungeonComplete; untrack(() => { if (v) showDungeonComplete = true }) })
 
   // Save combatSpeed to localStorage
   $effect(() => {
@@ -1194,7 +1211,7 @@
       <div class="res"><span class="res-ico">🧪</span><span class="res-lbl">POT</span><span class="rv">{player.materials.potion ?? 0}</span></div>
       <div class="res"><span class="res-ico">🌿</span><span class="res-lbl">HERB</span><span class="rv">{player.materials.herbs ?? 0}</span></div>
     </div>
-    <div class="zone-tag">ZONE {player.currentZone + 1} -- {zone.label}</div>
+    <div class="zone-tag" class:post-game-zone={player.currentZone >= 9}>ZONE {player.currentZone + 1} -- {zone.label}</div>
     {#if player.prestigeTokens > 0}
       <div class="res prestige-tag"><span style="color:var(--z-accent)">⚡ {player.prestigeTokens}x</span></div>
       <div class="res prestige-mult"><span style="color:#f0c030">x{prestigeMultiplier(player.prestigeTokens).toFixed(1)}</span></div>
@@ -1422,8 +1439,8 @@
           <span class="zzone-cnt">{player.currentStage} / {STAGES_PER_ZONE}</span>
         </div>
         <div class="zzone-r3">
-          {#each ZONES as z, i}
-            {#if i <= player.unlockedZones + 1}
+          {#each ZONES.slice(0, 9) as z, i}
+            {#if i <= player.unlockedZones + 1 && i <= 8}
               {@const bossLocked = i > player.unlockedZones}
               {@const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0}
               {@const lvlLocked = player.level < lvlReq}
@@ -1438,6 +1455,31 @@
               >{#if done}<span class="zn2-check">✓</span>{/if}{#if locked}{#if lvlLocked && !bossLocked}LV{lvlReq}{:else}🔒{/if}{:else}{i + 1}{/if}</button>
             {/if}
           {/each}
+          {#if player.unlockedZones >= 8}
+            {@const descentUnlocked = player.nickDefeated && player.level >= 50 && player.prestigeTokens >= 1}
+            <div class="zn-descent-sep {descentUnlocked ? 'unlocked' : 'locked'}">
+              {#if descentUnlocked}▼ DESCENT{:else}DEFEAT NICK · LV50 · PRESTIGE 1{/if}
+            </div>
+            {#if descentUnlocked}
+              {#each ZONES.slice(9) as z, pgIdx}
+                {@const i = pgIdx + 9}
+                {#if i <= player.unlockedZones + 1}
+                  {@const bossLocked = i > player.unlockedZones}
+                  {@const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0}
+                  {@const lvlLocked = player.level < lvlReq}
+                  {@const locked = bossLocked || lvlLocked}
+                  {@const active = player.currentZone === i}
+                  {@const done = i < player.unlockedZones}
+                  <button
+                    class="zn-btn2 pg {active ? 'active' : ''} {locked ? 'locked' : ''} {done ? 'done' : ''}"
+                    onclick={() => doTravelToZone(i)}
+                    title={locked ? (lvlLocked ? `LV${lvlReq} required` : '🔒 LOCKED') : z.label}
+                    disabled={locked}
+                  >{#if done}<span class="zn2-check">✓</span>{/if}{#if locked}{#if lvlLocked && !bossLocked}LV{lvlReq}{:else}🔒{/if}{:else}{i + 1}{/if}</button>
+                {/if}
+              {/each}
+            {/if}
+          {/if}
           {#if zoneLockMsg}<span class="zone-lock-msg">{zoneLockMsg}</span>{/if}
         </div>
       </div>
@@ -2372,6 +2414,19 @@
   </div>
 {/if}
 
+<!-- DUNGEON COMPLETE OVERLAY -->
+{#if showDungeonComplete}
+  <div class="victory-overlay nick-victory" onclick={() => { showDungeonComplete = false; combatState.dungeonComplete = false }}>
+    <div class="vic-box">
+      <div class="vic-title" style="color:#888;font-size:10px;margin-bottom:4px">THE DUNGEON</div>
+      <div class="vic-title" style="color:#fff;font-size:22px;text-shadow:none">COMPLETE</div>
+      <div class="vic-sub" style="color:#aaa;margin-top:12px">{player.name}</div>
+      <div class="vic-line" style="color:#666;margin-top:16px">Prestige: ⚡{player.prestigeTokens}</div>
+      <div class="vic-hint" style="margin-top:24px">[ CONTINUE ]</div>
+    </div>
+  </div>
+{/if}
+
 <!-- LEVEL UP FLASH -->
 {#if levelUpFlash}
   <div class="levelup-flash"></div>
@@ -2444,6 +2499,7 @@
   .res-lbl { font-size: 7px; color: #555; letter-spacing: 0.5px; }
   .rv { font-size: 10px; color: var(--z-accent); font-weight: bold; }
   .zone-tag { background: var(--z-panel2); border: 1px solid var(--z-accent2); padding: 5px 10px; color: var(--z-accent2); font-size: 9px; white-space: nowrap; }
+  .zone-tag.post-game-zone { color: #ff4020; }
 
   /* ── MAIN GRID ────────────────────────────────────────────────────── */
   .mgrid {
@@ -2658,6 +2714,16 @@
   .zn-btn2.done    { background: color-mix(in srgb, #20a040 12%, #000); color: #40c060; border-color: #20a040; }
   .zn-btn2.locked  { opacity: 0.3; cursor: not-allowed; }
   .zn-btn2:not(.locked):not(.active):not(.done):hover { border-color: var(--z-border-hi); color: #999; }
+  .zn-descent-sep {
+    width: 100%; text-align: center; font-size: 7px; letter-spacing: 2px;
+    padding: 3px 0; margin: 2px 0;
+    border-top: 1px solid #1a0a00; border-bottom: 1px solid #1a0a00;
+  }
+  .zn-descent-sep.unlocked { color: #c04020; border-color: #401010; }
+  .zn-descent-sep.locked   { color: #442222; border-color: #1a0808; }
+  .zn-btn2.pg { border-color: #401010; color: #c04020; }
+  .zn-btn2.pg.active { background: #401010; color: #ff4020; border-color: #c04020; }
+  .zn-btn2.pg.done { color: #802010; }
   .zn2-check { color: #40c060; font-size: 9px; }
 
   /* ── SPLIT LOG ────────────────────────────────────────────────────── */

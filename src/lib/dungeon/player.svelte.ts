@@ -39,6 +39,7 @@ export type PlayerState = {
   fraserDefeated: boolean
   firstVisit: string[]
   nickDefeated: boolean
+  deepestPostGameZone: number  // 0 = none, 1 = first post-game zone cleared, etc.
   achievements: string[]
   firstBossKills: string[]
   lifetimeStats: LifetimeStats
@@ -73,6 +74,7 @@ function freshState(): PlayerState {
     fraserDefeated: false,
     firstVisit: [],
     nickDefeated: false,
+    deepestPostGameZone: 0,
     achievements: [],
     firstBossKills: [],
     lifetimeStats: {
@@ -130,6 +132,7 @@ export function applyPlayerData(saved: Partial<PlayerState>): void {
   if (!player.firstVisit) player.firstVisit = []
   if (!player.firstBossKills) player.firstBossKills = []
   if (player.nickDefeated === undefined) player.nickDefeated = false
+  if (player.deepestPostGameZone === undefined) player.deepestPostGameZone = 0
   if (!player.lastSaveTimestamp) player.lastSaveTimestamp = Date.now()
   // Merge skills individually so new skill IDs get defaults when loading old saves
   const skillDefaults = defaults.skills
@@ -380,14 +383,15 @@ export async function deleteCloudSave(): Promise<void> {
 
 export async function submitLeaderboard(p: PlayerState): Promise<void> {
   const payload = {
-    playerName:    p.name,
-    highestZone:   p.currentZone,
-    highestStage:  p.currentStage,
-    playerLevel:   p.level,
-    prestigeTokens: p.prestigeTokens,
-    fraserKills:   p.lifetimeStats.fraserKills,
-    nickDefeated:  p.nickDefeated,
-    totalPlaytime: p.lifetimeStats.totalPlaytime,
+    playerName:           p.name,
+    highestZone:          p.currentZone,
+    highestStage:         p.currentStage,
+    playerLevel:          p.level,
+    prestigeTokens:       p.prestigeTokens,
+    fraserKills:          p.lifetimeStats.fraserKills,
+    nickDefeated:         p.nickDefeated,
+    totalPlaytime:        p.lifetimeStats.totalPlaytime,
+    deepestPostGameZone:  p.deepestPostGameZone,
   }
   try {
     await fetch('/api/dungeon/leaderboard', {
@@ -417,6 +421,7 @@ export function checkAchievements(): void {
     ['fraser-3',     player.lifetimeStats.fraserKills >= 3],
     ['zone-9',       player.unlockedZones >= 8],
     ['secret',       player.nickDefeated],
+    ['the-end',      player.deepestPostGameZone >= 20],
   ]
   for (const [id, met] of checks) {
     if (met && !player.achievements.includes(id)) {

@@ -71,6 +71,7 @@ export type CombatState = {
   inNickFight: boolean
   nickVictory: boolean
   isVictory: boolean
+  dungeonComplete: boolean
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export const combatState: CombatState = $state({
   inNickFight: false,
   nickVictory: false,
   isVictory: false,
+  dungeonComplete: false,
 })
 
 let floaterSeq = 0
@@ -345,12 +347,15 @@ function processEvents(events: CombatEvent[]): void {
         } else {
           dmg = Math.max(1, Math.floor(baseDmg * ev.multiplier * zone9Mult - def * 0.5))
         }
-        // Boss special attack cap at 65% player maxHp (90% for zone 6+)
+        // Boss special attack cap — post-game zones scale higher
         if (enemy?.isBoss && ev.multiplier < 9999) {
-          const specialCapPct = (enemy.isBoss && zoneIdx >= 6)
-            ? 0.90
-            : 0.65
-          const maxSpecialHit = Math.floor(untrack(() => player.maxHp) * specialCapPct)
+          function getBossSpecialCap(zoneIndex: number): number {
+            if (zoneIndex < 6)   return 0.65
+            if (zoneIndex <= 12) return 0.90 + (zoneIndex - 6) * 0.01   // 90%→96%
+            if (zoneIndex <= 18) return 0.96 + (zoneIndex - 12) * 0.005 // 96%→99%
+            return 0.99
+          }
+          const maxSpecialHit = Math.floor(untrack(() => player.maxHp) * getBossSpecialCap(zoneIdx))
           dmg = Math.min(dmg, maxSpecialHit)
         }
 
@@ -781,12 +786,16 @@ export function enemyAttack(): void {
 
   dmg = Math.max(1, dmg)
 
-  // Boss regular hits capped at 35% player maxHp (zone-scaled up to 50%)
+  // Boss regular hits capped — post-game zones scale higher
   if (enemy.isBoss) {
-    const bossCapPct = enemy.isBoss
-      ? Math.min(0.50, 0.35 + 0.025 * zoneIdx)
-      : 1.0
-    const maxBossHit = Math.floor(player.maxHp * bossCapPct)
+    function getBossHitCap(zoneIndex: number): number {
+      if (zoneIndex <= 6)  return Math.min(0.50, 0.35 + 0.025 * zoneIndex)
+      if (zoneIndex <= 12) return 0.50 + (zoneIndex - 6) * 0.008   // 50%→55%
+      if (zoneIndex <= 18) return 0.55 + (zoneIndex - 12) * 0.012  // 55%→62%
+      if (zoneIndex <= 24) return 0.62 + (zoneIndex - 18) * 0.015  // 62%→71%
+      return Math.min(0.85, 0.71 + (zoneIndex - 24) * 0.02)        // 71%→85%
+    }
+    const maxBossHit = Math.floor(player.maxHp * getBossHitCap(zoneIdx))
     dmg = Math.min(dmg, maxBossHit)
   }
 
@@ -957,9 +966,23 @@ function handleEnemyDeath(): void {
     return
   }
 
+  // The End final boss special case
+  if (combatState.enemyId === 'the-end') {
+    checkAchievements()
+    combatState.dungeonComplete = true
+    savePlayer()
+  }
+
   const stage = untrack(() => player.currentStage)
 
   if (enemy.isBoss) {
+    // Track deepest post-game zone reached
+    if (zoneIdx >= 9) {
+      const pgZone = zoneIdx - 8  // 1-indexed post-game depth
+      if (pgZone > (player.deepestPostGameZone ?? 0)) {
+        player.deepestPostGameZone = pgZone
+      }
+    }
     // Boss defeated -- advance to next zone
     submitLeaderboard(player)
     const nextZone = zoneIdx + 1
@@ -972,10 +995,11 @@ function handleEnemyDeath(): void {
         checkAchievements()
         spawnEnemy()
       }, 1500)
-    } else {
+    } else if (zoneIdx <= 8) {
       addLog('sys', '▶ ALL ZONES CLEARED! You have beaten The Dungeon!')
       combatState.isVictory = true
     }
+    // Post-game zones beyond index 8 handled separately
   } else {
     // Advance stage
     player.currentStage = stage + 1

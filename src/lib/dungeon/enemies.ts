@@ -365,7 +365,7 @@ export const ENEMIES: Record<string, Enemy> = {
   },
   'chief-surgeon': {
     id: 'chief-surgeon', name: "CHIEF SURGEON", sprite: '🔬',
-    baseHp: 14000, baseDmg: 340,
+    baseHp: 11200, baseDmg: 340,
     drops: [
       { itemId: 'power-ring',   chance: 0.20 },
       { itemId: 'plate-armour', chance: 0.25 },
@@ -420,7 +420,7 @@ export const ENEMIES: Record<string, Enemy> = {
   },
   'the-ceo': {
     id: 'the-ceo', name: "THE CEO", sprite: '🏢',
-    baseHp: 28000, baseDmg: 540,
+    baseHp: 22400, baseDmg: 540,
     drops: [
       { itemId: 'wolton-suit',  chance: 0.10  },
       { itemId: 'wolton-visor', chance: 0.08  },
@@ -479,7 +479,7 @@ export const ENEMIES: Record<string, Enemy> = {
   },
   'wolton-prime': {
     id: 'wolton-prime', name: "WOLTON PRIME", sprite: '⚡',
-    baseHp: 55000, baseDmg: 820,
+    baseHp: 44000, baseDmg: 820,
     drops: [
       { itemId: 'wolton-breaker', chance: 0.35 },
       { itemId: 'wolton-suit',    chance: 0.30 },

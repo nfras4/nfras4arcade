@@ -37,7 +37,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   }
 
   const name = playerName.trim().slice(0, 32)
-  const BLOCKED_NAMES = new Set(['PLAYER', 'NICK', 'player', 'nick'])
+  const BLOCKED_NAMES = new Set(['PLAYER', 'NICK', 'player', 'nick', 'ADMIN', 'admin'])
   if (BLOCKED_NAMES.has(name)) return json({ ok: true, skipped: 'blocked_name' })
   const now = Math.floor(Date.now() / 1000)
 

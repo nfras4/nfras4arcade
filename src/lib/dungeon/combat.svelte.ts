@@ -5,7 +5,7 @@ import {
   itemXpToNext,
   type Stats, type PlayerState,
 } from './player.svelte'
-import { ENEMIES } from './enemies'
+import { ENEMIES, type Enemy } from './enemies'
 import { BOSS_MECHANICS, BOSS_DEATH_TEXTS, headCoachState, type BossMechanic, type CombatEvent, type BossContext } from './bosses'
 import { ZONES } from './zones'
 import { ITEMS, MATERIAL_TIERS, type Item } from './items'
@@ -24,15 +24,17 @@ import {
 
 export type HitType = 'normal' | 'boss_special'
 
-export function applyWound(p: PlayerState, damage: number, hitType: HitType): void {
+export function applyWound(p: PlayerState, damage: number, hitType: HitType, enemy?: Enemy): void {
   const woundRates: Record<HitType, number> = {
     normal:       0.40,
     boss_special: 0.70,
   }
+  let effectiveRate = woundRates[hitType]
   const isVulnerable = p.maxHp < 500
-  const effectiveRate = hitType === 'boss_special' && isVulnerable
-    ? woundRates[hitType] * 0.5
-    : woundRates[hitType]
+  const isBossHit = hitType === 'boss_special' || (hitType === 'normal' && (enemy?.isBoss ?? false))
+  if (isVulnerable && isBossHit) {
+    effectiveRate *= 0.4
+  }
   const woundAmount = Math.floor(damage * effectiveRate)
   if (woundAmount > 0) {
     p.woundedHp = Math.min(
@@ -123,6 +125,7 @@ let bossBackInjuryChance = 0.4
 let bossInvoiceDrainAmount = 80
 let fraserVillainActive = false
 let fraserDrainDoubled = false
+let specialTimerLastFired = new Map<string, number>()
 
 // ── Gear / effective stats ────────────────────────────────────────────────
 
@@ -294,6 +297,7 @@ function clearBossState(): void {
   bossInvoiceDrainAmount = 80
   fraserVillainActive = false
   fraserDrainDoubled = false
+  specialTimerLastFired.clear()
   combatState.activeStuns = []
   combatState.activeBossBuffs = []
   combatState.currentPhase = null
@@ -356,12 +360,13 @@ function processEvents(events: CombatEvent[]): void {
           function getBossSpecialCap(zoneIndex: number, maxHp: number): number {
             const pct = (() => {
               if (zoneIndex < 6)   return 0.65
-              if (zoneIndex <= 12) return 0.90 + (zoneIndex - 6) * 0.01
-              if (zoneIndex <= 18) return 0.96 + (zoneIndex - 12) * 0.005
+              if (zoneIndex <= 8)  return 0.72
+              if (zoneIndex <= 12) return 0.80 + (zoneIndex - 9) * 0.01
+              if (zoneIndex <= 18) return 0.90 + (zoneIndex - 12) * 0.005
               return 0.99
             })()
             const isVulnerable = maxHp < 500
-            const safePct = isVulnerable ? Math.min(pct, 0.70) : pct
+            const safePct = isVulnerable ? Math.min(pct, 0.65) : pct
             return Math.floor(maxHp * safePct)
           }
           const currentMaxHp = untrack(() => player.maxHp)
@@ -378,7 +383,7 @@ function processEvents(events: CombatEvent[]): void {
             if (player.hp > literalDmg) {
               // Rare survival: player has >9999 HP (extreme vitality investment)
               damagePlayer(literalDmg)
-              applyWound(player, literalDmg, 'boss_special')
+              applyWound(player, literalDmg, 'boss_special', enemy)
               addLog('sys', "▶ You actually survived that. Respect.")
               nickMonkeyBarrelSurvived = true
             } else {
@@ -391,7 +396,7 @@ function processEvents(events: CombatEvent[]): void {
           return
         }
         damagePlayer(dmg)
-        applyWound(player, dmg, 'boss_special')
+        applyWound(player, dmg, 'boss_special', enemy)
         addFloater(`-${dmg}`, 'hit', 'player')
         if (player.hp <= 0) handlePlayerDeath()
         break
@@ -438,9 +443,13 @@ function processEvents(events: CombatEvent[]): void {
         const summon = ENEMIES[summonId]
         if (summon) {
           const def = untrack(() => getEffectiveStats(player).defence)
-          const summonDmg = Math.max(1, Math.floor(summon.baseDmg * 0.5) - def)
+          let summonDmg = Math.max(1, Math.floor(summon.baseDmg * 0.5) - def)
+          if (enemy?.isBoss) {
+            const summonCap = Math.floor(untrack(() => player.maxHp) * 0.25)
+            summonDmg = Math.min(summonDmg, summonCap)
+          }
           damagePlayer(summonDmg)
-          applyWound(player, summonDmg, 'normal')
+          applyWound(player, summonDmg, 'normal', enemy)
           addLog('dmg', `▶ ${summon.name} attacks you for ${summonDmg}!`)
           addFloater(`-${summonDmg}`, 'hit', 'player')
           if (player.hp <= 0) handlePlayerDeath()
@@ -509,6 +518,12 @@ function startBossTimers(mechanic: BossMechanic): void {
     const interval = phaseTimerOverrides[timer.id] ?? timer.intervalMs
     const id = setInterval(() => {
       if (combatState.enemyHp <= 0 || combatState.playerDead) return
+      if (timer.id === 'big-hit') {
+        const now = Date.now()
+        const lastFired = specialTimerLastFired.get('big-hit') ?? 0
+        if (now - lastFired < 3000) return
+        specialTimerLastFired.set('big-hit', now)
+      }
       const ctx = getBossContext()
       let events = timer.action(ctx)
       // Override nick invoice drain amount
@@ -814,7 +829,7 @@ export function enemyAttack(): void {
   }
 
   damagePlayer(dmg)
-  applyWound(player, dmg, 'normal')
+  applyWound(player, dmg, 'normal', enemy)
   addLog('dmg', `▶ ${combatState.enemyName} hit you for ${dmg}.`)
   addFloater(`-${dmg}`, 'hit', 'player')
 

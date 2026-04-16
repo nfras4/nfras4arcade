@@ -165,6 +165,14 @@ export const ITEMS: Record<string, Item> = {
     dropSource: ['basement-rat', 'stressed-postgrad'],
     craftCost: { materials: {}, gold: 40 },
   },
+  'steel-ring': {
+    id: 'steel-ring', name: 'STEEL RING', slot: 'ring', sprite: '🔩',
+    statBonuses: { speed: { flat: 4 }, luck: { flat: 4 } }, rarity: 'uncommon', tier: 2, tierIndex: 2,
+    craftCost: { materials: { steel: 5 }, gold: 120 },
+    dropSource: ['aggressive-ref', 'the-bouncer', 'grad-overseer', 'rowdy-fan'],
+    dropChance: 0.06,
+    discardable: true,
+  },
   'speed-ring': {
     id: 'speed-ring', name: 'SPEED RING', slot: 'ring', sprite: '💫',
     statBonuses: { speed: { flat: 2 } }, rarity: 'uncommon', tier: 3, tierIndex: 3,
@@ -200,67 +208,67 @@ export const ITEMS: Record<string, Item> = {
   // ── T5 ITEMS (forge-only) ─────────────────────────────────────────────────
   't5-void-blade': {
     id: 't5-void-blade', name: 'VOID BLADE', slot: 'weapon', sprite: '🌑',
-    statBonuses: { attack: { flat: 30 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+    statBonuses: { attack: { flat: 42 } }, rarity: 'epic', tier: 5, tierIndex: 5,
   },
   't5-void-plate': {
     id: 't5-void-plate', name: 'VOID PLATE', slot: 'armour', sprite: '🌑',
-    statBonuses: { defence: { flat: 35 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+    statBonuses: { defence: { flat: 42 } }, rarity: 'epic', tier: 5, tierIndex: 5,
   },
   't5-void-crown': {
     id: 't5-void-crown', name: 'VOID CROWN', slot: 'helmet', sprite: '🌑',
-    statBonuses: { defence: { flat: 20 }, luck: { flat: 10 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+    statBonuses: { defence: { flat: 26 }, luck: { flat: 14 } }, rarity: 'epic', tier: 5, tierIndex: 5,
   },
   't5-void-ring': {
     id: 't5-void-ring', name: 'VOID RING', slot: 'ring', sprite: '🌑',
-    statBonuses: { speed: { flat: 8 }, luck: { flat: 8 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+    statBonuses: { speed: { flat: 12 }, luck: { flat: 12 } }, rarity: 'epic', tier: 5, tierIndex: 5,
   },
   't5-void-amulet': {
     id: 't5-void-amulet', name: 'VOID AMULET', slot: 'amulet', sprite: '🌑',
-    statBonuses: { attack: { flat: 15 }, defence: { flat: 15 } }, rarity: 'epic', tier: 5, tierIndex: 5,
+    statBonuses: { attack: { flat: 20 }, defence: { flat: 20 } }, rarity: 'epic', tier: 5, tierIndex: 5,
   },
 
   // ── T6 ITEMS (forge-only) ─────────────────────────────────────────────────
   't6-fractured-edge': {
     id: 't6-fractured-edge', name: 'FRACTURED EDGE', slot: 'weapon', sprite: '⚡',
-    statBonuses: { attack: { percent: 8 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+    statBonuses: { attack: { flat: 20, percent: 8 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
   },
   't6-fractured-mail': {
     id: 't6-fractured-mail', name: 'FRACTURED MAIL', slot: 'armour', sprite: '⚡',
-    statBonuses: { defence: { percent: 8 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+    statBonuses: { defence: { flat: 20, percent: 8 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
   },
   't6-fractured-visor': {
     id: 't6-fractured-visor', name: 'FRACTURED VISOR', slot: 'helmet', sprite: '⚡',
-    statBonuses: { defence: { percent: 6 }, luck: { percent: 6 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+    statBonuses: { defence: { flat: 12, percent: 6 }, luck: { flat: 8, percent: 6 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
   },
   't6-fractured-band': {
     id: 't6-fractured-band', name: 'FRACTURED BAND', slot: 'ring', sprite: '⚡',
-    statBonuses: { speed: { percent: 8 }, luck: { percent: 6 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+    statBonuses: { speed: { flat: 10, percent: 8 }, luck: { flat: 8, percent: 6 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
   },
   't6-fractured-charm': {
     id: 't6-fractured-charm', name: 'FRACTURED CHARM', slot: 'amulet', sprite: '⚡',
-    statBonuses: { attack: { percent: 7 }, defence: { percent: 7 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
+    statBonuses: { attack: { flat: 12, percent: 7 }, defence: { flat: 12, percent: 7 } }, rarity: 'legendary', tier: 6, tierIndex: 6,
   },
 
   // ── T7 ITEMS (forge-only) ─────────────────────────────────────────────────
   't7-ascendant-reaper': {
     id: 't7-ascendant-reaper', name: 'ASCENDANT REAPER', slot: 'weapon', sprite: '🌟',
-    statBonuses: { attack: { percent: 18 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+    statBonuses: { attack: { flat: 35, percent: 18 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
   },
   't7-ascendant-robes': {
     id: 't7-ascendant-robes', name: 'ASCENDANT ROBES', slot: 'armour', sprite: '🌟',
-    statBonuses: { defence: { percent: 18 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+    statBonuses: { defence: { flat: 35, percent: 18 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
   },
   't7-ascendant-crown': {
     id: 't7-ascendant-crown', name: 'ASCENDANT CROWN', slot: 'helmet', sprite: '🌟',
-    statBonuses: { defence: { percent: 14 }, luck: { percent: 12 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+    statBonuses: { defence: { flat: 20, percent: 14 }, luck: { flat: 15, percent: 12 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
   },
   't7-ascendant-ring': {
     id: 't7-ascendant-ring', name: 'ASCENDANT RING', slot: 'ring', sprite: '🌟',
-    statBonuses: { speed: { percent: 16 }, luck: { percent: 14 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+    statBonuses: { speed: { flat: 18, percent: 16 }, luck: { flat: 14, percent: 14 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
   },
   't7-ascendant-totem': {
     id: 't7-ascendant-totem', name: 'ASCENDANT TOTEM', slot: 'amulet', sprite: '🌟',
-    statBonuses: { attack: { percent: 16 }, defence: { percent: 16 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
+    statBonuses: { attack: { flat: 22, percent: 16 }, defence: { flat: 22, percent: 16 } }, rarity: 'legendary', tier: 7, tierIndex: 7,
   },
 
   // ── BOSS UNIQUES ──────────────────────────────────────────────────────────
@@ -447,7 +455,8 @@ export const FORGE_CHAINS: Record<string, string> = {
   't5-void-crown':      't6-fractured-visor',
   't6-fractured-visor': 't7-ascendant-crown',
   // rings
-  'copper-ring':        'speed-ring',
+  'copper-ring':        'steel-ring',
+  'steel-ring':         'speed-ring',
   'speed-ring':         'power-ring',
   'power-ring':         't5-void-ring',
   't5-void-ring':       't6-fractured-band',

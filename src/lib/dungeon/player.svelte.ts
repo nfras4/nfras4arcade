@@ -61,7 +61,7 @@ function freshState(): PlayerState {
     woundedHp: 0,
     lastHitTimestamp: 0,
     gold: 3500,
-    stats:      { attack: 5, defence: 3, speed: 0, luck: 2, vitality: 10, critDmg: 150, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
+    stats:      { attack: 5, defence: 3, speed: 0, luck: 2, vitality: 10, critDmg: 200, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
     statLevels: { attack: 0, defence: 0, speed: 0, luck: 0, vitality: 0, critDmg: 0, hpRegen: 0, goldFind: 0, xpBoost: 0, lifesteal: 0 },
     gear: { weapon: null, armour: null, helmet: null, ring: null, amulet: null },
     currentZone: 0,
@@ -252,7 +252,10 @@ export function gainSkillXp(skillId: SkillId, amount: number): void {
 }
 
 export function healPlayer(amount: number): void {
-  player.hp = Math.min(player.maxHp, player.hp + amount)
+  player.hp = Math.min(
+    player.maxHp - player.woundedHp,
+    player.hp + amount
+  )
 }
 
 export function damagePlayer(amount: number): void {
@@ -282,14 +285,17 @@ export function travelToZone(zoneIndex: number): void {
   savePlayer()
 }
 
-/** Compute effective goldFind multiplier including gear bonuses. Exported for timers. */
+/** Compute effective goldFind multiplier including all gear bonuses. Exported for timers. */
 export function goldFindMultiplier(): number {
   const base = player.stats.goldFind
   let pct = 0, flat = 0
   for (const item of Object.values(player.gear)) {
     if (!item) continue
-    flat += item.statBonuses.goldFind?.flat ?? 0
+    const lvlMult = 1 + ((item.itemLevel ?? 1) - 1) * 0.08
+    if (item.statBonuses.goldFind?.flat)    flat += item.statBonuses.goldFind.flat * lvlMult
+    if (item.statBonuses.goldFind?.percent) pct  += item.statBonuses.goldFind.percent * lvlMult
     pct += (item.rolledBonuses ?? []).filter(r => r.stat === 'goldFind').reduce((s, r) => s + r.percent, 0)
+    pct += (item.modifier?.bonuses ?? []).filter(r => r.stat === 'goldFind').reduce((s, r) => s + r.percent, 0)
   }
   const eff = Math.floor(base * (1 + pct / 100)) + flat
   return 1 + eff / 100

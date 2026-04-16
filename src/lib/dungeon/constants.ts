@@ -184,7 +184,7 @@ export const SKILL_COMBAT_BONUSES: Record<SkillId, { stat: StatKey; perLevel: nu
   mining:      { stat: 'attack',   perLevel: 0.25  },  // max +15% at 60
   herbalism:   { stat: 'hpRegen',  perLevel: 0.167 },  // max +10/s at 60
   brewing:     { stat: 'vitality', perLevel: 0.083 },  // max +5% at 60
-  patrol:      { stat: 'goldFind', perLevel: 0.167 },  // max +10% at 60
+  patrol:      { stat: 'goldFind', perLevel: 0 },      // direct patrol gold bonus in timers.svelte.ts instead
 }
 
 // ── Achievements ──────────────────────────────────────────────────────────

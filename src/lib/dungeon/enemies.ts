@@ -108,6 +108,7 @@ export const ENEMIES: Record<string, Enemy> = {
     drops: [
       { itemId: 'leather-vest', chance: 0.08 },
       { itemId: 'iron-sword',   chance: 0.06 },
+      { itemId: 'steel-ring',   chance: 0.06 },
     ],
     isElite: true,
   },
@@ -163,6 +164,7 @@ export const ENEMIES: Record<string, Enemy> = {
     drops: [
       { itemId: 'chain-mail',  chance: 0.08 },
       { itemId: 'steel-blade', chance: 0.05 },
+      { itemId: 'steel-ring',  chance: 0.06 },
     ],
     isMiniboss: true,
   },
@@ -200,6 +202,7 @@ export const ENEMIES: Record<string, Enemy> = {
     drops: [
       { itemId: 'chain-mail',  chance: 0.06 },
       { itemId: 'steel-blade', chance: 0.04 },
+      { itemId: 'steel-ring',  chance: 0.06 },
     ],
     isElite: true,
   },
@@ -246,6 +249,7 @@ export const ENEMIES: Record<string, Enemy> = {
     drops: [
       { itemId: 'chain-mail',      chance: 0.08 },
       { itemId: 'enchanted-sword', chance: 0.03 },
+      { itemId: 'steel-ring',      chance: 0.06 },
     ],
     isElite: true,
   },

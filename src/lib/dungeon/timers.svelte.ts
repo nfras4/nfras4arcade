@@ -40,6 +40,11 @@ const ACTIVITY_BASE_XP: Record<ActivityId, number> = {
   'patrol':       20,
 }
 
+function getSkillXpGain(baseXp: number, skillLevel: number, multiplier: number): number {
+  const levelBonus = 1 + (skillLevel * 0.05)  // +5% per level
+  return Math.floor(baseXp * levelBonus * multiplier)
+}
+
 const BASE_MATERIAL: Record<ActivityId, string> = {
   'chop-wood':    'wood',
   'mine-iron':    'iron',
@@ -130,12 +135,14 @@ export function loadTimers(): void {
           const totalCycles = 1 + extraCycles  // 1 for the original completion + extras
           const pMult = prestigeMultiplier(player.prestigeTokens)
           const gMult = goldFindMultiplier()
-          const patrolBase = 80 + (player.skills?.patrol?.level ?? 0) * 5
-          const gold = Math.floor(totalCycles * patrolBase * pMult * gMult)
+          const patrolSkillLevel = player.skills?.patrol?.level ?? 0
+          const patrolBase = 80 + patrolSkillLevel * 5
+          const patrolSkillBonus = patrolSkillLevel * 3
+          const gold = Math.floor(totalCycles * (patrolBase + patrolSkillBonus) * pMult * gMult)
           patrolGold += gold
           gainGold(gold)
           player.lifetimeStats.goldEarned += gold
-          const patrolXp = Math.floor(ACTIVITY_BASE_XP['patrol'] * (player.skillXpMultiplier ?? 1.0))
+          const patrolXp = getSkillXpGain(ACTIVITY_BASE_XP['patrol'], patrolSkillLevel, player.skillXpMultiplier ?? 1.0)
           gainSkillXp('patrol', patrolXp)
         } else {
           applyReward(activity)
@@ -178,8 +185,9 @@ function applyReward(activity: Activity): void {
   const skillLevel = player.skills?.[skillId]?.level ?? 0
 
   if (activity.id === 'patrol') {
+    const patrolSkillBonus = skillLevel * 3  // +3 gold per skill level per cycle
     const patrolBase = 80 + skillLevel * 5
-    const gold = Math.floor(patrolBase * goldFindMultiplier())
+    const gold = Math.floor((patrolBase + patrolSkillBonus) * goldFindMultiplier())
     gainGold(gold)
     player.lifetimeStats.goldEarned += gold
   } else {
@@ -188,7 +196,7 @@ function applyReward(activity: Activity): void {
     gainMaterial(mat, amount)
   }
 
-  const xpGain = Math.floor((ACTIVITY_BASE_XP[activity.id as ActivityId] ?? 0) * (player.skillXpMultiplier ?? 1.0))
+  const xpGain = getSkillXpGain(ACTIVITY_BASE_XP[activity.id as ActivityId] ?? 0, skillLevel, player.skillXpMultiplier ?? 1.0)
   if (xpGain > 0 && skillId) gainSkillXp(skillId, xpGain)
 
   savePlayer()

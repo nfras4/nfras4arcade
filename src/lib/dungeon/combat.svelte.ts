@@ -791,7 +791,7 @@ export function enemyAttack(): void {
   }
 
   damagePlayer(dmg)
-  applyWound(player, dmg, enemy.isBoss ? 'boss_special' : 'normal')
+  applyWound(player, dmg, 'normal')
   addLog('dmg', `▶ ${combatState.enemyName} hit you for ${dmg}.`)
   addFloater(`-${dmg}`, 'hit', 'player')
 

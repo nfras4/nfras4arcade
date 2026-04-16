@@ -52,7 +52,7 @@ export function craftRoll(item: Item, luckStat: number): CraftResult {
   if (!ROLL_RANGES[item.rarity]) {
     return { item, bonusRolls: item.rolledBonuses ?? [], rollQuality: 'normal' }
   }
-  const luckBonus = Math.min(luckStat * 0.008, 0.4)  // cap at +40%
+  const luckBonus = Math.min(luckStat * 0.008, 0.8)  // cap at +80%
 
   // Determine quality
   const r = Math.random()
@@ -161,7 +161,7 @@ export function rollModifier(
   isBossUnique: boolean,
 ): ItemModifier {
   const upgraded = itemTier >= 6
-  const luckBonus = Math.min(luckStat * 0.005, 0.25)
+  const luckBonus = Math.min(luckStat * 0.005, 0.50)
 
   const weights = upgraded
     ? {

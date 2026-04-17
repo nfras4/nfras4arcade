@@ -538,7 +538,6 @@
             </div>
             <div class="pt-info">
               <p>10 paylines, left-to-right from reel 1. 3+ matching to win.</p>
-              <p>RTP: ~96%</p>
             </div>
           </div>
         {/if}

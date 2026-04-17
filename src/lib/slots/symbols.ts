@@ -9,11 +9,11 @@ export interface SlotSymbol {
 export const WILD_ID = 5;
 
 export const SYMBOLS: SlotSymbol[] = [
-  { id: 0, name: 'cherry',  label: 'CH', color: '#e94560', payouts: { 3: 2,  4: 6,   5: 18 } },
-  { id: 1, name: 'lemon',   label: 'LM', color: '#e6c44d', payouts: { 3: 4,  4: 10,  5: 24 } },
-  { id: 2, name: 'orange',  label: 'OR', color: '#f39c12', payouts: { 3: 6,  4: 14,  5: 36 } },
-  { id: 3, name: 'gem',     label: 'GM', color: '#4da8e6', payouts: { 3: 10, 4: 24,  5: 60 } },
-  { id: 4, name: 'star',    label: 'ST', color: '#a855f7', payouts: { 3: 12, 4: 36,  5: 90 } },
+  { id: 0, name: 'cherry',  label: 'CH', color: '#e94560', payouts: { 3: 2,  4: 7,   5: 20 } },
+  { id: 1, name: 'lemon',   label: 'LM', color: '#e6c44d', payouts: { 3: 4,  4: 11,  5: 26 } },
+  { id: 2, name: 'orange',  label: 'OR', color: '#f39c12', payouts: { 3: 7,  4: 16,  5: 40 } },
+  { id: 3, name: 'gem',     label: 'GM', color: '#4da8e6', payouts: { 3: 11, 4: 27,  5: 65 } },
+  { id: 4, name: 'star',    label: 'ST', color: '#a855f7', payouts: { 3: 13, 4: 40,  5: 97 } },
   { id: 5, name: 'wild',    label: 'WD', color: '#3dd68c', payouts: { 3: 0,  4: 0,   5: 0  } },
 ];
 

@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-17** - Deployed to nfras4arcade. Summary: Add dungeon prestige system, HR Department component, and combat tuning (bosses, enemies, player, timers). Branch: `main`, commit: `5f2d666`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Add who's-voted checklist to impostor voting phase (live ☑/☐ per player); fix &#10003;/&#10007; HTML entities rendering as literal text in Svelte expressions. Branch: `main`, commit: `83c4597`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Add farm mode toggle to dungeon — checkbox in zone bar loops stages 1-9, skips miniboss/boss, progress bar scales to 9-stage range, persists via localStorage. Branch: `main`, commit: `1c97b21`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Fix boss special timer one-shot risk — lower getBossSpecialCap (0.65→0.45/0.72→0.50/etc), wound rate 0.70→0.45, 800ms regular-hit mutex after specials, big-hit 2.0x→1.6x, dunk description mismatch fixed. Branch: `main`, commit: `d9e7c27`.
@@ -212,4 +213,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Dungeon balance fixes — T5/T6/T7 hybrid gear stats, boss wound rate fix, healPlayer wound ceiling, luck quality caps doubled, skill XP level scaling, patrol gold direct bonus, T2 steel-ring, critDmg init 200. Branch: `main`, commit: `d5a58cd`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Add 5 new dungeon stats (critDmg, hpRegen, goldFind, xpBoost, lifesteal) - wired into combat engine, UI split into COMBAT/PASSIVE groups with units and UNLOCK buttons. Branch: `main`, commit: `7c99394`.
 - **2026-04-15** - Deployed to nfras4arcade. Summary: Dungeon 3-stage RPG upgrade - hybrid flat+percent stats, MATERIAL_TIERS, 10 boss uniques, tiered mat drops, gear tab redesigned to 4 sub-tabs (LOADOUT/LOOT/CRAFTING/REROLL). Branch: `main`, commit: `0941f7b`.
-- **2026-04-15** - Deployed to nfras4arcade. Summary: Rename 'Wolton Dungeon' to 'The Dungeon' in all player-visible text; add formatStat() to fix decimal display in upgrade modals. Branch: `main`, commit: `fcc9f44`.

@@ -1784,8 +1784,12 @@
             {@const sellableItems = player.lootQueue.filter(i => i.discardable !== false && i.rarity !== 'boss_unique')}
             {@const clearRefund = sellableItems.reduce((s, i) => s + sellReturn(i), 0)}
             {@const keptUniques = player.lootQueue.filter(i => i.discardable === false || i.rarity === 'boss_unique').length}
-            {#if sellableItems.length > 0}
-              <div class="clear-all-row">
+            {@const preview = sortedLootQueue.slice(0, 5)}
+            {@const remaining = player.lootQueue.length - preview.length}
+            <div class="loot-tab-header">
+              <span class="loot-count">{player.lootQueue.length} ITEM{player.lootQueue.length === 1 ? '' : 'S'}</span>
+              <button class="lq-btn manage-items-btn" onclick={() => { showItemManager = true; clearSelection() }}>📦 MANAGE ITEMS</button>
+              {#if sellableItems.length > 0}
                 {#if clearAllConfirm}
                   <button class="lq-btn sell confirm clear-all-btn" onclick={() => { clearAllLoot(); clearAllConfirm = false }}>CONFIRM CLEAR? (3s)</button>
                 {:else}
@@ -1793,68 +1797,34 @@
                     clearAllConfirm = true
                     if (clearAllTimeout) clearTimeout(clearAllTimeout)
                     clearAllTimeout = setTimeout(() => { clearAllConfirm = false }, 3000)
-                  }}>CLEAR ALL (sell all for {clearRefund}g)</button>
+                  }}>CLEAR ALL ({clearRefund}g)</button>
                 {/if}
-                {#if keptUniques > 0}
-                  <span class="clear-kept-note">{keptUniques} UNIQUE ITEM{keptUniques > 1 ? 'S' : ''} KEPT</span>
-                {/if}
-              </div>
-            {/if}
-            {#each sortedLootQueue as item, idx (item.instanceId ?? idx)}
-              <div class="lq-card">
-                <div class="lq-top">
-                  <span class="lq-spr">{item.sprite}</span>
-                  <div class="lq-inf">
-                    <div class="lq-nm" style="color:{rarityColor(item.rarity)}">
-                      {item.name}
-                      <span class="item-lvl-badge" style="color:{itemLevelColor(item.itemLevel ?? 1)}">Lv{item.itemLevel ?? 1}</span>
-                      {#if item.tier}<span class="tier-badge">T{item.tier}</span>{/if}
-                      {#if item.modifier}<span class="mod-badge {item.modifier.quality === 'godroll' ? 'mod-godroll' : ''}" style="color:{modifierColor(item.modifier.quality)}">{item.modifier.quality.toUpperCase()}</span>{/if}
-                      {#if (item.forgeCount ?? 0) > 0}<span class="forge-count-badge">x{item.forgeCount}</span>{/if}
-                      {#if item.rarity === 'boss_unique'}<span class="unique-badge"> ★UNIQUE</span>{/if}
-                    </div>
-                    {#if (item.itemLevel ?? 1) < 10}
-                      <div class="item-xp-bar"><div class="item-xp-fill" style="width:{Math.min(100, ((item.itemXp ?? 0) / (item.itemXpToNext ?? itemXpToNext(item.itemLevel ?? 1))) * 100)}%"></div></div>
-                    {/if}
-                    <div class="lq-st">{formatStatBonuses(item)}</div>
-                    {#if item.rolledBonuses && item.rolledBonuses.length > 0}
-                      <div class="lq-rolls">{item.rolledBonuses.map(r => r.label).join(' ')}</div>
-                    {/if}
-                    {#if item.modifier && item.modifier.bonuses.length > 0}
-                      <div class="lq-rolls mod-rolls">{item.modifier.bonuses.map(r => r.label).join(' ')}</div>
-                    {/if}
-                    {#if item.lore}<div class="item-lore">{item.lore}</div>{/if}
-                  </div>
+              {/if}
+              {#if keptUniques > 0}
+                <span class="clear-kept-note">{keptUniques} UNIQUE KEPT</span>
+              {/if}
+            </div>
+            {#each preview as item, idx (item.instanceId ?? idx)}
+              <div class="lq-preview-row">
+                <span class="lq-spr">{item.sprite}</span>
+                <div class="lq-preview-inf">
+                  <span class="lq-preview-nm" style="color:{rarityColor(item.rarity)}">
+                    {item.name}
+                    <span class="item-lvl-badge" style="color:{itemLevelColor(item.itemLevel ?? 1)}">Lv{item.itemLevel ?? 1}</span>
+                    {#if item.tier}<span class="tier-badge">T{item.tier}</span>{/if}
+                    {#if item.rarity === 'boss_unique'}<span class="unique-badge"> ★</span>{/if}
+                  </span>
+                  <span class="lq-preview-st">{formatStatBonuses(item)}</span>
                 </div>
-                <div class="lq-btns">
+                <div class="lq-preview-btns">
                   <button class="lq-btn eq" onclick={() => equipFromLootQueue(item)}>EQUIP</button>
-                  {#if item.rarity !== 'boss_unique'}
-                    {@const bdRet = breakdownReturn(item)}
-                    {#if breakdownConfirmItem === item}
-                      <button class="lq-btn bd confirm" onclick={() => { doBreakdown(item); breakdownConfirmItem = null }}>CONFIRM?</button>
-                    {:else}
-                      <button class="lq-btn bd" onclick={() => {
-                        breakdownConfirmItem = item; sellConfirmItem = null
-                        if (breakdownConfirmTimeout) clearTimeout(breakdownConfirmTimeout)
-                        breakdownConfirmTimeout = setTimeout(() => { breakdownConfirmItem = null }, 2000)
-                      }}>{'voidEssence' in bdRet ? `BD (${bdRet.voidEssence}x void)` : bdRet.amount > 0 ? `BD (${bdRet.amount}x ${MATERIAL_TIERS[bdRet.mat]?.sprite ?? ''}+${bdRet.gold}g)` : `BD (+${bdRet.gold}g)`}</button>
-                    {/if}
-                    {@const sv = sellReturn(item)}
-                    {#if sellConfirmItem === item}
-                      <button class="lq-btn sell confirm" onclick={() => { doSell(item); sellConfirmItem = null }}>CONFIRM?</button>
-                    {:else}
-                      <button class="lq-btn sell" onclick={() => {
-                        sellConfirmItem = item; breakdownConfirmItem = null
-                        if (sellConfirmTimeout) clearTimeout(sellConfirmTimeout)
-                        sellConfirmTimeout = setTimeout(() => { sellConfirmItem = null }, 2000)
-                      }}>SELL ({sv}g)</button>
-                    {/if}
-                  {:else}
-                    <span class="keep-badge">🔒 BOSS UNIQUE</span>
-                  {/if}
+                  <button class="lq-btn sell" onclick={() => doSell(item)}>SELL ({sellReturn(item)}g)</button>
                 </div>
               </div>
             {/each}
+            {#if remaining > 0}
+              <button class="lq-more-link" onclick={() => { showItemManager = true; clearSelection() }}>+{remaining} MORE — OPEN MANAGER</button>
+            {/if}
           {/if}
 
         {:else if gearSubTab === 'crafting'}
@@ -2308,6 +2278,121 @@
           {/if}
         </div>
       {/each}
+    </div>
+  </div>
+{/if}
+
+<!-- ITEM MANAGER MODAL -->
+{#if showItemManager}
+  <div class="moverlay" onclick={() => { showItemManager = false; clearSelection() }} role="dialog" aria-modal="true">
+    <div class="mbox im-box" onclick={(e) => e.stopPropagation()}>
+      <div class="mhdr">
+        <span class="mtitle">📦 ITEM MANAGER</span>
+        <span class="im-count">{filteredItems.length} / {player.lootQueue.length}</span>
+        <span class="mgold">🪙 {player.gold}</span>
+        <button class="mclose" onclick={() => { showItemManager = false; clearSelection() }}>✕</button>
+      </div>
+
+      <div class="im-sort-bar">
+        <span class="im-sort-lbl">SORT:</span>
+        {#each (['power','tier','slot','rarity','level','name'] as SortKey[]) as key}
+          <button class="im-sort-btn {sortKey === key ? 'active' : ''}" onclick={() => {
+            if (sortKey === key) sortAsc = !sortAsc
+            else { sortKey = key; sortAsc = false }
+          }}>{key.toUpperCase()}{sortKey === key ? (sortAsc ? ' ▲' : ' ▼') : ''}</button>
+        {/each}
+      </div>
+
+      <div class="im-filter-row">
+        <span class="im-filter-lbl">SLOT:</span>
+        <button class="im-filter-btn {filterSlot === 'all' ? 'active' : ''}" onclick={() => filterSlot = 'all'}>ALL</button>
+        {#each (['weapon','armour','helmet','ring','amulet'] as ItemSlot[]) as slot}
+          <button class="im-filter-btn {filterSlot === slot ? 'active' : ''}" onclick={() => filterSlot = slot}>{slot.toUpperCase()}</button>
+        {/each}
+      </div>
+
+      <div class="im-filter-row">
+        <span class="im-filter-lbl">RARITY:</span>
+        <button class="im-filter-btn {filterRarity === 'all' ? 'active' : ''}" onclick={() => filterRarity = 'all'}>ALL</button>
+        {#each ['common','uncommon','rare','epic','legendary','boss_unique'] as rar}
+          <button class="im-filter-btn {filterRarity === rar ? 'active' : ''}" style="color:{rarityColor(rar)}" onclick={() => filterRarity = rar}>{rar.replace('_',' ').toUpperCase()}</button>
+        {/each}
+      </div>
+
+      <div class="im-select-bar">
+        <button class="im-select-btn" onclick={() => selectAll(false)}>SELECT ALL (SELLABLE)</button>
+        <button class="im-select-btn danger" onclick={() => selectAll(true)}>SELECT ALL (+ BOSS)</button>
+        <button class="im-select-btn" onclick={clearSelection}>CLEAR SELECTION</button>
+        <span class="im-sel-count">{selectedIds.size} SELECTED</span>
+      </div>
+
+      {#if confirmBossSell}
+        <div class="im-boss-warn">
+          ⚠️ SELLING BOSS UNIQUES — {selectedItems.filter(i => i.rarity === 'boss_unique').length} BOSS DROP(S) INCLUDED. THIS IS PERMANENT.
+          <button class="im-boss-confirm" onclick={sellSelected}>CONFIRM SELL (+{selectedSellValue}g)</button>
+          <button class="im-boss-cancel" onclick={() => confirmBossSell = false}>CANCEL</button>
+        </div>
+      {/if}
+
+      <div class="im-list">
+        {#if pagedItems.length === 0}
+          <div class="stub">NO ITEMS MATCH FILTERS</div>
+        {/if}
+        {#each pagedItems as item, idx (item.instanceId ?? item.id + '-' + idx)}
+          {@const iid = item.instanceId ?? item.id}
+          {@const isSelected = selectedIds.has(iid)}
+          {@const isBoss = item.rarity === 'boss_unique'}
+          <div class="im-row {isSelected ? 'selected' : ''} {isBoss ? 'boss-unique' : ''}">
+            <input
+              type="checkbox"
+              class="im-check"
+              checked={isSelected}
+              onclick={(e) => { e.stopPropagation(); handleItemClick(item, e as unknown as MouseEvent) }}
+            />
+            <span class="im-spr">{item.sprite}</span>
+            <div class="im-inf">
+              <div class="im-nm" style="color:{rarityColor(item.rarity)}">
+                {item.name}
+                <span class="item-lvl-badge" style="color:{itemLevelColor(item.itemLevel ?? 1)}">Lv{item.itemLevel ?? 1}</span>
+                {#if item.tier}<span class="tier-badge">T{item.tier}</span>{/if}
+                <span class="im-slot-badge">{item.slot.toUpperCase()}</span>
+                <span class="im-rar-badge" style="color:{rarityColor(item.rarity)}">{item.rarity.replace('_',' ').toUpperCase()}</span>
+                {#if item.modifier}<span class="mod-badge {item.modifier.quality === 'godroll' ? 'mod-godroll' : ''}" style="color:{modifierColor(item.modifier.quality)}">{item.modifier.quality.toUpperCase()}</span>{/if}
+                {#if (item.forgeCount ?? 0) > 0}<span class="forge-count-badge">x{item.forgeCount}</span>{/if}
+                {#if isBoss}<span class="unique-badge"> ★UNIQUE</span>{/if}
+              </div>
+              <div class="im-st">{formatStatBonuses(item)}</div>
+              {#if item.modifier && item.modifier.bonuses.length > 0}
+                <div class="im-rolls mod-rolls">{item.modifier.bonuses.map(r => r.label).join(' ')}</div>
+              {/if}
+            </div>
+            <div class="im-row-btns">
+              <span class="im-sell-val">+{sellReturn(item)}g</span>
+              <button class="lq-btn eq" onclick={() => equipFromLootQueue(item)}>EQUIP</button>
+              {#if !isBoss}
+                <button class="lq-btn bd" onclick={() => doBreakdown(item)}>BD</button>
+              {/if}
+              <button class="lq-btn sell" onclick={() => doSell(item)}>SELL</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <div class="im-pager">
+        <button class="im-page-btn" disabled={currentPage <= 1} onclick={() => currentPage = Math.max(1, currentPage - 1)}>◀</button>
+        <span class="im-page-lbl">PAGE {currentPage} / {totalPages}</span>
+        <button class="im-page-btn" disabled={currentPage >= totalPages} onclick={() => currentPage = Math.min(totalPages, currentPage + 1)}>▶</button>
+      </div>
+
+      <div class="im-action-bar">
+        <button class="im-action-btn sell" disabled={selectedIds.size === 0} onclick={sellSelected}>
+          SELL SELECTED ({selectedIds.size}) +{selectedSellValue}g
+        </button>
+        <button class="im-action-btn bd" disabled={selectedIds.size === 0} onclick={breakdownSelected}>
+          BREAK DOWN SELECTED ({selectedIds.size})
+        </button>
+        <button class="im-action-btn close" onclick={() => { showItemManager = false; clearSelection() }}>CLOSE</button>
+      </div>
     </div>
   </div>
 {/if}
@@ -3760,4 +3845,156 @@
   .skill-unlock-entry { font-size: 7px; padding: 2px 5px; border: 1px solid #222; }
   .skill-unlock-entry.met { color: #f0c030; border-color: #3a2a00; }
   .skill-unlock-entry.unmet { color: #555; border-color: #1a1a1a; }
+
+  /* ── LOOT TAB COMPACT PREVIEW ─────────────────────────────────────── */
+  .loot-tab-header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 6px 0; margin-bottom: 8px; border-bottom: 1px solid var(--z-border);
+  }
+  .loot-count { font-size: 9px; color: var(--z-accent); letter-spacing: 1px; }
+  .manage-items-btn {
+    background: color-mix(in srgb, var(--z-accent) 22%, #000);
+    color: var(--z-accent);
+    border-color: color-mix(in srgb, var(--z-accent) 50%, #000);
+  }
+  .manage-items-btn:hover { background: color-mix(in srgb, var(--z-accent) 38%, #000); }
+  .lq-preview-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    padding: 6px 8px; margin-bottom: 4px;
+  }
+  .lq-preview-row:nth-child(even) { background: color-mix(in srgb, var(--z-panel2) 70%, #000); }
+  .lq-preview-inf { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .lq-preview-nm { font-size: 9px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .lq-preview-st { font-size: 8px; color: #888; }
+  .lq-preview-btns { display: flex; gap: 4px; }
+  .lq-more-link {
+    background: var(--z-panel2); border: 1px solid var(--z-border); color: var(--z-accent2);
+    font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 8px; cursor: pointer; width: 100%; text-align: center; letter-spacing: 1px;
+  }
+  .lq-more-link:hover { background: var(--z-panel); border-color: var(--z-accent); }
+
+  /* ── ITEM MANAGER MODAL ──────────────────────────────────────────── */
+  .im-box {
+    min-width: min(720px, 96vw); max-width: 96vw; max-height: 92vh;
+    overflow: hidden; display: flex; flex-direction: column; gap: 8px;
+    padding: 14px;
+  }
+  .im-count { font-size: 9px; color: #888; }
+  .im-sort-bar, .im-filter-row, .im-select-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    padding: 5px 7px;
+  }
+  .im-sort-lbl, .im-filter-lbl { font-size: 8px; color: #666; margin-right: 4px; }
+  .im-sort-btn, .im-filter-btn, .im-select-btn {
+    background: #060608; border: 1px solid var(--z-border); color: #aaa;
+    font-family: 'Press Start 2P', monospace; font-size: 7px;
+    padding: 4px 7px; cursor: pointer; letter-spacing: 1px;
+  }
+  .im-sort-btn:hover, .im-filter-btn:hover, .im-select-btn:hover {
+    border-color: var(--z-accent); color: #fff;
+  }
+  .im-sort-btn.active, .im-filter-btn.active {
+    background: color-mix(in srgb, var(--z-accent) 22%, #000);
+    border-color: var(--z-accent); color: var(--z-accent);
+  }
+  .im-select-btn.danger { color: #ff9000; border-color: #3a2000; }
+  .im-select-btn.danger:hover { border-color: #ff9000; }
+  .im-sel-count { margin-left: auto; font-size: 8px; color: var(--z-accent); }
+
+  .im-boss-warn {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    background: #200a0a; border: 1px solid #ff4444; color: #ff9090;
+    padding: 7px 10px; font-size: 8px; letter-spacing: 1px;
+  }
+  .im-boss-confirm {
+    background: #400a0a; border: 1px solid #ff4444; color: #ff4444;
+    font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 5px 8px; cursor: pointer; margin-left: auto;
+    animation: bb 0.4s ease-in-out infinite alternate;
+  }
+  .im-boss-cancel {
+    background: #111; border: 1px solid var(--z-border); color: #aaa;
+    font-family: 'Press Start 2P', monospace; font-size: 8px;
+    padding: 5px 8px; cursor: pointer;
+  }
+
+  .im-list {
+    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+    border: 1px solid var(--z-border); background: #050508; padding: 4px;
+    max-height: 48vh;
+  }
+  .im-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--z-panel2); border: 1px solid var(--z-border);
+    padding: 6px 8px;
+  }
+  .im-row:nth-child(even) { background: color-mix(in srgb, var(--z-panel2) 65%, #000); }
+  .im-row.selected {
+    border-color: #f0c030; box-shadow: inset 0 0 0 1px #f0c030;
+  }
+  .im-row.boss-unique {
+    background: color-mix(in srgb, #3a0a0a 35%, var(--z-panel2));
+  }
+  .im-row.boss-unique.selected {
+    box-shadow: inset 0 0 0 1px #ff9000;
+    border-color: #ff9000;
+  }
+  .im-check { width: 14px; height: 14px; cursor: pointer; accent-color: #f0c030; }
+  .im-spr { font-size: 18px; }
+  .im-inf { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .im-nm { font-size: 9px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .im-st { font-size: 8px; color: #888; }
+  .im-rolls { font-size: 7px; color: #40a0ff; }
+  .im-rolls.mod-rolls { color: #c040ff; }
+  .im-slot-badge {
+    font-size: 7px; color: #888; background: #111; border: 1px solid #222;
+    padding: 1px 4px;
+  }
+  .im-rar-badge {
+    font-size: 7px; background: #111; border: 1px solid #222;
+    padding: 1px 4px;
+  }
+  .im-row-btns { display: flex; align-items: center; gap: 4px; }
+  .im-sell-val { font-size: 8px; color: #f0c030; margin-right: 2px; }
+
+  .im-pager {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 4px; font-size: 8px; color: #888;
+  }
+  .im-page-btn {
+    background: var(--z-panel2); border: 1px solid var(--z-border); color: #aaa;
+    font-family: 'Press Start 2P', monospace; font-size: 9px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  .im-page-btn:hover:not(:disabled) { border-color: var(--z-accent); color: #fff; }
+  .im-page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .im-page-lbl { letter-spacing: 1px; }
+
+  .im-action-bar {
+    display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px;
+    border-top: 1px solid var(--z-border); position: sticky; bottom: 0;
+    background: var(--z-panel); margin: 0 -14px -14px; padding: 10px 14px 14px;
+  }
+  .im-action-btn {
+    flex: 1; min-width: 100px;
+    background: var(--z-panel2); border: 1px solid var(--z-border); color: #aaa;
+    font-family: 'Press Start 2P', monospace; font-size: 9px;
+    padding: 9px 10px; cursor: pointer; letter-spacing: 1px;
+  }
+  .im-action-btn:hover:not(:disabled) { border-color: var(--z-accent); color: #fff; }
+  .im-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .im-action-btn.sell {
+    background: #1a0a00; color: #f0c030; border-color: #3a2a00;
+  }
+  .im-action-btn.sell:hover:not(:disabled) { background: #2a1800; border-color: #f0c030; }
+  .im-action-btn.bd {
+    background: #0a0a1a; color: #4080ff; border-color: #1a2a4a;
+  }
+  .im-action-btn.bd:hover:not(:disabled) { background: #0f1025; border-color: #4080ff; }
+  .im-action-btn.close {
+    flex: 0 0 auto;
+  }
 </style>

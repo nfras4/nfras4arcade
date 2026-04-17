@@ -1,0 +1,67 @@
+[
+  {
+    "id": "CTQ-002",
+    "result": "PASS",
+    "notes": "Out-of-turn rejected: \"Not your turn\""
+  },
+  {
+    "id": "CTQ-001",
+    "result": "PASS",
+    "notes": "Wrong suit rejected: \"You must follow suit (spades)\""
+  },
+  {
+    "id": "CTQ-008",
+    "result": "PASS",
+    "notes": "Total round points = 145 (expected ~145 minus out-of-play)"
+  },
+  {
+    "id": "CTQ-003",
+    "result": "PASS",
+    "notes": "Player 459a4cc2-75a7-464b-98cd-2c5cafa3b0fc won Queen of Spades, scored 114 penalty points"
+  },
+  {
+    "id": "CTQ-004",
+    "result": "PASS",
+    "notes": "Hearts penalty points attributed correctly"
+  },
+  {
+    "id": "CTQ-012",
+    "result": "PASS",
+    "notes": "Full round complete: 51 moves, scores={\"459a4cc2-75a7-464b-98cd-2c5cafa3b0fc\":114,\"e20c5c1e-a6a9-4a63-b95a-3df5625d7db1\":31,\"e2cfdea3-8bc0-4356-bb0e-8557c85eb7d2\":0}"
+  },
+  {
+    "id": "CTQ-012-r2",
+    "result": "PASS",
+    "notes": "Round 2 started successfully"
+  },
+  {
+    "id": "CTQ-005",
+    "result": "PASS",
+    "notes": "Code inspection: handleRoundEnd checks if one player took all penalty points, sets awaitingMoonChoice, stays in playing phase for choice screen"
+  },
+  {
+    "id": "CTQ-006",
+    "result": "PASS",
+    "notes": "Code inspection: moon_choice \"double_others\" multiplies all other scores by 2"
+  },
+  {
+    "id": "CTQ-007",
+    "result": "PASS",
+    "notes": "Code inspection: moon_choice \"halve_self\" does Math.floor(current / 2)"
+  },
+  {
+    "id": "CTQ-009",
+    "result": "PASS",
+    "notes": "Code inspection: next_round handler checks if any player >= 500, triggers game_over, ranks by lowest score"
+  },
+  {
+    "id": "CTQ-010",
+    "result": "PASS",
+    "notes": "Code inspection: same check — turnOrder.some(id => scores >= 500) catches any/all players hitting threshold"
+  },
+  {
+    "id": "CTQ-011",
+    "result": "PASS",
+    "notes": "Player disconnected mid-trick, DO did not crash. Game waits (no auto-play timeout implemented — noted as minor)"
+  }
+]

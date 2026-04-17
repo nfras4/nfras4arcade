@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-16** - Deployed to nfras4arcade. Summary: Add who's-voted checklist to impostor voting phase (live ☑/☐ per player); fix &#10003;/&#10007; HTML entities rendering as literal text in Svelte expressions. Branch: `main`, commit: `83c4597`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Add farm mode toggle to dungeon — checkbox in zone bar loops stages 1-9, skips miniboss/boss, progress bar scales to 9-stage range, persists via localStorage. Branch: `main`, commit: `1c97b21`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Fix boss special timer one-shot risk — lower getBossSpecialCap (0.65→0.45/0.72→0.50/etc), wound rate 0.70→0.45, 800ms regular-hit mutex after specials, big-hit 2.0x→1.6x, dunk description mismatch fixed. Branch: `main`, commit: `d9e7c27`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Nerf Chief Surgeon — big-hit 2.5x → 2.0x, warmed-up interval 5000ms → 6500ms, warmed-up back-injury chance 20% → 30%. Branch: `main`, commit: `7a8549b`.

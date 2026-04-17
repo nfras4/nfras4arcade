@@ -521,11 +521,11 @@ export const ENEMIES: Record<string, Enemy> = {
   'failed-clone':       { id: 'failed-clone',        name: 'FAILED CLONE',        sprite: '👤', baseHp: 2000,       baseDmg: 340,    drops: [], isElite: true },
   'security-protocol':  { id: 'security-protocol',   name: 'SECURITY PROTOCOL',   sprite: '🔒', baseHp: 2400,       baseDmg: 400,    drops: [], isElite: true },
   'containment-breach': { id: 'containment-breach',  name: 'CONTAINMENT BREACH',  sprite: '⚠️', baseHp: 8000,       baseDmg: 600,    drops: [], isMiniboss: true },
-  'dr-01':              { id: 'dr-01',               name: 'DR-01',               sprite: '🔬', baseHp: 100000,     baseDmg: 1200,   drops: [], isBoss: true },
+  'dr-01':              { id: 'dr-01',               name: 'DR-01',               sprite: '🔬', baseHp: 100000,     baseDmg: 420,    drops: [], isBoss: true },
   'alpha-specimen':     { id: 'alpha-specimen',      name: 'ALPHA SPECIMEN',      sprite: '🧪', baseHp: 10000,      baseDmg: 800,    drops: [], isMiniboss: true },
-  'the-specimen':       { id: 'the-specimen',        name: 'THE SPECIMEN',        sprite: '☣️', baseHp: 160000,     baseDmg: 1600,   drops: [], isBoss: true },
+  'the-specimen':       { id: 'the-specimen',        name: 'THE SPECIMEN',        sprite: '☣️', baseHp: 160000,     baseDmg: 460,    drops: [], isBoss: true },
   'core-guardian':      { id: 'core-guardian',       name: 'CORE GUARDIAN',       sprite: '💾', baseHp: 14000,      baseDmg: 1000,   drops: [], isMiniboss: true },
-  'nexus':              { id: 'nexus',               name: 'NEXUS',               sprite: '🖥️', baseHp: 250000,     baseDmg: 2200,   drops: [], isBoss: true },
+  'nexus':              { id: 'nexus',               name: 'NEXUS',               sprite: '🖥️', baseHp: 250000,     baseDmg: 510,    drops: [], isBoss: true },
 
   // ── ZONES 12-14: WOLTON CORRUPTION ───────────────────────────────────────
   'fractured-guard':    { id: 'fractured-guard',     name: 'FRACTURED GUARD',     sprite: '💔', baseHp: 3500,       baseDmg: 520,    drops: [] },
@@ -534,11 +534,11 @@ export const ENEMIES: Record<string, Enemy> = {
   'broken-construct':   { id: 'broken-construct',    name: 'BROKEN CONSTRUCT',    sprite: '🔧', baseHp: 6000,       baseDmg: 940,    drops: [], isElite: true },
   'reality-tear':       { id: 'reality-tear',        name: 'REALITY TEAR',        sprite: '🌀', baseHp: 7200,       baseDmg: 1100,   drops: [], isElite: true },
   'the-fracture':       { id: 'the-fracture',        name: 'THE FRACTURE',        sprite: '⚡', baseHp: 22000,      baseDmg: 1600,   drops: [], isMiniboss: true },
-  'shard':              { id: 'shard',               name: 'SHARD',               sprite: '💠', baseHp: 400000,     baseDmg: 3200,   drops: [], isBoss: true },
+  'shard':              { id: 'shard',               name: 'SHARD',               sprite: '💠', baseHp: 400000,     baseDmg: 300,    drops: [], isBoss: true },
   'void-architect':     { id: 'void-architect',      name: 'VOID ARCHITECT',      sprite: '🏗️', baseHp: 30000,      baseDmg: 2200,   drops: [], isMiniboss: true },
-  'the-architect':      { id: 'the-architect',       name: 'THE ARCHITECT',       sprite: '🌑', baseHp: 650000,     baseDmg: 4800,   drops: [], isBoss: true },
+  'the-architect':      { id: 'the-architect',       name: 'THE ARCHITECT',       sprite: '🌑', baseHp: 650000,     baseDmg: 340,    drops: [], isBoss: true },
   'mirror-shard':       { id: 'mirror-shard',        name: 'MIRROR SHARD',        sprite: '🪞', baseHp: 40000,      baseDmg: 3000,   drops: [], isMiniboss: true },
-  'echo':               { id: 'echo',               name: 'ECHO',               sprite: '👁️', baseHp: 1000000,    baseDmg: 7000,   drops: [], isBoss: true },
+  'echo':               { id: 'echo',               name: 'ECHO',               sprite: '👁️', baseHp: 1000000,    baseDmg: 380,    drops: [], isBoss: true },
 
   // ── ZONES 15-17: VOID DESCENT ────────────────────────────────────────────
   'void-wisp':          { id: 'void-wisp',           name: 'VOID WISP',           sprite: '✨', baseHp: 9000,       baseDmg: 1400,   drops: [] },
@@ -547,11 +547,11 @@ export const ENEMIES: Record<string, Enemy> = {
   'echo-fragment':      { id: 'echo-fragment',       name: 'ECHO FRAGMENT',       sprite: '🔮', baseHp: 16000,      baseDmg: 2500,   drops: [], isElite: true },
   'silence':            { id: 'silence',             name: 'SILENCE',             sprite: '🔇', baseHp: 19000,      baseDmg: 3000,   drops: [], isElite: true },
   'void-herald':        { id: 'void-herald',         name: 'VOID HERALD',         sprite: '📯', baseHp: 60000,      baseDmg: 4500,   drops: [], isMiniboss: true },
-  'vestige':            { id: 'vestige',             name: 'VESTIGE',             sprite: '👻', baseHp: 2500000,    baseDmg: 12000,  drops: [], isBoss: true },
+  'vestige':            { id: 'vestige',             name: 'VESTIGE',             sprite: '👻', baseHp: 2500000,    baseDmg: 190,    drops: [], isBoss: true },
   'null-prime':         { id: 'null-prime',          name: 'NULL PRIME',          sprite: '⚫', baseHp: 80000,      baseDmg: 6000,   drops: [], isMiniboss: true },
-  'the-weight':         { id: 'the-weight',          name: 'THE WEIGHT',          sprite: '🏋️', baseHp: 4000000,    baseDmg: 18000,  drops: [], isBoss: true },
+  'the-weight':         { id: 'the-weight',          name: 'THE WEIGHT',          sprite: '🏋️', baseHp: 4000000,    baseDmg: 220,    drops: [], isBoss: true },
   'unraveller':         { id: 'unraveller',          name: 'UNRAVELLER',          sprite: '🧶', baseHp: 110000,     baseDmg: 8000,   drops: [], isMiniboss: true },
-  'collapse':           { id: 'collapse',            name: 'COLLAPSE',            sprite: '💥', baseHp: 6500000,    baseDmg: 26000,  drops: [], isBoss: true },
+  'collapse':           { id: 'collapse',            name: 'COLLAPSE',            sprite: '💥', baseHp: 6500000,    baseDmg: 255,    drops: [], isBoss: true },
 
   // ── ZONES 18-20: DEEP VOID ────────────────────────────────────────────────
   'ancient-remnant':    { id: 'ancient-remnant',     name: 'ANCIENT REMNANT',     sprite: '🗿', baseHp: 24000,      baseDmg: 3800,   drops: [] },
@@ -560,11 +560,11 @@ export const ENEMIES: Record<string, Enemy> = {
   'the-nameless':       { id: 'the-nameless',        name: 'THE NAMELESS',        sprite: '🌔', baseHp: 46000,      baseDmg: 6800,   drops: [], isElite: true },
   'origin-shard':       { id: 'origin-shard',        name: 'ORIGIN SHARD',        sprite: '🌕', baseHp: 57000,      baseDmg: 8200,   drops: [], isElite: true },
   'deep-remnant':       { id: 'deep-remnant',        name: 'DEEP REMNANT',        sprite: '🌌', baseHp: 180000,     baseDmg: 13000,  drops: [], isMiniboss: true },
-  'origin':             { id: 'origin',              name: 'ORIGIN',              sprite: '🌠', baseHp: 15000000,   baseDmg: 40000,  drops: [], isBoss: true },
+  'origin':             { id: 'origin',              name: 'ORIGIN',              sprite: '🌠', baseHp: 15000000,   baseDmg: 130,    drops: [], isBoss: true },
   'void-sovereign':     { id: 'void-sovereign',      name: 'VOID SOVEREIGN',      sprite: '👑', baseHp: 240000,     baseDmg: 18000,  drops: [], isMiniboss: true },
-  'silence-absolute':   { id: 'silence-absolute',    name: 'SILENCE ABSOLUTE',    sprite: '⬜', baseHp: 25000000,   baseDmg: 60000,  drops: [], isBoss: true },
+  'silence-absolute':   { id: 'silence-absolute',    name: 'SILENCE ABSOLUTE',    sprite: '⬜', baseHp: 25000000,   baseDmg: 155,    drops: [], isBoss: true },
   'the-penultimate':    { id: 'the-penultimate',     name: 'THE PENULTIMATE',     sprite: '🔺', baseHp: 320000,     baseDmg: 25000,  drops: [], isMiniboss: true },
-  'the-first-slime':    { id: 'the-first-slime',     name: 'THE FIRST SLIME',     sprite: '🟢', baseHp: 40000000,   baseDmg: 90000,  drops: [], isBoss: true },
+  'the-first-slime':    { id: 'the-first-slime',     name: 'THE FIRST SLIME',     sprite: '🟢', baseHp: 40000000,   baseDmg: 175,    drops: [], isBoss: true },
 
   // ── ZONES 21-23: THE REMNANT ─────────────────────────────────────────────
   'remnant-wisp':       { id: 'remnant-wisp',        name: 'REMNANT WISP',        sprite: '🌫️', baseHp: 70000,      baseDmg: 12000,  drops: [] },
@@ -573,11 +573,11 @@ export const ENEMIES: Record<string, Enemy> = {
   'void-colossus':      { id: 'void-colossus',       name: 'VOID COLOSSUS',       sprite: '🗼', baseHp: 138000,     baseDmg: 22000,  drops: [], isElite: true },
   'the-between':        { id: 'the-between',         name: 'THE BETWEEN',         sprite: '🌉', baseHp: 172000,     baseDmg: 27000,  drops: [], isElite: true },
   'remnant-prime':      { id: 'remnant-prime',       name: 'REMNANT PRIME',       sprite: '⚱️', baseHp: 550000,     baseDmg: 40000,  drops: [], isMiniboss: true },
-  'the-remnant-boss':   { id: 'the-remnant-boss',    name: 'THE REMNANT',         sprite: '🏚️', baseHp: 80000000,   baseDmg: 120000, drops: [], isBoss: true },
+  'the-remnant-boss':   { id: 'the-remnant-boss',    name: 'THE REMNANT',         sprite: '🏚️', baseHp: 80000000,   baseDmg: 80,     drops: [], isBoss: true },
   'null-colossus':      { id: 'null-colossus',       name: 'NULL COLOSSUS',       sprite: '🗻', baseHp: 730000,     baseDmg: 55000,  drops: [], isMiniboss: true },
-  'the-null':           { id: 'the-null',            name: 'THE NULL',            sprite: '⭕', baseHp: 130000000,  baseDmg: 180000, drops: [], isBoss: true },
+  'the-null':           { id: 'the-null',            name: 'THE NULL',            sprite: '⭕', baseHp: 130000000,  baseDmg: 86,     drops: [], isBoss: true },
   'final-guardian':     { id: 'final-guardian',      name: 'FINAL GUARDIAN',      sprite: '🛡️', baseHp: 970000,     baseDmg: 75000,  drops: [], isMiniboss: true },
-  'the-nothing':        { id: 'the-nothing',         name: 'THE NOTHING',         sprite: '🕳️', baseHp: 210000000,  baseDmg: 260000, drops: [], isBoss: true },
+  'the-nothing':        { id: 'the-nothing',         name: 'THE NOTHING',         sprite: '🕳️', baseHp: 210000000,  baseDmg: 93,     drops: [], isBoss: true },
 
   // ── ZONES 24-26: NULL SPACE ──────────────────────────────────────────────
   'space-remnant':      { id: 'space-remnant',       name: 'SPACE REMNANT',       sprite: '🌑', baseHp: 215000,     baseDmg: 36000,  drops: [] },
@@ -586,11 +586,11 @@ export const ENEMIES: Record<string, Enemy> = {
   'the-erased':         { id: 'the-erased',          name: 'THE ERASED',          sprite: '🌔', baseHp: 422000,     baseDmg: 70000,  drops: [], isElite: true },
   'space-sovereign':    { id: 'space-sovereign',     name: 'SPACE SOVEREIGN',     sprite: '🌕', baseHp: 528000,     baseDmg: 87000,  drops: [], isElite: true },
   'space-colossus':     { id: 'space-colossus',      name: 'SPACE COLOSSUS',      sprite: '🪐', baseHp: 1700000,    baseDmg: 130000, drops: [], isMiniboss: true },
-  'null-prime-boss':    { id: 'null-prime-boss',     name: 'NULL PRIME',          sprite: '🌌', baseHp: 350000000,  baseDmg: 380000, drops: [], isBoss: true },
+  'null-prime-boss':    { id: 'null-prime-boss',     name: 'NULL PRIME',          sprite: '🌌', baseHp: 350000000,  baseDmg: 99,     drops: [], isBoss: true },
   'void-ancient':       { id: 'void-ancient',        name: 'VOID ANCIENT',        sprite: '💫', baseHp: 2200000,    baseDmg: 180000, drops: [], isMiniboss: true },
-  'the-vast':           { id: 'the-vast',            name: 'THE VAST',            sprite: '🔭', baseHp: 580000000,  baseDmg: 560000, drops: [], isBoss: true },
+  'the-vast':           { id: 'the-vast',            name: 'THE VAST',            sprite: '🔭', baseHp: 580000000,  baseDmg: 106,    drops: [], isBoss: true },
   'space-prime':        { id: 'space-prime',         name: 'SPACE PRIME',         sprite: '⭐', baseHp: 2900000,    baseDmg: 250000, drops: [], isMiniboss: true },
-  'the-infinite':       { id: 'the-infinite',        name: 'THE INFINITE',        sprite: '♾️', baseHp: 950000000,  baseDmg: 820000, drops: [], isBoss: true },
+  'the-infinite':       { id: 'the-infinite',        name: 'THE INFINITE',        sprite: '♾️', baseHp: 950000000,  baseDmg: 112,    drops: [], isBoss: true },
 
   // ── ZONES 27-29: THE END ─────────────────────────────────────────────────
   'end-remnant':        { id: 'end-remnant',         name: 'END REMNANT',         sprite: '🌑', baseHp: 660000,     baseDmg: 110000, drops: [] },
@@ -599,7 +599,7 @@ export const ENEMIES: Record<string, Enemy> = {
   'the-last':           { id: 'the-last',            name: 'THE LAST',            sprite: '🕯️', baseHp: 1290000,    baseDmg: 215000, drops: [], isElite: true },
   'end-ancient':        { id: 'end-ancient',         name: 'END ANCIENT',         sprite: '⚰️', baseHp: 1610000,    baseDmg: 268000, drops: [], isElite: true },
   'end-colossus':       { id: 'end-colossus',        name: 'END COLOSSUS',        sprite: '🏔️', baseHp: 5200000,    baseDmg: 400000, drops: [], isMiniboss: true },
-  'the-first':          { id: 'the-first',           name: 'THE FIRST',           sprite: '🌅', baseHp: 1600000000, baseDmg: 1200000,drops: [], isBoss: true },
+  'the-first':          { id: 'the-first',           name: 'THE FIRST',           sprite: '🌅', baseHp: 1600000000, baseDmg: 119,    drops: [], isBoss: true },
   'the-last-guardian':  { id: 'the-last-guardian',   name: 'THE LAST GUARDIAN',   sprite: '⚔️', baseHp: 6900000,    baseDmg: 560000, drops: [], isMiniboss: true },
-  'the-end':            { id: 'the-end',             name: 'THE END',             sprite: '🌌', baseHp: 2500000000, baseDmg: 1800000,drops: [], isBoss: true },
+  'the-end':            { id: 'the-end',             name: 'THE END',             sprite: '🌌', baseHp: 2500000000, baseDmg: 125,    drops: [], isBoss: true },
 }

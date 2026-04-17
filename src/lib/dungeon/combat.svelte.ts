@@ -11,6 +11,7 @@ import { ZONES } from './zones'
 import { ITEMS, MATERIAL_TIERS, type Item } from './items'
 import { ACTIVITIES } from './timers.svelte'
 import { dropRoll, rollModifier } from './crafting'
+import { hasModifier, hasChallenge, computeChallengeBonus } from './prestige'
 import {
   calcEnemyHp, calcEnemyDmg, ELITE_HP_MULT, MINIBOSS_HP_MULT, BOSS_HP_MULT,
   STAGES_PER_ZONE, MAX_LOG_ENTRIES, randInt, prestigeMultiplier,
@@ -29,20 +30,65 @@ export function applyWound(p: PlayerState, damage: number, hitType: HitType, ene
     normal:       0.40,
     boss_special: 0.45,
   }
-  let effectiveRate = woundRates[hitType]
+  const baseRate = woundRates[hitType]
+
+  const woundReduction = Math.min(0.20, Math.max(0.02,
+    getEffectiveStats(p).defence / (p.maxHp * 3)
+  ))
+
   const isVulnerable = p.maxHp < 500
-  const isBossHit = hitType === 'boss_special' || (hitType === 'normal' && (enemy?.isBoss ?? false))
+  const isBossHit = hitType === 'boss_special' || (enemy?.isBoss ?? false)
+
+  let effectiveRate = baseRate - woundReduction
   if (isVulnerable && isBossHit) {
-    effectiveRate *= 0.4
+    effectiveRate = effectiveRate * 0.4
   }
+  effectiveRate = Math.max(0.05, effectiveRate)
+
   const woundAmount = Math.floor(damage * effectiveRate)
-  if (woundAmount > 0) {
-    p.woundedHp = Math.min(
-      p.woundedHp + woundAmount,
-      p.maxHp - p.hp
-    )
-    p.lastHitTimestamp = Date.now()
-  }
+  p.woundedHp = Math.min(
+    p.woundedHp + woundAmount,
+    p.maxHp - p.hp
+  )
+  p.lastHitTimestamp = Date.now()
+}
+
+function getBossHitCap(zoneIndex: number, maxHp: number, defence: number): number {
+  const baseCap = (() => {
+    if (zoneIndex <= 6)  return Math.min(0.50, 0.35 + 0.025 * zoneIndex)
+    if (zoneIndex <= 12) return 0.50 + (zoneIndex - 6) * 0.008
+    if (zoneIndex <= 18) return 0.55 + (zoneIndex - 12) * 0.012
+    return Math.min(0.85, 0.71 + (zoneIndex - 24) * 0.02)
+  })()
+  const capReduction = Math.min(0.15, Math.max(0.02,
+    defence / (maxHp * 2)
+  ))
+  const effectiveCap = Math.max(0.20, baseCap - capReduction)
+  const isVulnerable = maxHp < 500
+  const finalCap = isVulnerable
+    ? Math.min(effectiveCap, 0.60)
+    : effectiveCap
+  return Math.floor(maxHp * finalCap)
+}
+
+function getBossSpecialCap(zoneIndex: number, maxHp: number, defence: number): number {
+  const baseCap = (() => {
+    if (zoneIndex < 6)   return 0.45
+    if (zoneIndex <= 8)  return 0.50
+    if (zoneIndex <= 12) return 0.55
+    if (zoneIndex <= 18) return 0.60
+    if (zoneIndex <= 24) return 0.65
+    return 0.70
+  })()
+  const capReduction = Math.min(0.15, Math.max(0.02,
+    defence / (maxHp * 2)
+  ))
+  const effectiveCap = Math.max(0.25, baseCap - capReduction)
+  const isVulnerable = maxHp < 500
+  const finalCap = isVulnerable
+    ? Math.min(effectiveCap, 0.40)
+    : effectiveCap
+  return Math.floor(maxHp * finalCap)
 }
 
 export type LogType = 'dmg' | 'crit' | 'heal' | 'gold' | 'sys'
@@ -79,6 +125,8 @@ export type CombatState = {
   isVictory: boolean
   dungeonComplete: boolean
   lastSpecialHitAt: number
+  runStartTime: number
+  runEnded: boolean          // true if a challenge (ironman/full-audit) ends the run on death
 }
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -103,6 +151,8 @@ export const combatState: CombatState = $state({
   isVictory: false,
   dungeonComplete: false,
   lastSpecialHitAt: 0,
+  runStartTime: Date.now(),
+  runEnded: false,
 })
 
 let floaterSeq = 0
@@ -178,6 +228,28 @@ export function getEffectiveStats(p: PlayerState): Stats {
     }
   }
 
+  // Prestige perks (percent contribution — from HR shop purchases)
+  if (p.prestigePerks) {
+    const perks = p.prestigePerks
+    const perkMap: Record<StatKey, number> = {
+      attack:    perks.attackBonus,
+      defence:   perks.defenceBonus,
+      speed:     perks.speedBonus,
+      goldFind:  perks.goldBonus,
+      vitality:  perks.vitalityBonus,
+      critDmg:   perks.critDmgBonus,
+      lifesteal: perks.lifeStealBonus,
+      hpRegen:   perks.hpRegenBonus,
+      xpBoost:   perks.xpBonus,
+      luck:      perks.luckBonus,
+    }
+    for (const [stat, bonus] of Object.entries(perkMap) as [StatKey, number][]) {
+      if (bonus > 0) {
+        percentBonus[stat] = (percentBonus[stat] ?? 0) + bonus
+      }
+    }
+  }
+
   const result: Stats = {} as Stats
   for (const key of Object.keys(base) as StatKey[]) {
     const b = Number.isFinite(base[key]) ? base[key]! : 0
@@ -213,7 +285,9 @@ function rollDrops(
 
   // Luck adds minor chance bonus (0.1% per luck point, capped at +15%)
   const dropBonus = Math.min(luckStat * 0.001, 0.15)
-  const finalChance = Math.min(baseChance + dropBonus, 0.95)
+  // HR Shop: fast-track-loot modifier doubles drop rate (capped at 0.95)
+  const dropRateMult = hasModifier(player, 'modifier:dropRateMult:2') ? 2 : 1
+  const finalChance = Math.min((baseChance + dropBonus) * dropRateMult, 0.95)
 
   if (Math.random() > finalChance) return []
 
@@ -376,21 +450,8 @@ function processEvents(events: CombatEvent[]): void {
         }
         // Boss special attack cap — post-game zones scale higher
         if (enemy?.isBoss && ev.multiplier < 9999) {
-          function getBossSpecialCap(zoneIndex: number, maxHp: number): number {
-            const pct = (() => {
-              if (zoneIndex < 6)   return 0.45
-              if (zoneIndex <= 8)  return 0.50
-              if (zoneIndex <= 12) return 0.55
-              if (zoneIndex <= 18) return 0.60
-              if (zoneIndex <= 24) return 0.65
-              return 0.70
-            })()
-            const isVulnerable = maxHp < 500
-            const safePct = isVulnerable ? Math.min(pct, 0.40) : pct
-            return Math.floor(maxHp * safePct)
-          }
           const currentMaxHp = untrack(() => player.maxHp)
-          const maxSpecialHit = getBossSpecialCap(zoneIdx, currentMaxHp)
+          const maxSpecialHit = getBossSpecialCap(zoneIdx, currentMaxHp, def)
           dmg = Math.min(dmg, maxSpecialHit)
         }
 
@@ -626,6 +687,8 @@ function checkBossPhases(): void {
 
   for (const phase of sorted) {
     if (enteredPhases.has(phase.id)) continue
+    // HR Shop: Fraser's final-form phase only activates if FRASER PROTOCOL is unlocked
+    if (phase.id === 'final-form' && !player.permanentUnlocks.includes('fraser-protocol')) continue
     const shouldActivate = phase.hpThreshold >= 1.0 ? !enteredPhases.has(phase.id) : hpPct <= phase.hpThreshold
 
     if (shouldActivate) {
@@ -749,10 +812,12 @@ export function playerAttack(): void {
   combatState.enemyHp = Math.max(0, combatState.enemyHp - dmg)
 
   // Lifesteal — capped by woundedHp (wounds block healing)
+  // HR Shop: Hazard Pay modifier doubles effective lifesteal this run
   const currentZone = untrack(() => player.currentZone)
-  const baseLifestealCap = 30
-  const zonedLifestealCap = Math.max(15, baseLifestealCap - currentZone * 2)
-  const lifestealPct = Math.min(eff.lifesteal, zonedLifestealCap)
+  const lifeStealMod = hasModifier(player, 'modifier:lifeStealMult:2') ? 2 : 1
+  const baseLifestealCap = 30 * lifeStealMod
+  const zonedLifestealCap = Math.max(15 * lifeStealMod, baseLifestealCap - currentZone * 2)
+  const lifestealPct = Math.min(eff.lifesteal * lifeStealMod, zonedLifestealCap)
   if (lifestealPct > 0 && dmg > 0) {
     const lifeStealHeal = Math.floor(dmg * lifestealPct / 100)
     if (lifeStealHeal > 0) {
@@ -837,18 +902,7 @@ export function enemyAttack(): void {
 
   // Boss regular hits capped — post-game zones scale higher
   if (enemy.isBoss) {
-    function getBossHitCap(zoneIndex: number, maxHp: number): number {
-      const pct = (() => {
-        if (zoneIndex <= 6)  return Math.min(0.50, 0.35 + 0.025 * zoneIndex)
-        if (zoneIndex <= 12) return 0.50 + (zoneIndex - 6) * 0.008
-        if (zoneIndex <= 18) return 0.55 + (zoneIndex - 12) * 0.012
-        if (zoneIndex <= 24) return 0.62 + (zoneIndex - 18) * 0.015
-        return Math.min(0.85, 0.71 + (zoneIndex - 24) * 0.02)
-      })()
-      const safePct = Math.min(pct, 0.60)
-      return Math.floor(maxHp * safePct)
-    }
-    const maxBossHit = getBossHitCap(zoneIdx, player.maxHp)
+    const maxBossHit = getBossHitCap(zoneIdx, player.maxHp, def)
     dmg = Math.min(dmg, maxBossHit)
   }
 
@@ -870,6 +924,11 @@ function handleEnemyDeath(): void {
   const pMult = prestigeMultiplier(untrack(() => player.prestigeTokens))
   const zoneIdx = untrack(() => player.currentZone)
 
+  // HR Shop run modifiers / challenges
+  const goldMult = hasModifier(player, 'modifier:goldMult:2') ? 2 : 1
+  const xpMult   = hasModifier(player, 'modifier:xpMult:2')   ? 2 : 1
+  const noCombatGold = hasChallenge(player, 'challenge:noCombatGold')
+
   // Gold drop — scales by zone tier and enemy type (with prestige multiplier + goldFind)
   const zoneTier = zoneIdx + 1
   const goldBase = enemy.isBoss     ? BASE_GOLD_BOSS
@@ -878,11 +937,13 @@ function handleEnemyDeath(): void {
                  : BASE_GOLD_NORMAL
   const baseGold = calcZoneReward(goldBase, zoneTier)
   const goldFindMult = 1 + (untrack(() => getEffectiveStats(player).goldFind) / 100)
-  const gold = Math.floor(baseGold * pMult * goldFindMult)
-  gainGold(gold)
-  player.lifetimeStats.goldEarned += gold
-  addLog('gold', `▶ ${combatState.enemyName} dropped ${gold} gold.`)
-  addFloater(`+${gold}g`, 'gold', 'enemy')
+  const gold = noCombatGold ? 0 : Math.floor(baseGold * pMult * goldFindMult * goldMult)
+  if (gold > 0) {
+    gainGold(gold)
+    player.lifetimeStats.goldEarned += gold
+    addLog('gold', `▶ ${combatState.enemyName} dropped ${gold} gold.`)
+    addFloater(`+${gold}g`, 'gold', 'enemy')
+  }
 
   // XP — scales by zone tier and enemy type (with prestige multiplier + xpBoost)
   const xpBase = enemy.isBoss     ? BASE_XP_BOSS
@@ -891,7 +952,7 @@ function handleEnemyDeath(): void {
                : BASE_XP_NORMAL
   const baseXp = calcZoneReward(xpBase, zoneTier)
   const xpBoostMult = 1 + (untrack(() => getEffectiveStats(player).xpBoost) / 100)
-  const xp = Math.floor(baseXp * pMult * xpBoostMult)
+  const xp = Math.floor(baseXp * pMult * xpBoostMult * xpMult)
   gainXp(xp)
   gainItemXp(Math.ceil(xp * 0.15))
 
@@ -899,10 +960,36 @@ function handleEnemyDeath(): void {
   player.lifetimeStats.enemiesKilled++
   if (enemy.isBoss) player.lifetimeStats.bossesDefeated++
 
-  // Zone 9 boss / Fraser tracking
+  // Zone 9 boss / Fraser tracking + HR Shop prestige-token payout
   if (enemy.isBoss && zoneIdx === 8) {
     player.fraserDefeated = true
     player.lifetimeStats.fraserKills++
+
+    // Challenge bonus tokens (Unpaid Overtime, Understaffed, Ironman, etc.)
+    let bonusTokens = computeChallengeBonus(player)
+
+    // Speed Review — only if Fraser killed within the challenge window
+    const speedReview = player.activeChallenges.find(c => c.startsWith('challenge:speedRun:'))
+    if (speedReview) {
+      const windowMs = Number(speedReview.split(':')[2] ?? '0')
+      const elapsed = Date.now() - combatState.runStartTime
+      if (windowMs > 0 && elapsed <= windowMs) {
+        // Already included in computeChallengeBonus; no-op here
+      } else {
+        // Speed Review failed — subtract its bonus (2 tokens) from the total
+        bonusTokens = Math.max(0, bonusTokens - 2)
+      }
+    }
+
+    // Performance Bonus modifier doubles prestige-token payout from Fraser
+    const prestigeMult = hasModifier(player, 'modifier:prestigeMult:2') ? 2 : 1
+    const totalTokens = (1 + bonusTokens) * prestigeMult
+    // Tokens are awarded when the player prestiges (via +1 in prestige()).
+    // Extra challenge tokens are tracked separately and added on prestige.
+    player.bonusTokensEarned = (player.bonusTokensEarned ?? 0) + (totalTokens - 1)
+    if (bonusTokens > 0 || prestigeMult > 1) {
+      addLog('sys', `▶ Bonus tokens earned: +${totalTokens - 1}`)
+    }
   }
 
   // Item drops
@@ -1063,10 +1150,26 @@ function handleEnemyDeath(): void {
 function handlePlayerDeath(): void {
   combatState.playerDead = true
   addLog('sys', `▶ You were defeated by ${combatState.enemyName}...`)
+
+  // HR Shop: Ironman Clause / Full Audit — one death ends the run
+  const ironman = hasChallenge(player, 'challenge:noRespawn') || hasChallenge(player, 'challenge:fullAudit')
+  if (ironman) {
+    combatState.runEnded = true
+    addLog('sys', '▶ IRONMAN CLAUSE — run terminated. Return to HR to begin again.')
+    // Forfeit active challenges (consumed) — modifiers cleared on next prestige
+    return
+  }
+
   setTimeout(() => {
     respawnPlayer()
     spawnEnemy()
   }, 2000)
+}
+
+/** Reset the run timer — called when a new prestige run begins. */
+export function resetRunTimer(): void {
+  combatState.runStartTime = Date.now()
+  combatState.runEnded = false
 }
 
 export function startNickFight(): void {

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "PRES-001",
+    "result": "PASS",
+    "notes": "Out-of-turn rejected: \"Not your turn\""
+  },
+  {
+    "id": "PRES-002",
+    "result": "PASS",
+    "notes": "Wrong count rejected: \"Must play exactly 1 card(s)\""
+  },
+  {
+    "id": "PRES-003",
+    "result": "PASS",
+    "notes": "Lower rank rejected: \"Must play higher ranked cards\""
+  },
+  {
+    "id": "PRES-004",
+    "result": "PASS",
+    "notes": "All passed: pile cleared, lead player gets next turn"
+  },
+  {
+    "id": "PRES-009",
+    "result": "PASS",
+    "notes": "Fake card rejected: \"You do not have that card\""
+  },
+  {
+    "id": "PRES-010",
+    "result": "PASS",
+    "notes": "3-player game complete. Titles: {\"e2cfdea3-8bc0-4356-bb0e-8557c85eb7d2\":\"President\",\"e20c5c1e-a6a9-4a63-b95a-3df5625d7db1\":\"Neutral\",\"459a4cc2-75a7-464b-98cd-2c5cafa3b0fc\":\"Scum\"}"
+  },
+  {
+    "id": "PRES-005",
+    "result": "PASS",
+    "notes": "Covered by PRES-010: players go out and are ranked in finish order"
+  },
+  {
+    "id": "PRES-006",
+    "result": "PASS",
+    "notes": "Covered by PRES-010: last player ranked Scum, round ends"
+  },
+  {
+    "id": "PRES-007",
+    "result": "PASS",
+    "notes": "Code inspection: doCardSwap() auto-selects worst 2 from President and best 2 from Scum — no player choice involved, swap is forced"
+  },
+  {
+    "id": "PRES-008",
+    "result": "PASS",
+    "notes": "Code inspection: card swap is automatic (doCardSwap), no player interaction — disconnect has no effect on swap"
+  },
+  {
+    "id": "PRES-011",
+    "result": "SKIP",
+    "notes": "Only 4 test accounts available; need 6 players. Code inspection: getTitleForPosition handles all 5 titles correctly for 6 players"
+  },
+  {
+    "id": "PRES-012",
+    "result": "SKIP",
+    "notes": "Would need to run 2+ rounds; reconnect logic verified in Impostor tests (same CardRoom base class)"
+  }
+]

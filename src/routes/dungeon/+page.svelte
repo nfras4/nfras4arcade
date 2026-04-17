@@ -6,7 +6,7 @@
     prestige, canPrestige, setOnAchievement, checkAchievements,
     submitLeaderboard, itemXpToNext,
   } from '$lib/dungeon/player.svelte'
-  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound, setFarmMode } from '$lib/dungeon/combat.svelte'
+  import { combatState, spawnEnemy, playerAttack, enemyAttack, startNickFight, getEffectiveStats, applyWound, setFarmMode, resetRunTimer } from '$lib/dungeon/combat.svelte'
   import { ENEMIES } from '$lib/dungeon/enemies'
   import {
     loadTimers, saveTimers, startActivity, collectActivity,
@@ -25,6 +25,7 @@
   import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS, FORGE_CHAINS } from '$lib/dungeon/items'
   import { craftRoll, rerollCost, reforgeCost, rollModifier, type CraftResult } from '$lib/dungeon/crafting'
   import { playSound, setMuted, isMuted, initAudio } from '$lib/dungeon/audio'
+  import HRDepartment from '$lib/dungeon/HRDepartment.svelte'
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   let canvasEl = $state<HTMLCanvasElement | undefined>()
@@ -35,6 +36,7 @@
   let showPrestigeModal  = $state(false)
   let showAchModal       = $state(false)
   let showStatsModal     = $state(false)
+  let showHRDept         = $state(false)
   let showOfflineModal   = $state(false)
   let showCraftResult    = $state(false)
   let craftResult        = $state<CraftResult | null>(null)
@@ -304,6 +306,97 @@
 
   const sortedLootQueue = $derived([...player.lootQueue].sort((a, b) => itemPower(b) - itemPower(a)))
 
+  // ── Item Manager state ──────────────────────────────────────────────────
+  let showItemManager = $state(false)
+  type SortKey = 'power'|'tier'|'slot'|'rarity'|'level'|'name'
+  let sortKey = $state<SortKey>('power')
+  let sortAsc = $state(false)
+  let filterSlot = $state<ItemSlot|'all'>('all')
+  let filterRarity = $state<string>('all')
+  let selectedIds = $state(new Set<string>())
+  let currentPage = $state(1)
+  const PAGE_SIZE = 20
+  let confirmBossSell = $state(false)
+  let lastClickedId: string | null = $state(null)
+
+  const filteredItems = $derived.by(() => {
+    let items = [...player.lootQueue]
+    if (filterSlot !== 'all') items = items.filter(i => i.slot === filterSlot)
+    if (filterRarity !== 'all') items = items.filter(i => i.rarity === filterRarity)
+    const rarityOrder = ['boss_unique','legendary','epic','rare','uncommon','common']
+    items.sort((a, b) => {
+      let diff = 0
+      switch (sortKey) {
+        case 'power':  diff = itemPower(b) - itemPower(a); break
+        case 'tier':   diff = (b.tier ?? 0) - (a.tier ?? 0); break
+        case 'slot':   diff = a.slot.localeCompare(b.slot); break
+        case 'rarity': diff = rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity); break
+        case 'level':  diff = (b.itemLevel ?? 1) - (a.itemLevel ?? 1); break
+        case 'name':   diff = a.name.localeCompare(b.name); break
+      }
+      return sortAsc ? -diff : diff
+    })
+    return items
+  })
+  const totalPages = $derived(Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE)))
+  const pagedItems = $derived(filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE))
+  const selectedItems = $derived(filteredItems.filter(i => selectedIds.has(i.instanceId ?? i.id)))
+  const selectedSellValue = $derived(selectedItems.reduce((s, i) => s + sellReturn(i), 0))
+
+  $effect(() => { filterSlot; filterRarity; sortKey; currentPage = 1 })
+  $effect(() => { if (currentPage > totalPages) currentPage = totalPages })
+
+  function toggleSelect(item: Item) {
+    const id = item.instanceId ?? item.id
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    selectedIds = next
+  }
+  function selectAll(includeBossUniques: boolean) {
+    const ids = filteredItems.filter(i => includeBossUniques || i.rarity !== 'boss_unique').map(i => i.instanceId ?? i.id)
+    selectedIds = new Set(ids)
+  }
+  function clearSelection() { selectedIds = new Set(); confirmBossSell = false }
+
+  function handleItemClick(item: Item, event: MouseEvent) {
+    const id = item.instanceId ?? item.id
+    if (event.shiftKey && lastClickedId) {
+      const ids = filteredItems.map(i => i.instanceId ?? i.id)
+      const fromIdx = ids.indexOf(lastClickedId)
+      const toIdx = ids.indexOf(id)
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+        const next = new Set(selectedIds)
+        ids.slice(start, end + 1).forEach(r => next.add(r))
+        selectedIds = next
+      }
+    } else {
+      toggleSelect(item)
+    }
+    lastClickedId = id
+  }
+
+  function sellSelected() {
+    if (selectedItems.length === 0) return
+    const hasBossUnique = selectedItems.some(i => i.rarity === 'boss_unique')
+    if (hasBossUnique && !confirmBossSell) { confirmBossSell = true; return }
+    let totalGold = 0
+    const victims = [...selectedItems]
+    for (const item of victims) totalGold += sellReturn(item)
+    const victimIds = new Set(victims.map(i => i.instanceId ?? i.id))
+    player.lootQueue = player.lootQueue.filter(i => !victimIds.has(i.instanceId ?? i.id))
+    player.gold += totalGold
+    clearSelection()
+    savePlayer()
+  }
+
+  function breakdownSelected() {
+    if (selectedItems.length === 0) return
+    const victims = [...selectedItems]
+    for (const item of victims) doBreakdown(item)
+    clearSelection()
+  }
+
   function canAffordCraft(recipe: CraftEntry): boolean {
     for (const [mat, amt] of Object.entries(recipe.materials)) {
       if ((player.materials[mat] ?? 0) < amt) return false
@@ -507,7 +600,10 @@
   }
 
   function sellReturn(item: Item): number {
-    if (item.rarity === 'boss_unique') return 0
+    if (item.rarity === 'boss_unique') {
+      const level = item.itemLevel ?? 1
+      return Math.floor(level * GOLD_PER_LEVEL[5] * 1.2)
+    }
     const tier = item.tier ?? 1
     const level = item.itemLevel ?? 1
     return Math.floor(level * (GOLD_PER_LEVEL[tier] ?? 5) * 1.2)
@@ -526,7 +622,6 @@
   }
 
   function doSell(item: Item): void {
-    if (item.rarity === 'boss_unique') return
     player.gold += sellReturn(item)
     removeItem(item)
     savePlayer()
@@ -584,6 +679,7 @@
     else if (showUpgradeModal) showUpgradeModal = false
     else if (equipModalSlot) equipModalSlot = null
     else if (showCraftResult) dismissCraftOverlay()
+    else if (showHRDept) showHRDept = false
     else if (showAchModal) showAchModal = false
     else if (showSkillsModal) showSkillsModal = false
     else if (showStatsModal) showStatsModal = false
@@ -736,6 +832,7 @@
     }
     setTimeout(async () => {
       prestige()              // resets player (including saveVersion → 0) and calls savePlayer()
+      resetRunTimer()         // reset HR Shop run timer for the new run
       showPrestigeModal = false
       spawnEnemy()
       checkAchievements()
@@ -769,7 +866,7 @@
   // ── Stat rows ────────────────────────────────────────────────────────────
   const STAT_ROWS: { key: StatKey; icon: string; name: string; desc: string; short: string; unit: string; group: 'combat' | 'passive' }[] = [
     { key: 'attack',    icon: '⚔️',  name: 'ATTACK',     desc: '+3 atk dmg',                  short: 'ATK',   unit: '',   group: 'combat'  },
-    { key: 'defence',   icon: '🛡️',  name: 'DEFENCE',    desc: '+2 dmg reduction',             short: 'DEF',   unit: '',   group: 'combat'  },
+    { key: 'defence',   icon: '🛡️',  name: 'DEFENCE',    desc: 'Reduces boss hit cap and wound rate. More defence = bosses hit for less % of your HP and wound you less.', short: 'DEF',   unit: '',   group: 'combat'  },
     { key: 'speed',     icon: '⚡',   name: 'SPEED',      desc: 'Attack interval. Lower is faster. Min: 250ms.',short: 'SPD',   unit: '',   group: 'combat'  },
     { key: 'vitality',  icon: '❤️',  name: 'VITALITY',   desc: '+200 max HP',                  short: 'VIT',   unit: '',   group: 'combat'  },
     { key: 'critDmg',   icon: '💥',  name: 'CRIT DMG',   desc: 'Crit multiplier. Higher = more crit damage.',        short: 'CRIT',  unit: '%',  group: 'combat'  },
@@ -926,7 +1023,12 @@
   $effect(() => {
     const spd = combatSpeed
     const speed = untrack(() => getEffectiveStats(player).speed)
-    const ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
+    // HR Shop: SLOW PROCESSING challenge floors attack interval at 750ms
+    const challenges = untrack(() => player.activeChallenges ?? [])
+    const slowCap = challenges.find(c => c.startsWith('challenge:slowAttack:'))
+    const slowFloor = slowCap ? Number(slowCap.split(':')[2] ?? '750') : 0
+    let ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
+    if (slowFloor > 0) ms = Math.max(ms, slowFloor)
     const id = setInterval(playerAttack, ms)
     return () => clearInterval(id)
   })
@@ -1354,6 +1456,15 @@
         <button class="icon-btn" onclick={() => showAchModal = true} title="Achievements">🎖️</button>
         <button class="icon-btn" onclick={() => showStatsModal = true} title="Stats">📊</button>
         <button class="icon-btn" onclick={() => showLeaderboard = true} title="Leaderboard">🏆</button>
+        {#if player.fraserDefeated || player.lifetimeStats.timesPrestiged > 0}
+          <button
+            class="icon-btn hr-btn {player.prestigeTokens > 0 ? 'has-tokens' : ''}"
+            onclick={() => showHRDept = true}
+            title="Wolton HR Department"
+          >
+            📋{#if player.prestigeTokens > 0}<span class="hr-badge">{player.prestigeTokens}</span>{/if}
+          </button>
+        {/if}
       </div>
     </div>
 
@@ -2127,6 +2238,11 @@
       </div>
     </div>
   </div>
+{/if}
+
+<!-- HR DEPARTMENT -->
+{#if showHRDept}
+  <HRDepartment onClose={() => showHRDept = false} />
 {/if}
 
 <!-- ACHIEVEMENT MODAL -->
@@ -2923,6 +3039,24 @@
     font-size: 16px; padding: 7px; cursor: pointer; text-align: center;
   }
   .icon-btn:hover { border-color: var(--z-accent); }
+  .icon-btn.hr-btn {
+    position: relative;
+  }
+  .icon-btn.has-tokens {
+    border-color: var(--z-accent);
+    animation: hr-pulse 2s ease-in-out infinite;
+  }
+  .hr-badge {
+    position: absolute; top: -2px; right: -2px;
+    background: #f0c030; color: #000;
+    font-family: 'Press Start 2P', monospace; font-size: 7px;
+    padding: 2px 4px; border: 1px solid #000;
+    line-height: 1;
+  }
+  @keyframes hr-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--z-accent) 60%, transparent); }
+    50%      { box-shadow: 0 0 6px 2px color-mix(in srgb, var(--z-accent) 40%, transparent); }
+  }
 
   /* ── PRESTIGE MODAL ──────────────────────────────────────────────── */
   .prestige-body { font-size: 10px; color: #aaa; line-height: 2.2; }

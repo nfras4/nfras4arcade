@@ -1,0 +1,27 @@
+[
+  {
+    "id": "CROSS-001",
+    "result": "PASS",
+    "notes": "President action in Impostor room: silently ignored. DO did not crash."
+  },
+  {
+    "id": "CROSS-002",
+    "result": "PASS",
+    "notes": "Impostor in \"hints\", President in \"playing\" — fully isolated DOs"
+  },
+  {
+    "id": "CROSS-003",
+    "result": "PASS",
+    "notes": "Player has 2 games played, 2 game types tracked"
+  },
+  {
+    "id": "CROSS-004",
+    "result": "PASS",
+    "notes": "Code inspection: awardMoonBadge() uses INSERT OR IGNORE into player_badges with b_going_bananas. Only awarded once per player (PK constraint). Triggered only on shoot the moon."
+  },
+  {
+    "id": "CROSS-005",
+    "result": "PASS",
+    "notes": "First Game badge count: 1 (INSERT OR IGNORE ensures max 1)"
+  }
+]

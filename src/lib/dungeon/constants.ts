@@ -45,7 +45,13 @@ export const BASE_GOLD_BOSS     = 120
 export const ATTACK_BASE_INTERVAL = 1500
 export const ENEMY_ATTACK_INTERVAL = 2000
 export const ENEMY_HP_ZONE_SCALE = 1.18
-export const ENEMY_DMG_ZONE_SCALE = 1.15
+/** Zone-aware enemy damage scaling. Story zones (0-8) keep 1.15; post-game reduced so baseDmg stays relevant and defence can matter. */
+export function getEnemyDmgScale(zoneIndex: number): number {
+  if (zoneIndex <= 8)  return 1.15
+  if (zoneIndex <= 14) return 1.08
+  if (zoneIndex <= 20) return 1.05
+  return 1.03
+}
 export const ENEMY_HP_STAGE_SCALE = 1.05
 export const ENEMY_DMG_STAGE_SCALE = 1.04
 export const ELITE_HP_MULT = 3
@@ -128,7 +134,7 @@ export function calcEnemyHp(baseHp: number, zoneIndex: number, stageNumber: numb
 }
 
 export function calcEnemyDmg(baseDmg: number, zoneIndex: number, stageNumber: number): number {
-  return Math.floor(baseDmg * Math.pow(ENEMY_DMG_ZONE_SCALE, zoneIndex) * Math.pow(ENEMY_DMG_STAGE_SCALE, stageNumber))
+  return Math.floor(baseDmg * Math.pow(getEnemyDmgScale(zoneIndex), zoneIndex) * Math.pow(ENEMY_DMG_STAGE_SCALE, stageNumber))
 }
 
 export function randInt(min: number, max: number): number {
@@ -211,4 +217,5 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'zone-9',         name: 'TOP FLOOR',             sprite: '🏢',  desc: 'Reach the 32nd floor' },
   { id: 'secret',         name: '???',                   sprite: '❓',  desc: '???' },
   { id: 'the-end',        name: 'THE END',               sprite: '🌌', desc: 'Defeat the final boss of the dungeon.' },
+  { id: 'resigned',       name: 'RESIGNED',              sprite: '📝',  desc: 'File the resignation letter with Nick.' },
 ]

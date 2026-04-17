@@ -1,5 +1,6 @@
 import { gainMaterial, gainGold, goldFindMultiplier, player, savePlayer, gainSkillXp } from './player.svelte'
 import { prestigeMultiplier, SKILL_TIER_UNLOCKS, type SkillId } from './constants'
+import { hasModifier, hasChallenge } from './prestige'
 
 export type Activity = {
   id: string
@@ -184,6 +185,10 @@ function applyReward(activity: Activity): void {
   const skillId = SKILL_MAP[activity.id as ActivityId]
   const skillLevel = player.skills?.[skillId]?.level ?? 0
 
+  // HR Shop modifiers: DESK JOB doubles material yield, SKILL SEMINAR triples skill XP
+  const matYieldMult = hasModifier(player, 'modifier:materialYieldMult:2') ? 2 : 1
+  const skillXpRunMult = hasModifier(player, 'modifier:skillXpMult:3') ? 3 : 1
+
   if (activity.id === 'patrol') {
     const patrolSkillBonus = skillLevel * 3  // +3 gold per skill level per cycle
     const patrolBase = 80 + skillLevel * 5
@@ -192,11 +197,12 @@ function applyReward(activity: Activity): void {
     player.lifetimeStats.goldEarned += gold
   } else {
     const mat    = getActivityMaterial(activity.id, skillLevel)
-    const amount = getActivityYield(activity.id, skillLevel)
+    const amount = getActivityYield(activity.id, skillLevel) * matYieldMult
     gainMaterial(mat, amount)
   }
 
-  const xpGain = getSkillXpGain(ACTIVITY_BASE_XP[activity.id as ActivityId] ?? 0, skillLevel, player.skillXpMultiplier ?? 1.0)
+  const baseXp = (ACTIVITY_BASE_XP[activity.id as ActivityId] ?? 0) * skillXpRunMult
+  const xpGain = getSkillXpGain(baseXp, skillLevel, player.skillXpMultiplier ?? 1.0)
   if (xpGain > 0 && skillId) gainSkillXp(skillId, xpGain)
 
   savePlayer()
@@ -206,9 +212,22 @@ export function activeSlotCount(): number {
   return Object.values(timerState.active).filter(e => !e.collected).length
 }
 
+/** Effective slot cap, accounting for HR Shop permanent unlocks and the
+ *  Understaffed challenge (which hard-caps slots to 1 regardless of other
+ *  unlocks). Prestige tokens still grant +1 each on top. */
+export function effectiveSlotCap(): number {
+  if (hasChallenge(player, 'challenge:oneActivitySlot')) return 1
+  let slots = BASE_SLOTS
+  const unlocks = player.permanentUnlocks ?? []
+  if (unlocks.includes('structural-redundancy')) slots = Math.max(slots, 5)
+  else if (unlocks.includes('extended-shift'))   slots = Math.max(slots, 4)
+  else if (unlocks.includes('activity-allowance')) slots = Math.max(slots, 3)
+  return slots + player.prestigeTokens
+}
+
 export function canStart(activity: Activity): boolean {
   if (player.level < activity.unlockLevel) return false
-  if (activeSlotCount() >= BASE_SLOTS + player.prestigeTokens) return false
+  if (activeSlotCount() >= effectiveSlotCap()) return false
   const existing = timerState.active[activity.id]
   if (existing && !existing.collected) return false
   return true

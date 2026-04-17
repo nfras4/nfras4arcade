@@ -74,6 +74,16 @@ function fraserMechanic(enemyId: string): BossMechanic {
         ],
         attackModifier: (base) => Math.floor(base * 1.5),
       },
+      {
+        id: 'final-form',
+        hpThreshold: 0.10,
+        onEnter: () => [
+          { type: 'log', message: "▶ FRASER PROTOCOL ACTIVE. He has been training. [FRASER enters final form -- attacks deal 2.25x damage, gold invoice doubled]", logType: 'sys' },
+          { type: 'barrier', hits: 5, durationMs: 10000, reduction: 0.6 },
+          { type: 'set-status-icon', icon: '👔', durationMs: 10000 },
+        ],
+        attackModifier: (base) => Math.floor(base * 2.25),
+      },
     ],
     specialTimers: [
       {

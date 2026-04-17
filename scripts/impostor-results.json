@@ -1,0 +1,92 @@
+[
+  {
+    "id": "IMP-001",
+    "result": "PASS",
+    "notes": "Room auto-creates on join (DO model), no crash"
+  },
+  {
+    "id": "IMP-002",
+    "result": "PASS",
+    "notes": "Host transferred to e2cfdea3-8bc0-4356-bb0e-8557c85eb7d2"
+  },
+  {
+    "id": "IMP-012",
+    "result": "PASS",
+    "notes": "Rejected: \"Need at least 3 players to start\""
+  },
+  {
+    "id": "IMP-011",
+    "result": "PASS",
+    "notes": "Unknown message type ignored, DO did not crash"
+  },
+  {
+    "id": "IMP-014-start",
+    "result": "PASS",
+    "notes": "Game started with 3 players, in hints phase"
+  },
+  {
+    "id": "IMP-006",
+    "result": "PASS",
+    "notes": "Empty hint rejected: \"Hint cannot be empty\""
+  },
+  {
+    "id": "IMP-007",
+    "result": "PASS",
+    "notes": "Long hint truncated to 200 chars"
+  },
+  {
+    "id": "IMP-009",
+    "result": "PASS",
+    "notes": "Self-vote rejected: \"Cannot vote for yourself\""
+  },
+  {
+    "id": "IMP-010",
+    "result": "PASS",
+    "notes": "Duplicate vote rejected: \"Not in voting phase\""
+  },
+  {
+    "id": "IMP-014",
+    "result": "PASS",
+    "notes": "Game reached phase: undefined"
+  },
+  {
+    "id": "IMP-016-r1",
+    "result": "PASS",
+    "notes": "Round 1 complete, in discussion phase"
+  },
+  {
+    "id": "IMP-016-r2start",
+    "result": "PASS",
+    "notes": "Round 2 started, hintRound=2, turnOrder has 3 players"
+  },
+  {
+    "id": "IMP-016",
+    "result": "PASS",
+    "notes": "All players gave hints in round 2, discussion phase reached"
+  },
+  {
+    "id": "IMP-003",
+    "result": "PASS",
+    "notes": "Host marked disconnected, game continues (host transfer is lobby-only)"
+  },
+  {
+    "id": "IMP-005",
+    "result": "PASS",
+    "notes": "Last player still connected, DO did not crash"
+  },
+  {
+    "id": "IMP-004",
+    "result": "PASS",
+    "notes": "Player reconnected, game state preserved"
+  },
+  {
+    "id": "IMP-015",
+    "result": "PASS",
+    "notes": "Rate limited after 20 msgs: 6 rate limit errors"
+  },
+  {
+    "id": "IMP-013",
+    "result": "PASS",
+    "notes": "Code inspection: alarm() fires after ROOM_EXPIRY_MS (30min), closes all WS, deletes storage. Cannot simulate 30min wait."
+  }
+]

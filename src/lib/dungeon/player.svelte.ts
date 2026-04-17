@@ -1,5 +1,5 @@
 import { statValue, calcMaxHp, upgradeCost, xpToNextLevel, skillXpToNext, type StatKey, type SkillId, type SkillState, ACHIEVEMENTS, ZONE_LEVEL_REQUIREMENTS } from './constants'
-import type { ItemSlot, Item } from './items'
+import { ITEMS, type ItemSlot, type Item } from './items'
 
 export function itemXpToNext(level: number): number {
   return Math.round(50 * Math.pow(level, 1.4))
@@ -15,6 +15,19 @@ export type LifetimeStats = {
   timesPrestiged: number
   totalPlaytime: number    // ms, increment on save
   fraserKills: number
+}
+
+export type PrestigePerk = {
+  attackBonus: number
+  defenceBonus: number
+  speedBonus: number
+  goldBonus: number
+  vitalityBonus: number
+  critDmgBonus: number
+  lifeStealBonus: number
+  hpRegenBonus: number
+  xpBonus: number
+  luckBonus: number
 }
 
 export type PlayerState = {
@@ -47,6 +60,12 @@ export type PlayerState = {
   saveVersion: number     // increments on each cloud save for conflict resolution
   skills: Record<SkillId, SkillState>
   skillXpMultiplier: number
+  prestigePerks: PrestigePerk
+  prestigePerkLevels: Record<string, number>
+  activeModifiers: string[]
+  permanentUnlocks: string[]
+  activeChallenges: string[]
+  bonusTokensEarned: number
 }
 
 const SAVE_KEY = 'wolton-dungeon-player'
@@ -96,6 +115,17 @@ function freshState(): PlayerState {
       patrol:      { level: 0, xp: 0, xpToNext: skillXpToNext(0) },
     },
     skillXpMultiplier: 1.0,
+    prestigePerks: {
+      attackBonus: 0, defenceBonus: 0, speedBonus: 0,
+      goldBonus: 0, vitalityBonus: 0, critDmgBonus: 0,
+      lifeStealBonus: 0, hpRegenBonus: 0,
+      xpBonus: 0, luckBonus: 0,
+    },
+    prestigePerkLevels: {},
+    activeModifiers: [],
+    permanentUnlocks: [],
+    activeChallenges: [],
+    bonusTokensEarned: 0,
   }
 }
 
@@ -144,6 +174,12 @@ export function applyPlayerData(saved: Partial<PlayerState>): void {
     ])
   ) as Record<SkillId, SkillState>
   if (!player.skillXpMultiplier) player.skillXpMultiplier = 1.0
+  player.prestigePerks = { ...defaults.prestigePerks, ...(saved.prestigePerks ?? {}) }
+  player.prestigePerkLevels = { ...(saved.prestigePerkLevels ?? {}) }
+  player.activeModifiers = Array.isArray(saved.activeModifiers) ? [...saved.activeModifiers] : []
+  player.permanentUnlocks = Array.isArray(saved.permanentUnlocks) ? [...saved.permanentUnlocks] : []
+  player.activeChallenges = Array.isArray(saved.activeChallenges) ? [...saved.activeChallenges] : []
+  player.bonusTokensEarned = saved.bonusTokensEarned ?? 0
 }
 
 function mergeWithDefaults(saved: Partial<PlayerState>): PlayerState {
@@ -163,6 +199,12 @@ function mergeWithDefaults(saved: Partial<PlayerState>): PlayerState {
     materials:     { ...d.materials,     ...(saved.materials     ?? {}) },
     skills,
     skillXpMultiplier: saved.skillXpMultiplier ?? 1.0,
+    prestigePerks:     { ...d.prestigePerks, ...(saved.prestigePerks ?? {}) },
+    prestigePerkLevels: { ...(saved.prestigePerkLevels ?? {}) },
+    activeModifiers:   Array.isArray(saved.activeModifiers) ? [...saved.activeModifiers] : [],
+    permanentUnlocks:  Array.isArray(saved.permanentUnlocks) ? [...saved.permanentUnlocks] : [],
+    activeChallenges:  Array.isArray(saved.activeChallenges) ? [...saved.activeChallenges] : [],
+    bonusTokensEarned: saved.bonusTokensEarned ?? 0,
   } as PlayerState
 }
 
@@ -309,6 +351,9 @@ export function addToLootQueue(item: Item): void {
 }
 
 export function equipFromLootQueue(item: Item): void {
+  // HR Shop: NO EQUIPMENT POLICY / FULL AUDIT — block gear changes this run
+  const challenges = player.activeChallenges ?? []
+  if (challenges.includes('challenge:noGear') || challenges.includes('challenge:fullAudit')) return
   const slot = item.slot
   const current = player.gear[slot]
   const idx = player.lootQueue.indexOf(item)
@@ -337,13 +382,96 @@ export function canPrestige(): boolean {
   return player.fraserDefeated
 }
 
+/** Apply permanent benefits purchased in the HR shop to a freshly-prestiged player.
+ *  preGear and preMaterials are pre-prestige snapshots for carry-over benefits. */
+function applyPermanentBenefits(
+  p: PlayerState,
+  preGear: Record<ItemSlot, Item | null>,
+  preMaterials: Record<string, number>,
+): void {
+  // Starting zone — highest wins
+  let startZone = 0
+  if (p.permanentUnlocks.includes('executive-access'))      startZone = 6
+  else if (p.permanentUnlocks.includes('fast-track'))       startZone = 4
+  else if (p.permanentUnlocks.includes('early-checkout'))   startZone = 2
+  if (startZone > 0) {
+    p.currentZone = startZone
+    p.unlockedZones = startZone
+  }
+  // Wolton pension: +10% lifetime gold earned (one-time on prestige)
+  if (p.permanentUnlocks.includes('wolton-pension')) {
+    p.gold += Math.floor(p.lifetimeStats.goldEarned * 0.10)
+  }
+  // Loot retention: keep previous gear
+  if (p.permanentUnlocks.includes('loot-retention')) {
+    p.gear = { ...preGear }
+  }
+  // Material carry: copy 25% of each material (floored)
+  if (p.permanentUnlocks.includes('material-carry')) {
+    for (const [mat, amt] of Object.entries(preMaterials)) {
+      const carry = Math.floor(amt * 0.25)
+      if (carry > 0) p.materials[mat] = (p.materials[mat] ?? 0) + carry
+    }
+  }
+}
+
+/** Apply active run modifiers from the HR shop. */
+function applyRunModifiers(p: PlayerState): void {
+  const mods = p.activeModifiers
+  if (mods.includes('modifier:startGear:t2')) {
+    // Starter T2 gear set — equip baseline T2 items from items registry
+    const starter = getStarterGearSet('t2')
+    for (const item of starter) {
+      if (item) p.gear[item.slot] = item
+    }
+  }
+  if (mods.includes('modifier:startGold:2000')) {
+    p.gold += 2000
+  }
+  if (mods.includes('modifier:startPotions:5')) {
+    p.materials.potion = (p.materials.potion ?? 0) + 5
+  }
+}
+
+/** Build a T2 starter gear set by instancing baseline items. */
+function getStarterGearSet(tier: 't2'): Item[] {
+  if (tier !== 't2') return []
+  const ids = ['iron-sword', 'leather-vest', 'iron-helm', 'steel-ring', 'rat-tooth']
+  const out: Item[] = []
+  for (const id of ids) {
+    const base = ITEMS[id]
+    if (!base) continue
+    out.push({
+      ...base,
+      instanceId: crypto.randomUUID(),
+      rolledBonuses: [...(base.rolledBonuses ?? [])],
+      rerollCount: 0,
+      itemLevel: 1,
+      itemXp: 0,
+      itemXpToNext: itemXpToNext(1),
+    })
+  }
+  return out
+}
+
 export function prestige(): void {
   if (!canPrestige()) return
-  const tokens = player.prestigeTokens + 1
+  // Base +1 token + any bonus tokens earned during the run (HR shop challenges/modifiers)
+  const bonusTokens = Math.max(0, player.bonusTokensEarned ?? 0)
+  const tokens = player.prestigeTokens + 1 + bonusTokens
   const name = player.name
   const achievements = [...player.achievements]
   const lifetimeStats = { ...player.lifetimeStats, timesPrestiged: player.lifetimeStats.timesPrestiged + 1 }
   const savedSkills = { ...player.skills } as Record<SkillId, SkillState>
+  // Preserved through prestige: perks, perk levels, permanent unlocks
+  const savedPrestigePerks = { ...player.prestigePerks }
+  const savedPrestigePerkLevels = { ...player.prestigePerkLevels }
+  const savedPermanentUnlocks = [...player.permanentUnlocks]
+  const savedActiveModifiers = [...player.activeModifiers]
+  const savedActiveChallenges = [...player.activeChallenges]
+  // Pre-prestige snapshots for permanent-benefit handling
+  const preGear = { ...player.gear }
+  const preMaterials = { ...player.materials }
   const fresh = freshState()
   Object.assign(player, fresh)
   player.name = name
@@ -353,10 +481,32 @@ export function prestige(): void {
   player.achievements = achievements
   player.lifetimeStats = lifetimeStats
   player.skills = savedSkills
+  player.prestigePerks = savedPrestigePerks
+  player.prestigePerkLevels = savedPrestigePerkLevels
+  player.permanentUnlocks = savedPermanentUnlocks
+  // Carry forward the chosen modifiers/challenges into the new run; they clear on next prestige
+  player.activeModifiers = savedActiveModifiers
+  player.activeChallenges = savedActiveChallenges
+  player.bonusTokensEarned = 0
   const multiplierTable = [1.0, 1.2, 1.3, 1.4, 1.5, 1.7, 2.0, 2.3, 2.6, 3.0, 3.5, 4.0, 4.5, 5.0]
   player.skillXpMultiplier = multiplierTable[Math.min(tokens, multiplierTable.length - 1)]
   player.lastSaveTimestamp = Date.now()
+  // Apply permanent benefits and run modifiers from shop purchases
+  applyPermanentBenefits(player, preGear, preMaterials)
+  applyRunModifiers(player)
+  // Recompute max HP if perks changed vitality (perks are applied in getEffectiveStats, so maxHp stays base)
   savePlayer()
+}
+
+/** Called by combat on the first enemy of a new prestige run — resets active
+ *  modifiers/challenges that were consumed for the previous run. The current
+ *  activeModifiers/activeChallenges remain through the run; this is invoked
+ *  after the run ends (on the next prestige call) via prestige() itself.
+ *  Kept as a named helper for potential future explicit reset calls. */
+export function clearRunConfigAfterUse(): void {
+  player.activeModifiers = []
+  player.activeChallenges = []
+  player.bonusTokensEarned = 0
 }
 
 // ── CLOUD SAVE ───────────────────────────────────────────────────────────────
@@ -422,6 +572,7 @@ export function checkAchievements(): void {
     ['zone-9',       player.unlockedZones >= 8],
     ['secret',       player.nickDefeated],
     ['the-end',      player.deepestPostGameZone >= 20],
+    ['resigned',     player.permanentUnlocks.includes('resignation-letter')],
   ]
   for (const [id, met] of checks) {
     if (met && !player.achievements.includes(id)) {

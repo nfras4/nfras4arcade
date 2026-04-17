@@ -27,3 +27,6 @@ dist/
 .DS_Store
 Thumbs.db
 .claude/settings.local.json
+
+# Local benchmark scripts
+scripts/*.sh

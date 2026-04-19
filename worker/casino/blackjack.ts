@@ -337,10 +337,12 @@ export class BlackjackRoom extends CasinoRoom {
     ts.results = {};
     ts.payouts = {};
     const profitedPlayers: string[] = [];
+    const netWinByPlayer: Record<string, number> = {};
 
     for (const [playerId, hands] of Object.entries(ts.playerHands)) {
       ts.results[playerId] = [];
       ts.payouts[playerId] = 0;
+      netWinByPlayer[playerId] = 0;
 
       for (const hand of hands) {
         let result: HandResult;
@@ -385,6 +387,10 @@ export class BlackjackRoom extends CasinoRoom {
         }
 
         ts.payouts[playerId] += payout;
+        // Net win for leaderboard excludes pushes (player gets bet back, net 0) and losses
+        if (result === 'win' || result === 'blackjack') {
+          netWinByPlayer[playerId] += payout - hand.bet;
+        }
         if (payout > 0) {
           this.awardChips(playerId, payout);
         }
@@ -394,6 +400,22 @@ export class BlackjackRoom extends CasinoRoom {
         profitedPlayers.push(playerId);
       }
     }
+
+    // Record biggest_win per player for this round (net win summed across hands)
+    try {
+      const stmts: D1PreparedStatement[] = [];
+      for (const [pid, netWin] of Object.entries(netWinByPlayer)) {
+        if (netWin <= 0) continue;
+        const player = this.players.get(pid);
+        if (!player || player.isGuest || pid.startsWith('guest_')) continue;
+        stmts.push(
+          this.env.DB.prepare(
+            'UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?'
+          ).bind(netWin, 'blackjack', pid, netWin)
+        );
+      }
+      if (stmts.length > 0) await this.env.DB.batch(stmts);
+    } catch {}
 
     // Award blackjack badge
     for (const [playerId, hands] of Object.entries(ts.playerHands)) {

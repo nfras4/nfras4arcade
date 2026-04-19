@@ -288,11 +288,14 @@ export class BaccaratRoom extends CasinoRoom {
     ts.result = result;
     ts.payouts = {};
     const profitedPlayers: string[] = [];
+    const netWinByPlayer: Record<string, number> = {};
 
     for (const [playerId, bets] of Object.entries(ts.playerBets)) {
       let totalPayout = 0;
+      let totalStaked = 0;
 
       for (const bet of bets) {
+        totalStaked += bet.amount;
         if (result === 'tie') {
           // Push on player/banker bets (return stake), tie bet pays 8:1
           if (bet.type === 'tie') {
@@ -315,11 +318,28 @@ export class BaccaratRoom extends CasinoRoom {
       }
 
       ts.payouts[playerId] = totalPayout;
+      netWinByPlayer[playerId] = totalPayout - totalStaked;
       if (totalPayout > 0) {
         this.awardChips(playerId, totalPayout);
         profitedPlayers.push(playerId);
       }
     }
+
+    // Record biggest_win per player for this round (net win after subtracting all stakes)
+    try {
+      const stmts: D1PreparedStatement[] = [];
+      for (const [pid, netWin] of Object.entries(netWinByPlayer)) {
+        if (netWin <= 0) continue;
+        const player = this.players.get(pid);
+        if (!player || player.isGuest || pid.startsWith('guest_')) continue;
+        stmts.push(
+          this.env.DB.prepare(
+            'UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?'
+          ).bind(netWin, 'baccarat', pid, netWin)
+        );
+      }
+      if (stmts.length > 0) await this.env.DB.batch(stmts);
+    } catch {}
 
     // Track history (last 20 results)
     ts.history.unshift(result);

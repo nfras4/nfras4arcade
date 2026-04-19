@@ -677,6 +677,13 @@ export class PokerRoom extends CardRoom {
 
     this.setTable(ts);
 
+    // Record biggest_win per winner (sum of all pot shares won this hand)
+    if (ts.winnersInfo) {
+      for (const w of ts.winnersInfo) {
+        await this.recordBiggestWin(ts, w.playerId, w.amount);
+      }
+    }
+
     // Persist chip balances for registered players
     await this.persistChips(ts);
   }
@@ -718,6 +725,7 @@ export class PokerRoom extends CardRoom {
     ts.winnersInfo = [{ playerId: winnerId, amount: totalWon }];
     ts.actionOnPlayerId = null;
 
+    await this.recordBiggestWin(ts, winnerId, totalWon);
     await this.persistChips(ts);
   }
 
@@ -729,13 +737,25 @@ export class PokerRoom extends CardRoom {
       const stmts: D1PreparedStatement[] = [];
       for (const [id] of this.players) {
         if (!this.bots.has(id) && !id.startsWith('guest_') && !ts.isGuestPlayer[id]) {
+          const newChips = ts.playerChips[id];
           stmts.push(
             this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
-              .bind(ts.playerChips[id], Math.floor(Date.now() / 1000), id)
+              .bind(newChips, Math.floor(Date.now() / 1000), id)
           );
         }
       }
       if (stmts.length > 0) await this.env.DB.batch(stmts);
+    } catch {}
+  }
+
+  private async recordBiggestWin(ts: PokerTableState, playerId: string, winAmount: number): Promise<void> {
+    if (ts.gameMode === 'casual') return;
+    if (winAmount <= 0) return;
+    if (this.bots.has(playerId) || playerId.startsWith('guest_') || ts.isGuestPlayer[playerId]) return;
+    try {
+      await this.env.DB.prepare(
+        'UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?'
+      ).bind(winAmount, 'poker', playerId, winAmount).run();
     } catch {}
   }
 

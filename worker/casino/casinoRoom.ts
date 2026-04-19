@@ -415,9 +415,10 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     if (!player.isGuest && !playerId.startsWith('guest_')) {
       try {
         const now = Math.floor(Date.now() / 1000);
-        await this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
-          .bind(player.chips, now, playerId)
-          .run();
+        await this.env.DB.batch([
+          this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
+            .bind(player.chips, now, playerId),
+        ]);
       } catch {}
     }
 

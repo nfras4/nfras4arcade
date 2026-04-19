@@ -694,6 +694,10 @@ export abstract class CardRoom extends DurableObject<Env> {
           db.prepare('UPDATE player_profiles SET chips = chips + ?, updated_at = ? WHERE id = ?')
             .bind(chipReward, now, id)
         );
+        stmts.push(
+          db.prepare('UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?')
+            .bind(chipReward, 'cards', id, chipReward)
+        );
 
         // First Game badge
         stmts.push(

@@ -42,10 +42,12 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 
   // Award winnings if any
   if (outcome.totalWin > 0) {
-    await db
-      .prepare('UPDATE player_profiles SET chips = chips + ?, updated_at = ? WHERE id = ?')
-      .bind(outcome.totalWin, now, locals.user.id)
-      .run();
+    await db.batch([
+      db.prepare('UPDATE player_profiles SET chips = chips + ?, updated_at = ? WHERE id = ?')
+        .bind(outcome.totalWin, now, locals.user.id),
+      db.prepare('UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?')
+        .bind(outcome.totalWin, 'slots', locals.user.id, outcome.totalWin),
+    ]);
   }
 
   // Read final balance

@@ -216,11 +216,14 @@ export class RouletteRoom extends CasinoRoom {
     ts.resultSlotIndex = slotIndex;
     ts.payouts = {};
     const profitedPlayers: string[] = [];
+    const netWinByPlayer: Record<string, number> = {};
 
     for (const [playerId, bets] of Object.entries(ts.playerBets)) {
       let totalPayout = 0;
+      let totalStaked = 0;
 
       for (const bet of bets) {
+        totalStaked += bet.amount;
         if (bet.type === result) {
           const multiplier = PAYOUT_MULTIPLIERS[bet.type];
           const payout = bet.amount + bet.amount * multiplier;
@@ -229,11 +232,28 @@ export class RouletteRoom extends CasinoRoom {
       }
 
       ts.payouts[playerId] = totalPayout;
+      netWinByPlayer[playerId] = totalPayout - totalStaked;
       if (totalPayout > 0) {
         this.awardChips(playerId, totalPayout);
         profitedPlayers.push(playerId);
       }
     }
+
+    // Record biggest_win per player for this spin (net win after subtracting all stakes)
+    try {
+      const stmts: D1PreparedStatement[] = [];
+      for (const [pid, netWin] of Object.entries(netWinByPlayer)) {
+        if (netWin <= 0) continue;
+        const player = this.players.get(pid);
+        if (!player || player.isGuest || pid.startsWith('guest_')) continue;
+        stmts.push(
+          this.env.DB.prepare(
+            'UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?'
+          ).bind(netWin, 'roulette', pid, netWin)
+        );
+      }
+      if (stmts.length > 0) await this.env.DB.batch(stmts);
+    } catch {}
 
     // Track history (last 20 results)
     ts.history.unshift(result);

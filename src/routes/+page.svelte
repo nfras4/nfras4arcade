@@ -1,24 +1,33 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
 
-  type Props = { data: { leaderboard: null | {
-    zone:    { player_name: string; highest_zone: number; highest_stage: number }[]
-    prestige: { player_name: string; prestige_tokens: number }[]
-    level:   { player_name: string; player_level: number }[]
-  }}}
+  type Props = { data: {
+    leaderboard: null | {
+      zone:    { player_name: string; highest_zone: number; highest_stage: number }[]
+      prestige: { player_name: string; prestige_tokens: number }[]
+      level:   { player_name: string; player_level: number }[]
+    }
+    chipLeaderboard: null | {
+      chips: { display_name: string; chips: number }[]
+      wins:  { display_name: string; biggest_win: number; biggest_win_game: string | null }[]
+    }
+  }}
 
   let { data }: Props = $props()
 
   let lbData = $state(data.leaderboard)
+  let chipLb = $state(data.chipLeaderboard)
 
-  // Refresh leaderboard every 2 minutes
+  // Refresh leaderboards every 2 minutes
   $effect(() => {
     const id = setInterval(async () => {
       try {
-        const [zone, prestige, level] = await Promise.all([
+        const [zone, prestige, level, chips, wins] = await Promise.all([
           fetch('/api/dungeon/leaderboard?sort=zone&limit=5').then(r => r.json()),
           fetch('/api/dungeon/leaderboard?sort=prestige&limit=5').then(r => r.json()),
           fetch('/api/dungeon/leaderboard?sort=level&limit=5').then(r => r.json()),
+          fetch('/api/leaderboard/chips?sort=chips&limit=5').then(r => r.json()),
+          fetch('/api/leaderboard/chips?sort=biggest_win&limit=5').then(r => r.json()),
         ])
         lbData = {
           zone:    zone.entries?.slice(0, 5).map((e: any) => ({
@@ -31,10 +40,24 @@
             player_name: e.playerName, player_level: e.playerLevel,
           })) ?? [],
         }
+        chipLb = {
+          chips: chips.entries?.slice(0, 5).map((e: any) => ({
+            display_name: e.playerName, chips: e.chips,
+          })) ?? [],
+          wins:  wins.entries?.slice(0, 5).map((e: any) => ({
+            display_name: e.playerName, biggest_win: e.biggestWin, biggest_win_game: e.game,
+          })) ?? [],
+        }
       } catch { /* keep showing existing data */ }
     }, 120_000)
     return () => clearInterval(id)
   })
+
+  function fmtChips(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+    if (n >= 1_000)     return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k'
+    return String(n)
+  }
 </script>
 
 <div class="hub">
@@ -159,6 +182,44 @@
                 <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
                 <span class="lb-pname">{row.player_name}</span>
                 <span class="lb-val">LV{row.player_level}</span>
+              </div>
+            {:else}
+              <div class="lb-empty">No entries yet</div>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {/if}
+
+    <!-- Chip Leaderboard Widget -->
+    {#if chipLb && (chipLb.chips.length > 0 || chipLb.wins.length > 0)}
+      <section class="lb-widget chip-widget" aria-label="Arcade chip leaderboard">
+        <div class="lb-widget-hdr">
+          <span class="lb-widget-title">ARCADE CHIPS — TOP PLAYERS</span>
+          <a href="/casino" class="lb-play-link">PLAY NOW →</a>
+        </div>
+        <div class="lb-cols lb-cols-2">
+          <div class="lb-col">
+            <div class="lb-col-title">TOP CHIPS</div>
+            {#each chipLb.chips as row, i}
+              <div class="lb-row">
+                <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
+                <span class="lb-pname">{row.display_name}</span>
+                <span class="lb-val">{fmtChips(row.chips)}</span>
+              </div>
+            {:else}
+              <div class="lb-empty">No entries yet</div>
+            {/each}
+          </div>
+          <div class="lb-col">
+            <div class="lb-col-title">BIGGEST WINS</div>
+            {#each chipLb.wins as row, i}
+              <div class="lb-row">
+                <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
+                <span class="lb-pname">{row.display_name}</span>
+                <span class="lb-val" title={row.biggest_win_game ?? ''}>
+                  +{fmtChips(row.biggest_win)}
+                </span>
               </div>
             {:else}
               <div class="lb-empty">No entries yet</div>
@@ -456,6 +517,10 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
+  }
+  .lb-cols.lb-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
   }
   .lb-col-title {
     font-family: 'Rajdhani', system-ui, sans-serif;

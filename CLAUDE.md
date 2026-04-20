@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-20** - Deployed to nfras4arcade. Summary: Add arcade chip leaderboard on landing page (TOP CHIPS + BIGGEST WINS). Migration 0015 adds biggest_win + biggest_win_game on player_profiles; tracked per-round at settlement for poker/blackjack/roulette/baccarat and on every positive credit in snap/impostor/cards/slots. New /api/leaderboard/chips endpoint. Branch: `main`, commit: `27f83aa`.
 - **2026-04-17** - Deployed to nfras4arcade. Summary: Tune slots paytable to 106.7% RTP (cherry 2/7/20, lemon 4/11/26, orange 7/16/40, gem 11/27/65, star 13/40/97); remove RTP display from slots UI. Branch: `main`, commit: `a9fdc74`.
 - **2026-04-17** - Deployed to nfras4arcade. Summary: Add Item Manager modal for dungeon loot with sort/filter/multi-select/pagination; boss uniques sellable (tier-5 rate) with confirm gate; compact 5-item preview on LOOT tab. Branch: `main`, commit: `5c3ee57`.
 - **2026-04-17** - Deployed to nfras4arcade. Summary: Add dungeon prestige system, HR Department component, and combat tuning (bosses, enemies, player, timers). Branch: `main`, commit: `5f2d666`.
@@ -210,5 +211,3 @@ Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports,
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Fix boss special timer one-shot risk — lower getBossSpecialCap (0.65→0.45/0.72→0.50/etc), wound rate 0.70→0.45, 800ms regular-hit mutex after specials, big-hit 2.0x→1.6x, dunk description mismatch fixed. Branch: `main`, commit: `d9e7c27`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Nerf Chief Surgeon — big-hit 2.5x → 2.0x, warmed-up interval 5000ms → 6500ms, warmed-up back-injury chance 20% → 30%. Branch: `main`, commit: `7a8549b`.
 - **2026-04-16** - Deployed to nfras4arcade. Summary: Fix Chief Surgeon boss damage pipeline — wound protection extended to all boss hits, summon cap 25% maxHp, story zone special cap 72%, big-hit 3s cooldown. Branch: `main`, commit: `2748c46`.
-- **2026-04-16** - Deployed to nfras4arcade. Summary: Fix post-prestige one-shot bug — boss special cap clamped to 70% maxHp when maxHp < 500, regular cap clamped to 60%, boss_special wound rate halved for vulnerable players. Branch: `main`, commit: `d66b2cf`.
-- **2026-04-16** - Deployed to nfras4arcade. Summary: Add 20 post-game zones (Wolton Deep Labs, Corruption, Void Descent, Deep Void, The Remnant, Null Space, The End) — 88 enemies, boss cap scaling to 85%, stat caps removed, DESCENT leaderboard tab, The First Slime + The End bosses, dungeonComplete overlay, migration 0014. Branch: `main`, commit: `ccab0b5`.

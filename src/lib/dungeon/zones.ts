@@ -1343,3 +1343,9 @@ export const ELLA_ZONE: Zone = {
     "hauu...",
   ],
 }
+
+// Safe zone lookup: ELLA_ZONE lives at id 50 and is not in ZONES[], so a raw
+// ZONES[player.currentZone] returns undefined when the player is in Ella's World.
+export function getZone(idx: number): Zone {
+  return idx === ELLA_ZONE.id ? ELLA_ZONE : ZONES[idx]
+}

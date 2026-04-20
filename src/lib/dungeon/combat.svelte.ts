@@ -7,7 +7,7 @@ import {
 } from './player.svelte'
 import { ENEMIES, type Enemy } from './enemies'
 import { BOSS_MECHANICS, BOSS_DEATH_TEXTS, headCoachState, type BossMechanic, type CombatEvent, type BossContext } from './bosses'
-import { ZONES, ELLA_ZONE } from './zones'
+import { ZONES, ELLA_ZONE, getZone } from './zones'
 import { ITEMS, MATERIAL_TIERS, type Item } from './items'
 import { ACTIVITIES } from './timers.svelte'
 import { dropRoll, rollModifier } from './crafting'
@@ -322,7 +322,7 @@ function rollDrops(
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function pickEnemyId(zoneIndex: number, stage: number): string {
-  const zone = zoneIndex === ELLA_ZONE_INDEX ? ELLA_ZONE : ZONES[zoneIndex]
+  const zone = getZone(zoneIndex)
   if (stage === STAGES_PER_ZONE) return zone.boss
   if (stage === 10) return zone.miniboss
   if (stage === 5 || (stage >= 11 && stage <= 19 && stage % 3 === 0)) {

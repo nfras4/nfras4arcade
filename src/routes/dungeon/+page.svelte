@@ -14,7 +14,7 @@
     canStart, ACTIVITIES, getOfflineEarnings, clearOfflineEarnings, resetTimers,
     getActivityYield, getActivityMaterial, SKILL_MAP,
   } from '$lib/dungeon/timers.svelte'
-  import { ZONES, ELLA_ZONE } from '$lib/dungeon/zones'
+  import { ZONES, ELLA_ZONE, getZone } from '$lib/dungeon/zones'
   import {
     upgradeCost, statValue, calcAttackInterval,
     ENEMY_ATTACK_INTERVAL, AUTOSAVE_INTERVAL_MS, STAGES_PER_ZONE,
@@ -882,7 +882,7 @@
 
   function genParticles(zi: number): Particle[] {
     const out: Particle[] = []
-    ZONES[zi].particles.forEach(cfg => {
+    getZone(zi).particles.forEach(cfg => {
       for (let i = 0; i < cfg.count; i++) {
         out.push({
           color: cfg.color, size: cfg.size + Math.random() * cfg.size,
@@ -915,7 +915,7 @@
   const xpPct      = $derived(player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0)
   const stagePct   = $derived(farmMode ? ((player.currentStage - 1) / 9) * 100 : ((player.currentStage - 1) / STAGES_PER_ZONE) * 100)
   const enmHpPct   = $derived(combatState.enemyMaxHp > 0 ? (combatState.enemyHp / combatState.enemyMaxHp) * 100 : 0)
-  const zone       = $derived(player.currentZone === ELLA_ZONE_INDEX ? ELLA_ZONE : ZONES[player.currentZone])
+  const zone       = $derived(getZone(player.currentZone))
   const ellaUnlocked = $derived((player.lifetimeStats.haydenKills ?? 0) >= 10)
   const plushieReady = $derived(
     player.gear?.amulet?.id === 'chiikawa-plushie' && (player.plushieCooldown ?? 0) <= now
@@ -945,7 +945,7 @@
     canvas.width  = canvas.offsetWidth  || 500
     canvas.height = canvas.offsetHeight || 300
     const ctx = canvas.getContext('2d')
-    if (ctx) ZONES[zi].drawBg(ctx, canvas.width, canvas.height)
+    if (ctx) getZone(zi).drawBg(ctx, canvas.width, canvas.height)
   }
 
   // ── Cloud save helpers ────────────────────────────────────────────────────
@@ -1025,7 +1025,7 @@
 
   $effect(() => {
     const zi = player.currentZone
-    const z  = ZONES[zi]
+    const z  = getZone(zi)
     const r  = document.documentElement
     r.style.setProperty('--z-bg',            z.palette.bg)
     r.style.setProperty('--z-panel',         z.palette.panel)
@@ -1045,7 +1045,7 @@
     canvas.width  = canvas.offsetWidth  || 500
     canvas.height = canvas.offsetHeight || 300
     const ctx = canvas.getContext('2d')
-    if (ctx) ZONES[zi].drawBg(ctx, canvas.width, canvas.height)
+    if (ctx) getZone(zi).drawBg(ctx, canvas.width, canvas.height)
   })
 
   $effect(() => {
@@ -1171,7 +1171,7 @@
     const zi = player.currentZone
     const zoneKey = `zone-${zi}`
     if (untrack(() => player.firstVisit.includes(zoneKey))) return
-    const lines = ZONES[zi].storyText
+    const lines = getZone(zi).storyText
     if (lines && lines.length > 0) {
       untrack(() => {
         player.firstVisit = [...player.firstVisit, zoneKey]

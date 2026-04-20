@@ -514,6 +514,40 @@ export const ENEMIES: Record<string, Enemy> = {
     ],
   },
 
+  // ── ELLA'S WORLD (SECRET ZONE, unlocks after 10 Hayden defeats) ──────────
+  // Hand-tuned stats — zone 50 skips standard scaling formulas.
+  'small-thing': {
+    id: 'small-thing', name: '*a small thing*', sprite: '🌸',
+    baseHp: 400, baseDmg: 120,
+    drops: [],
+  },
+  'crying-one': {
+    id: 'crying-one', name: '*the crying one*', sprite: '😢',
+    baseHp: 600, baseDmg: 180,
+    drops: [],
+  },
+  'hachiware': {
+    id: 'hachiware', name: '*hachiware*', sprite: '🐱',
+    baseHp: 1800, baseDmg: 280,
+    drops: [], isElite: true,
+  },
+  'usagi': {
+    id: 'usagi', name: '*usagi*', sprite: '🐰',
+    baseHp: 2000, baseDmg: 320,
+    drops: [], isElite: true,
+  },
+  'chiikawa-itself': {
+    id: 'chiikawa-itself', name: '*chiikawa*', sprite: '🐭',
+    baseHp: 6000, baseDmg: 500,
+    drops: [], isMiniboss: true,
+  },
+  'ella': {
+    id: 'ella', name: 'ELLA', sprite: '🌸',
+    baseHp: 18000, baseDmg: 400,
+    drops: [],
+    isBoss: true,
+  },
+
   // ── ZONES 9-11: WOLTON DEEP LABS ─────────────────────────────────────────
   'corrupted-slime':    { id: 'corrupted-slime',    name: 'CORRUPTED SLIME',    sprite: '🟢', baseHp: 800,        baseDmg: 180,    drops: [] },
   'rogue-drone':        { id: 'rogue-drone',         name: 'ROGUE DRONE',         sprite: '🤖', baseHp: 1200,       baseDmg: 220,    drops: [] },

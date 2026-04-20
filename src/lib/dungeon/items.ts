@@ -388,6 +388,12 @@ export const ITEMS: Record<string, Item> = {
     dropSource: ['wolton-prime'], dropChance: 0.30,
     lore: "Wolton Industries stock price: $0.00.", discardable: false,
   },
+  'chiikawa-plushie': {
+    id: 'chiikawa-plushie', name: 'CHIIKAWA PLUSHIE', slot: 'amulet', sprite: '🌸', rarity: 'boss_unique',
+    statBonuses: { luck: { flat: 25 }, hpRegen: { flat: 15 } },
+    dropSource: ['ella'], dropChance: 1.0,
+    lore: 'It protected you. You feel bad about this.', discardable: false,
+  },
   'monkey-barrel-token': {
     id: 'monkey-barrel-token', name: 'MONKEY BARREL TOKEN', slot: 'amulet', sprite: '🎮', rarity: 'boss_unique',
     statBonuses: {},

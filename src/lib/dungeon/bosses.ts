@@ -15,6 +15,7 @@ export type CombatEvent =
   | { type: 'summon-attack'; pool: string[] }
   | { type: 'set-player-miss'; chance: number }
   | { type: 'set-status-icon'; icon: string; durationMs: number }
+  | { type: 'next-enemy-hit-multiplier'; multiplier: number }
 
 export type BossContext = {
   enemyHpPct: number
@@ -644,6 +645,84 @@ export const BOSS_MECHANICS: Record<string, BossMechanic> = {
     ],
   },
 
+  'ella': {
+    enemyId: 'ella',
+    phases: [
+      {
+        id: 'hauu',
+        hpThreshold: 1.0,
+        onEnter: () => [
+          { type: 'log', message: "▶ hauu...! you came to visit!", logType: 'sys' },
+          { type: 'log', message: "▶ wait. why do you look like that.", logType: 'sys', delayMs: 900 },
+        ],
+      },
+      {
+        id: 'serious-mode',
+        hpThreshold: 0.60,
+        onEnter: () => [
+          { type: 'log', message: "▶ ella stops smiling. [SERIOUS MODE -- ella's attacks now deal 1.4x damage]", logType: 'sys' },
+        ],
+        attackModifier: (base) => Math.floor(base * 1.4),
+      },
+      {
+        id: 'usagi-mode',
+        hpThreshold: 0.30,
+        onEnter: () => [
+          { type: 'log', message: "▶ usagi appears behind her. YAHAAA!! [USAGI MODE -- ella's attacks deal 1.8x damage, chiikawa-cry cadence doubles]", logType: 'sys' },
+          { type: 'set-status-icon', icon: '🐰', durationMs: 4000 },
+        ],
+        attackModifier: (base) => Math.floor(base * 1.8),
+      },
+    ],
+    specialTimers: [
+      {
+        id: 'chiikawa-cry',
+        intervalMs: 10000,
+        castBarName: 'CHIIKAWA CRYING',
+        description: 'Chiikawa Cry: a soft wail stuns you for 2 seconds. If ella is in USAGI MODE, cadence doubles.',
+        action: () => [
+          { type: 'log', message: "▶ chiikawa starts crying somewhere off-screen. you freeze. [CHIIKAWA CRY -- you are stunned for 2s]", logType: 'sys' },
+          { type: 'stun-player', durationMs: 2000 },
+          { type: 'set-status-icon', icon: '😢', durationMs: 2000 },
+        ],
+      },
+      {
+        id: 'hauu-beam',
+        intervalMs: 15000,
+        castBarName: 'HAUU BEAM',
+        description: 'Hauu Beam: ella channels a soft pink beam that hits for 2.2x damage, ignoring defence.',
+        action: () => [
+          { type: 'log', message: "▶ ella inhales. hauuuuuu— [HAUU BEAM -- 2.2x damage, ignores defence]", logType: 'dmg' },
+          { type: 'damage-player', multiplier: 2.2, ignoreDefence: true },
+          { type: 'set-status-icon', icon: '🌸', durationMs: 1200 },
+        ],
+      },
+      {
+        id: 'hayden-distraction',
+        intervalMs: 25000,
+        castBarName: 'HAYDEN CALLING',
+        description: 'Hayden Calling: ella glances at her phone. 60% chance your next hit deals 1.5x; 40% chance you lose 60 gold to his latest multi.',
+        action: () => {
+          if (Math.random() < 0.6) {
+            return [
+              { type: 'log', message: "▶ ella glances at her phone. hayden again. your next hit lands harder. [NEXT HIT -- 1.5x damage]", logType: 'sys' },
+              { type: 'next-enemy-hit-multiplier', multiplier: 1.5 },
+              { type: 'set-status-icon', icon: '📱', durationMs: 3000 },
+            ]
+          }
+          return [
+            { type: 'log', message: "▶ hayden sent her a screenshot of a multi. it lost. ella sighs, and so does your wallet. [-60 gold]", logType: 'gold' },
+            { type: 'drain-gold', amount: 60 },
+            { type: 'set-status-icon', icon: '💸', durationMs: 2000 },
+          ]
+        },
+      },
+    ],
+    onDeath: () => [
+      { type: 'log', message: "▶ ella drops something soft. she doesn't look up.", logType: 'sys' },
+    ],
+  },
+
   'the-end': {
     enemyId: 'the-end',
     phases: [
@@ -715,4 +794,5 @@ export const BOSS_DEATH_TEXTS: Record<string, string[]> = {
   'nick':              ['YOU BEAT THE GUY WHO MADE THIS GAME.', "He's not happy about it."],
   'the-first-slime':   ['The first slime is defeated.', 'Nothing changes. Everything changes.'],
   'the-end':           ['You have reached the end.', 'Well done.'],
+  'ella':              ['ella drops something soft.', "she doesn't look up."],
 }

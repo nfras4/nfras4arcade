@@ -1,4 +1,4 @@
-import { statValue, calcMaxHp, upgradeCost, xpToNextLevel, skillXpToNext, type StatKey, type SkillId, type SkillState, ACHIEVEMENTS, ZONE_LEVEL_REQUIREMENTS } from './constants'
+import { statValue, calcMaxHp, upgradeCost, xpToNextLevel, skillXpToNext, type StatKey, type SkillId, type SkillState, ACHIEVEMENTS, ZONE_LEVEL_REQUIREMENTS, ELLA_ZONE_INDEX } from './constants'
 import { ITEMS, type ItemSlot, type Item } from './items'
 
 export function itemXpToNext(level: number): number {
@@ -15,6 +15,8 @@ export type LifetimeStats = {
   timesPrestiged: number
   totalPlaytime: number    // ms, increment on save
   fraserKills: number
+  haydenKills: number
+  ellaKills: number
 }
 
 export type PrestigePerk = {
@@ -66,6 +68,7 @@ export type PlayerState = {
   permanentUnlocks: string[]
   activeChallenges: string[]
   bonusTokensEarned: number
+  plushieCooldown: number   // timestamp of last chiikawa-plushie death-block activation
 }
 
 const SAVE_KEY = 'wolton-dungeon-player'
@@ -104,6 +107,8 @@ function freshState(): PlayerState {
       timesPrestiged: 0,
       totalPlaytime: 0,
       fraserKills: 0,
+      haydenKills: 0,
+      ellaKills: 0,
     },
     lastSaveTimestamp: Date.now(),
     saveVersion: 0,
@@ -126,6 +131,7 @@ function freshState(): PlayerState {
     permanentUnlocks: [],
     activeChallenges: [],
     bonusTokensEarned: 0,
+    plushieCooldown: 0,
   }
 }
 
@@ -180,6 +186,7 @@ export function applyPlayerData(saved: Partial<PlayerState>): void {
   player.permanentUnlocks = Array.isArray(saved.permanentUnlocks) ? [...saved.permanentUnlocks] : []
   player.activeChallenges = Array.isArray(saved.activeChallenges) ? [...saved.activeChallenges] : []
   player.bonusTokensEarned = saved.bonusTokensEarned ?? 0
+  player.plushieCooldown = saved.plushieCooldown ?? 0
 }
 
 function mergeWithDefaults(saved: Partial<PlayerState>): PlayerState {
@@ -205,6 +212,7 @@ function mergeWithDefaults(saved: Partial<PlayerState>): PlayerState {
     permanentUnlocks:  Array.isArray(saved.permanentUnlocks) ? [...saved.permanentUnlocks] : [],
     activeChallenges:  Array.isArray(saved.activeChallenges) ? [...saved.activeChallenges] : [],
     bonusTokensEarned: saved.bonusTokensEarned ?? 0,
+    plushieCooldown:   saved.plushieCooldown ?? 0,
   } as PlayerState
 }
 
@@ -324,6 +332,13 @@ export function advanceToZone(zoneIndex: number): void {
 }
 
 export function travelToZone(zoneIndex: number): void {
+  // ella zone bypasses normal unlock gate (unlocked separately via haydenKills)
+  if (zoneIndex === ELLA_ZONE_INDEX) {
+    player.currentZone = ELLA_ZONE_INDEX
+    player.currentStage = 1
+    savePlayer()
+    return
+  }
   if (zoneIndex > player.unlockedZones) return
   player.currentZone = zoneIndex
   player.currentStage = 1
@@ -542,6 +557,7 @@ export async function submitLeaderboard(p: PlayerState): Promise<void> {
     nickDefeated:         p.nickDefeated,
     totalPlaytime:        p.lifetimeStats.totalPlaytime,
     deepestPostGameZone:  p.deepestPostGameZone,
+    ellaKills:            p.lifetimeStats.ellaKills ?? 0,
   }
   try {
     await fetch('/api/dungeon/leaderboard', {
@@ -573,6 +589,7 @@ export function checkAchievements(): void {
     ['secret',       player.nickDefeated],
     ['the-end',      player.deepestPostGameZone >= 20],
     ['resigned',     player.permanentUnlocks.includes('resignation-letter')],
+    ['ella-defeated', (player.lifetimeStats.ellaKills ?? 0) >= 1],
   ]
   for (const [id, met] of checks) {
     if (met && !player.achievements.includes(id)) {

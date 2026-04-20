@@ -1287,3 +1287,59 @@ export const ZONES: Zone[] = [
     storyText: [".", ""],
   },
 ]
+
+// ── SECRET ZONE: ELLA'S WORLD (index 50, unlocks after 10 Hayden kills) ──
+// Kept as a separate export — never appended to ZONES[]. Renderer picks this
+// up via `player.currentZone === ELLA_ZONE_INDEX ? ELLA_ZONE : ZONES[idx]`.
+export const ELLA_ZONE: Zone = {
+  id: 50,
+  name: "ELLA'S WORLD",
+  label: "ELLA'S WORLD",
+  palette: {
+    bg: '#fff0f5', panel: '#ffe0ec', panel2: '#ffd0e0',
+    border: '#ffb0cc', borderHi: '#ff80b0',
+    accent: '#ff5090', accent2: '#ffa0c0',
+  },
+  groundPattern: 'repeating-linear-gradient(90deg,#ffd8e8 0,#ffd8e8 16px,#ffc8dc 16px,#ffc8dc 32px)',
+  drawBg(ctx, w, h) {
+    const g = ctx.createLinearGradient(0, 0, 0, h)
+    g.addColorStop(0, '#fff0f5')
+    g.addColorStop(0.6, '#ffe0ec')
+    g.addColorStop(1, '#ffd0e0')
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+    const t = Date.now() / 1000
+    for (let i = 0; i < 12; i++) {
+      const cx = ((i * 73 + t * 8) % (w + 40)) - 20
+      const cy = 20 + ((i * 41) % (h - 60)) + Math.sin(t + i) * 6
+      const r = 6 + (i % 3) * 3
+      ctx.fillStyle = i % 2 === 0 ? '#ffffffaa' : '#ffc0d8aa'
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.fillStyle = '#ff80b088'
+    for (let i = 0; i < 6; i++) {
+      const px = 40 + i * (w - 80) / 5
+      const py = h - 30 + Math.sin(t * 2 + i) * 3
+      ctx.beginPath()
+      for (let p = 0; p < 5; p++) {
+        const a = (p / 5) * Math.PI * 2
+        ctx.ellipse(px + Math.cos(a) * 4, py + Math.sin(a) * 4, 3, 2, a, 0, Math.PI * 2)
+      }
+      ctx.fill()
+    }
+  },
+  particles: [
+    { color: '#ffffff', size: 2, count: 4, speedY: -0.2, speedX: 0.1, life: 5000 },
+    { color: '#ffc0d8', size: 2, count: 3, speedY: -0.3, speedX: -0.05, life: 4500 },
+  ],
+  enemyPool: ['small-thing', 'crying-one'],
+  elitePool: ['hachiware', 'usagi'],
+  miniboss: 'chiikawa-itself',
+  boss: 'ella',
+  stages: 20,
+  storyText: [
+    "you shouldn't be here.",
+    "she was kind. she was soft.",
+    "you left anyway.",
+    "hauu...",
+  ],
+}

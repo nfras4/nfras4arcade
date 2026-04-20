@@ -14,12 +14,12 @@
     canStart, ACTIVITIES, getOfflineEarnings, clearOfflineEarnings, resetTimers,
     getActivityYield, getActivityMaterial, SKILL_MAP,
   } from '$lib/dungeon/timers.svelte'
-  import { ZONES } from '$lib/dungeon/zones'
+  import { ZONES, ELLA_ZONE } from '$lib/dungeon/zones'
   import {
     upgradeCost, statValue, calcAttackInterval,
     ENEMY_ATTACK_INTERVAL, AUTOSAVE_INTERVAL_MS, STAGES_PER_ZONE,
     ZONE_LEVEL_REQUIREMENTS, ACHIEVEMENTS, prestigeMultiplier,
-    SKILL_TIER_UNLOCKS, SKILL_COMBAT_BONUSES,
+    SKILL_TIER_UNLOCKS, SKILL_COMBAT_BONUSES, ELLA_ZONE_INDEX,
     type StatKey, type SkillId,
   } from '$lib/dungeon/constants'
   import { type ItemSlot, type Item, type CraftEntry, ITEMS, CRAFT_RECIPES, MATERIAL_TIERS, FORGE_CHAINS } from '$lib/dungeon/items'
@@ -108,6 +108,37 @@
   // Tutorial
   let showTutorial   = $state(false)
   let tutorialSlide  = $state(0)
+
+  // Ella zone cameo + intro
+  const HAYDEN_CAMEOS = [
+    '*hayden can be seen playing...sudoku?*',
+    '*hayden has ordered a meal deal. he seems content*',
+    '*hayden is checking bet365. he lost*',
+    '*hayden is watching the nrl. his team is losing*',
+    '*hayden waves at you. you are in mortal danger*',
+    '*hayden takes a photo of his food*',
+    '*hayden has not noticed the fight happening*',
+    '*hayden is asleep*',
+    '*hayden liked a chiikawa post*',
+  ]
+  const ELLA_INTRO_LINES = [
+    '????',
+    '...',
+    'where am i',
+    '*looks around*',
+    '*the sky is pink*',
+    '*there are small creatures everywhere*',
+    '*Hayden is in the corner playing...sudoku?*',
+    '',
+  ]
+  let cameoIndex     = 0
+  let cameoInterval: ReturnType<typeof setInterval> | null = null
+  let showEllaIntro  = $state(false)
+  let ellaIntroLine  = $state(0)
+  let ellaIntroInterval: ReturnType<typeof setInterval> | null = null
+  let combatPaused   = $state(false)
+  function pauseCombat(): void  { combatPaused = true }
+  function resumeCombat(): void { combatPaused = false }
 
   // Achievement toasts
   type AchToast = { id: string; name: string; sprite: string; ts: number }
@@ -775,6 +806,7 @@
   }
 
   function zoneAccessible(i: number): boolean {
+    if (i === ELLA_ZONE_INDEX) return (player.lifetimeStats.haydenKills ?? 0) >= 10
     if (i > player.unlockedZones) return false
     if (i >= 9 && !(player.nickDefeated && player.level >= 50 && player.prestigeTokens >= 1)) return false
     const lvlReq = ZONE_LEVEL_REQUIREMENTS[i] ?? 0
@@ -883,7 +915,12 @@
   const xpPct      = $derived(player.xpToNext > 0 ? (player.xp / player.xpToNext) * 100 : 0)
   const stagePct   = $derived(farmMode ? ((player.currentStage - 1) / 9) * 100 : ((player.currentStage - 1) / STAGES_PER_ZONE) * 100)
   const enmHpPct   = $derived(combatState.enemyMaxHp > 0 ? (combatState.enemyHp / combatState.enemyMaxHp) * 100 : 0)
-  const zone       = $derived(ZONES[player.currentZone])
+  const zone       = $derived(player.currentZone === ELLA_ZONE_INDEX ? ELLA_ZONE : ZONES[player.currentZone])
+  const ellaUnlocked = $derived((player.lifetimeStats.haydenKills ?? 0) >= 10)
+  const plushieReady = $derived(
+    player.gear?.amulet?.id === 'chiikawa-plushie' && (player.plushieCooldown ?? 0) <= now
+  )
+  const plushieEquipped = $derived(player.gear?.amulet?.id === 'chiikawa-plushie')
   const currentEnemy  = $derived(ENEMIES[combatState.enemyId])
   const isBossFight   = $derived(!!currentEnemy?.isBoss)
   const isMinibosFight = $derived(!!currentEnemy?.isMiniboss)
@@ -1029,13 +1066,13 @@
     const slowFloor = slowCap ? Number(slowCap.split(':')[2] ?? '750') : 0
     let ms = Math.max(200, Math.floor(calcAttackInterval(speed) / spd))
     if (slowFloor > 0) ms = Math.max(ms, slowFloor)
-    const id = setInterval(playerAttack, ms)
+    const id = setInterval(() => { if (!combatPaused) playerAttack() }, ms)
     return () => clearInterval(id)
   })
 
   $effect(() => {
     const spd = combatSpeed
-    const id = setInterval(enemyAttack, Math.floor(ENEMY_ATTACK_INTERVAL / spd))
+    const id = setInterval(() => { if (!combatPaused) enemyAttack() }, Math.floor(ENEMY_ATTACK_INTERVAL / spd))
     return () => clearInterval(id)
   })
 
@@ -1059,6 +1096,45 @@
   $effect(() => {
     const id = setInterval(() => { now = Date.now() }, 500)
     return () => clearInterval(id)
+  })
+
+  // Ella zone: Hayden cameo interval (fires every 30s while in Ella zone)
+  $effect(() => {
+    const inElla = player.currentZone === ELLA_ZONE_INDEX
+    if (inElla) {
+      cameoInterval = setInterval(() => {
+        const msg = HAYDEN_CAMEOS[cameoIndex % HAYDEN_CAMEOS.length]
+        combatState.log = [{ type: 'sys', message: msg }, ...combatState.log].slice(0, 50)
+        cameoIndex++
+      }, 30000)
+    } else {
+      if (cameoInterval) {
+        clearInterval(cameoInterval)
+        cameoInterval = null
+        cameoIndex = 0
+      }
+    }
+    return () => {
+      if (cameoInterval) { clearInterval(cameoInterval); cameoInterval = null }
+    }
+  })
+
+  // Ella zone: first visit dialogue overlay (typewriter)
+  $effect(() => {
+    if (!playerLoaded) return
+    if (player.currentZone !== ELLA_ZONE_INDEX) return
+    if (untrack(() => player.firstVisit.includes('ellas-world'))) return
+    untrack(() => {
+      showEllaIntro = true
+      ellaIntroLine = 0
+      pauseCombat()
+      ellaIntroInterval = setInterval(() => {
+        ellaIntroLine++
+        if (ellaIntroLine >= ELLA_INTRO_LINES.length - 1) {
+          if (ellaIntroInterval) { clearInterval(ellaIntroInterval); ellaIntroInterval = null }
+        }
+      }, 600)
+    })
   })
 
   $effect(() => {
@@ -1323,6 +1399,14 @@
       <div class="res"><span class="res-ico">⛏️</span><span class="res-lbl">IR</span><span class="rv">{player.materials.iron ?? 0}</span></div>
       <div class="res"><span class="res-ico">🧪</span><span class="res-lbl">POT</span><span class="rv">{player.materials.potion ?? 0}</span></div>
       <div class="res"><span class="res-ico">🌿</span><span class="res-lbl">HERB</span><span class="rv">{player.materials.herbs ?? 0}</span></div>
+      {#if plushieEquipped}
+        <div
+          class="res plushie-chip"
+          title={plushieReady ? 'Chiikawa plushie — ready to protect you' : 'Chiikawa plushie — on cooldown'}
+        >
+          <span class="res-ico">{plushieReady ? '🌸' : '🩶'}</span>
+        </div>
+      {/if}
     </div>
     <div class="zone-tag" class:post-game-zone={player.currentZone >= 9}>ZONE {player.currentZone + 1} -- {zone.label}</div>
     {#if player.prestigeTokens > 0}
@@ -1554,7 +1638,7 @@
       <div class="zzone">
         <div class="zzone-r1">
           <span class="zzone-lbl">ZONE PROGRESS</span>
-          <span class="zzone-name">ZONE {player.currentZone + 1} — {zone.label}</span>
+          <span class="zzone-name">{player.currentZone === ELLA_ZONE_INDEX ? zone.label : `ZONE ${player.currentZone + 1} — ${zone.label}`}</span>
         </div>
         <div class="zzone-r2">
           <div class="zzone-track"><div class="zzone-fill" style="width:{stagePct}%"></div></div>
@@ -1581,6 +1665,13 @@
               >{#if done}<span class="zn2-check">✓</span>{/if}{#if locked}{#if lvlLocked && !bossLocked}LV{lvlReq}{:else}🔒{/if}{:else}{i + 1}{/if}</button>
             {/if}
           {/each}
+          {#if ellaUnlocked}
+            <button
+              class="zn-btn2 ella {player.currentZone === ELLA_ZONE_INDEX ? 'active' : ''}"
+              onclick={() => doTravelToZone(ELLA_ZONE_INDEX)}
+              title="ELLA'S WORLD"
+            >🌸</button>
+          {/if}
           {#if player.unlockedZones >= 8}
             {@const descentUnlocked = player.nickDefeated && player.level >= 50 && player.prestigeTokens >= 1}
             <div class="zn-descent-sep {descentUnlocked ? 'unlocked' : 'locked'}">
@@ -2051,6 +2142,29 @@
 
   </div><!-- /mgrid -->
 </div><!-- /droot -->
+
+<!-- ELLA INTRO OVERLAY -->
+{#if showEllaIntro}
+  <div class="ella-intro-overlay" role="dialog" aria-modal="true">
+    <div class="ella-intro-content">
+      {#each ELLA_INTRO_LINES.slice(0, ellaIntroLine + 1) as line, i (i)}
+        <p class="ella-intro-line" class:empty={line === ''}>{line}</p>
+      {/each}
+      {#if ellaIntroLine >= ELLA_INTRO_LINES.length - 1}
+        <button
+          class="ella-intro-continue"
+          onclick={() => {
+            showEllaIntro = false
+            if (ellaIntroInterval) { clearInterval(ellaIntroInterval); ellaIntroInterval = null }
+            player.firstVisit = [...player.firstVisit, 'ellas-world']
+            resumeCombat()
+            savePlayer()
+          }}
+        >[ CONTINUE ]</button>
+      {/if}
+    </div>
+  </div>
+{/if}
 
 <!-- UPGRADE MODAL -->
 {#if showUpgradeModal}
@@ -3996,5 +4110,46 @@
   .im-action-btn.bd:hover:not(:disabled) { background: #0f1025; border-color: #4080ff; }
   .im-action-btn.close {
     flex: 0 0 auto;
+  }
+
+  /* Plushie status chip */
+  .plushie-chip { border-color: #ff80b0 !important; }
+
+  /* Ella zone first-visit intro overlay */
+  .ella-intro-overlay {
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ella-intro-content {
+    max-width: 400px;
+    text-align: center;
+    font-family: var(--px);
+    color: #c04060;
+    font-size: 11px;
+    line-height: 2;
+  }
+  .ella-intro-line {
+    margin: 0;
+    min-height: 1.2em;
+  }
+  .ella-intro-line.empty { min-height: 1.2em; }
+  .ella-intro-continue {
+    margin-top: 24px;
+    background: none;
+    border: 1px solid #ff80b0;
+    color: #ff80b0;
+    font-family: var(--px);
+    font-size: 9px;
+    padding: 6px 16px;
+    cursor: pointer;
+  }
+  .ella-intro-continue:hover {
+    background: #ff80b0;
+    color: white;
   }
 </style>

@@ -7,7 +7,7 @@ import {
 } from './player.svelte'
 import { ENEMIES, type Enemy } from './enemies'
 import { BOSS_MECHANICS, BOSS_DEATH_TEXTS, headCoachState, type BossMechanic, type CombatEvent, type BossContext } from './bosses'
-import { ZONES } from './zones'
+import { ZONES, ELLA_ZONE } from './zones'
 import { ITEMS, MATERIAL_TIERS, type Item } from './items'
 import { ACTIVITIES } from './timers.svelte'
 import { dropRoll, rollModifier } from './crafting'
@@ -15,7 +15,7 @@ import { hasModifier, hasChallenge, computeChallengeBonus } from './prestige'
 import {
   calcEnemyHp, calcEnemyDmg, ELITE_HP_MULT, MINIBOSS_HP_MULT, BOSS_HP_MULT,
   STAGES_PER_ZONE, MAX_LOG_ENTRIES, randInt, prestigeMultiplier,
-  calcZoneReward,
+  calcZoneReward, ELLA_ZONE_INDEX,
   BASE_XP_NORMAL, BASE_XP_ELITE, BASE_XP_MINIBOSS, BASE_XP_BOSS,
   BASE_GOLD_NORMAL, BASE_GOLD_ELITE, BASE_GOLD_MINIBOSS, BASE_GOLD_BOSS,
   type StatKey, SKILL_COMBAT_BONUSES, type SkillId,
@@ -178,6 +178,7 @@ let bossInvoiceDrainAmount = 80
 let fraserVillainActive = false
 let fraserDrainDoubled = false
 let specialTimerLastFired = new Map<string, number>()
+let enemyNextHitMultiplier = 1.0   // consumed on next player attack (ella's hayden-distraction)
 
 // ── Farm mode ─────────────────────────────────────────────────────────────
 let farmMode = false
@@ -321,7 +322,7 @@ function rollDrops(
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function pickEnemyId(zoneIndex: number, stage: number): string {
-  const zone = ZONES[zoneIndex]
+  const zone = zoneIndex === ELLA_ZONE_INDEX ? ELLA_ZONE : ZONES[zoneIndex]
   if (stage === STAGES_PER_ZONE) return zone.boss
   if (stage === 10) return zone.miniboss
   if (stage === 5 || (stage >= 11 && stage <= 19 && stage % 3 === 0)) {
@@ -389,6 +390,7 @@ function clearBossState(): void {
   bossInvoiceDrainAmount = 80
   fraserVillainActive = false
   fraserDrainDoubled = false
+  enemyNextHitMultiplier = 1.0
   specialTimerLastFired.clear()
   combatState.activeStuns = []
   combatState.activeBossBuffs = []
@@ -441,7 +443,9 @@ function processEvents(events: CombatEvent[]): void {
       }
       case 'damage-player': {
         const def = untrack(() => getEffectiveStats(player).defence)
-        const baseDmg = calcEnemyDmg(enemy?.baseDmg ?? 10, zoneIdx, untrack(() => player.currentStage) - 1)
+        const baseDmg = zoneIdx === ELLA_ZONE_INDEX
+          ? (enemy?.baseDmg ?? 10)
+          : calcEnemyDmg(enemy?.baseDmg ?? 10, zoneIdx, untrack(() => player.currentStage) - 1)
         let dmg: number
         if (ev.ignoreDefence) {
           dmg = Math.floor(baseDmg * ev.multiplier * zone9Mult)
@@ -549,6 +553,10 @@ function processEvents(events: CombatEvent[]): void {
           combatState.bossStatusIcons = combatState.bossStatusIcons.filter(i => i !== icon)
         }, ev.durationMs)
         bossDelayIds.push(tid)
+        break
+      }
+      case 'next-enemy-hit-multiplier': {
+        enemyNextHitMultiplier = ev.multiplier
         break
       }
     }
@@ -733,7 +741,9 @@ export function spawnEnemy(): void {
   if (!enemy) return
 
   const mult  = hpMultForEnemy(enemyId)
-  const maxHp = calcEnemyHp(enemy.baseHp, zoneIdx, stage - 1, mult)
+  const maxHp = zoneIdx === ELLA_ZONE_INDEX
+    ? Math.floor(enemy.baseHp * mult)
+    : calcEnemyHp(enemy.baseHp, zoneIdx, stage - 1, mult)
 
   combatState.enemyId    = enemyId
   combatState.enemyName  = enemy.name
@@ -788,6 +798,12 @@ export function playerAttack(): void {
   // Apply player damage bonus window (reels, phone-check)
   if (playerDamageBonusUntil > now) {
     dmg = Math.floor(dmg * playerDamageBonusMultiplier)
+  }
+
+  // Consume one-shot next-hit multiplier (ella hayden-distraction)
+  if (enemyNextHitMultiplier > 1.0) {
+    dmg = Math.floor(dmg * enemyNextHitMultiplier)
+    enemyNextHitMultiplier = 1.0
   }
 
   // Apply boss defence modifier (phase-based)
@@ -875,7 +891,9 @@ export function enemyAttack(): void {
   if (!enemy) return
 
   const def     = untrack(() => getEffectiveStats(player).defence)
-  const baseDmg = calcEnemyDmg(enemy.baseDmg, zoneIdx, stage - 1)
+  const baseDmg = zoneIdx === ELLA_ZONE_INDEX
+    ? enemy.baseDmg
+    : calcEnemyDmg(enemy.baseDmg, zoneIdx, stage - 1)
 
   let dmg = Math.max(1, baseDmg - def + Math.floor(Math.random() * 3))
 
@@ -959,6 +977,15 @@ function handleEnemyDeath(): void {
   // Lifetime stats
   player.lifetimeStats.enemiesKilled++
   if (enemy.isBoss) player.lifetimeStats.bossesDefeated++
+
+  // Secret-zone gates: Hayden kills unlock Ella; Ella kills award the achievement.
+  // Hayden (zone-manager) is a miniboss, not a boss — check both flags.
+  if ((enemy.isBoss || enemy.isMiniboss) && combatState.enemyId === 'zone-manager') {
+    player.lifetimeStats.haydenKills = (player.lifetimeStats.haydenKills ?? 0) + 1
+  }
+  if (enemy.isBoss && combatState.enemyId === 'ella') {
+    player.lifetimeStats.ellaKills = (player.lifetimeStats.ellaKills ?? 0) + 1
+  }
 
   // Zone 9 boss / Fraser tracking + HR Shop prestige-token payout
   if (enemy.isBoss && zoneIdx === 8) {
@@ -1148,6 +1175,19 @@ function handleEnemyDeath(): void {
 }
 
 function handlePlayerDeath(): void {
+  // Chiikawa Plushie death-block: restore to 1 HP instead of dying.
+  // 60s cooldown — only proc if equipped in amulet slot and not on cooldown.
+  const now = Date.now()
+  const amulet = player.gear?.amulet
+  const hasPlushie = amulet?.id === 'chiikawa-plushie'
+  if (hasPlushie && (player.plushieCooldown ?? 0) <= now) {
+    player.hp = 1
+    player.plushieCooldown = now + 60_000
+    addLog('heal', "▶ 🌸 the plushie took the hit. you feel bad.")
+    addFloater('🌸', 'heal', 'player')
+    return
+  }
+
   combatState.playerDead = true
   addLog('sys', `▶ You were defeated by ${combatState.enemyName}...`)
 

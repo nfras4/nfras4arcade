@@ -45,6 +45,9 @@ export const BASE_GOLD_BOSS     = 120
 export const ATTACK_BASE_INTERVAL = 1500
 export const ENEMY_ATTACK_INTERVAL = 2000
 export const ENEMY_HP_ZONE_SCALE = 1.18
+
+/** Secret boss zone — Ella's World. Uses hand-tuned stats, no zone scaling. */
+export const ELLA_ZONE_INDEX = 50
 /** Zone-aware enemy damage scaling. Story zones (0-8) keep 1.15; post-game reduced so baseDmg stays relevant and defence can matter. */
 export function getEnemyDmgScale(zoneIndex: number): number {
   if (zoneIndex <= 8)  return 1.15
@@ -218,4 +221,5 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'secret',         name: '???',                   sprite: '❓',  desc: '???' },
   { id: 'the-end',        name: 'THE END',               sprite: '🌌', desc: 'Defeat the final boss of the dungeon.' },
   { id: 'resigned',       name: 'RESIGNED',              sprite: '📝',  desc: 'File the resignation letter with Nick.' },
+  { id: 'ella-defeated',  name: 'HAUU!!',                sprite: '🌸', desc: 'Defeat Ella. You should feel bad.' },
 ]

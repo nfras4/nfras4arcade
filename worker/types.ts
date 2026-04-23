@@ -10,6 +10,7 @@ export interface Env {
   BLACKJACK_ROOM: DurableObjectNamespace;
   ROULETTE_ROOM: DurableObjectNamespace;
   BACCARAT_ROOM: DurableObjectNamespace;
+  LIARS_DICE_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
 }

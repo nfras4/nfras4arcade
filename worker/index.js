@@ -8,6 +8,7 @@ import { SnapRoom } from './snap/room';
 import { BlackjackRoom } from './casino/blackjack';
 import { RouletteRoom } from './casino/roulette';
 import { BaccaratRoom } from './casino/baccarat';
+import { LiarsDiceRoom } from './liarsDice/room';
 // src/worker.js
 import { Server } from "./../.svelte-kit/output/server/index.js";
 import { manifest, prerendered, base_path } from "./../.svelte-kit/cloudflare-tmp/manifest.js";
@@ -137,7 +138,7 @@ worker_default.fetch = async function(req, env, ctx) {
   const url = new URL(req.url);
 
   // WebSocket upgrade -> authenticate then forward to Durable Object
-  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM', '/ws/poker': 'POKER_ROOM', '/ws/snap': 'SNAP_ROOM', '/ws/blackjack': 'BLACKJACK_ROOM', '/ws/roulette': 'ROULETTE_ROOM', '/ws/baccarat': 'BACCARAT_ROOM' };
+  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM', '/ws/poker': 'POKER_ROOM', '/ws/snap': 'SNAP_ROOM', '/ws/blackjack': 'BLACKJACK_ROOM', '/ws/roulette': 'ROULETTE_ROOM', '/ws/baccarat': 'BACCARAT_ROOM', '/ws/liars-dice': 'LIARS_DICE_ROOM' };
   const doBinding = wsRoutes[url.pathname];
   if (doBinding && req.headers.get('Upgrade') === 'websocket') {
     const room = url.searchParams.get('room');
@@ -183,7 +184,7 @@ worker_default.fetch = async function(req, env, ctx) {
     headers.set('X-Is-Guest', userId.startsWith('guest_') ? 'true' : 'false');
 
     // For poker and casino games: load chip balance from D1
-    if ((doBinding === 'POKER_ROOM' || doBinding === 'BLACKJACK_ROOM' || doBinding === 'ROULETTE_ROOM' || doBinding === 'BACCARAT_ROOM') && userId && !userId.startsWith('guest_')) {
+    if ((doBinding === 'POKER_ROOM' || doBinding === 'BLACKJACK_ROOM' || doBinding === 'ROULETTE_ROOM' || doBinding === 'BACCARAT_ROOM' || doBinding === 'LIARS_DICE_ROOM') && userId && !userId.startsWith('guest_')) {
       try {
         const chipRow = await env.DB.prepare('SELECT chips FROM player_profiles WHERE id = ?').bind(userId).first();
         if (chipRow) headers.set('X-Player-Chips', String(chipRow.chips));
@@ -208,5 +209,6 @@ export {
   SnapRoom,
   BlackjackRoom,
   RouletteRoom,
-  BaccaratRoom
+  BaccaratRoom,
+  LiarsDiceRoom
 };

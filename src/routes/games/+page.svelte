@@ -65,6 +65,16 @@
       route: '/snap',
       soloAction: 'tutorial' as const,
     },
+    {
+      id: 'liars-dice',
+      name: "Liar's Dice",
+      description: 'Bid, bluff, call the liar',
+      minPlayers: 2,
+      maxPlayers: 6,
+      type: 'social deduction',
+      route: '/liars-dice',
+      soloAction: 'tutorial' as const,
+    },
   ];
 
   let creatingSolo: string | null = $state(null);

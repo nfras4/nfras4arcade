@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { xpToLevel } from '$lib/xp';
+import { resolvePlayerCosmetics } from '../../../../../worker/shared/cosmetics';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ locals, platform }) => {
@@ -36,22 +37,48 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       .bind(locals.user.id)
       .first<{ games_played: number; games_won: number; chips: number; xp: number }>();
 
-    // Fetch equipped name colour
-    const equippedColour = await db
+    // Fetch equipped name colour, card back, and table felt in one query
+    const equippedRow = await db
       .prepare(
-        `SELECT si.metadata FROM player_equipped pe
-         JOIN shop_items si ON si.id = pe.name_colour_id
+        `SELECT
+          nc.metadata AS name_colour_metadata,
+          cb.metadata AS card_back_metadata,
+          tf.metadata AS table_felt_metadata
+         FROM player_equipped pe
+         LEFT JOIN shop_items nc ON nc.id = pe.name_colour_id
+         LEFT JOIN shop_items cb ON cb.id = pe.card_back_id
+         LEFT JOIN shop_items tf ON tf.id = pe.table_felt_id
          WHERE pe.player_id = ?`
       )
       .bind(locals.user.id)
-      .first<{ metadata: string }>();
+      .first<{ name_colour_metadata: string | null; card_back_metadata: string | null; table_felt_metadata: string | null }>();
 
     let nameColour: string | null = null;
-    if (equippedColour?.metadata) {
+    if (equippedRow?.name_colour_metadata) {
       try {
-        nameColour = JSON.parse(equippedColour.metadata).hex || null;
+        nameColour = JSON.parse(equippedRow.name_colour_metadata).hex || null;
       } catch {}
     }
+
+    let cardBack: { style: string } | { svg: string } | null = null;
+    if (equippedRow?.card_back_metadata) {
+      try {
+        const meta = JSON.parse(equippedRow.card_back_metadata);
+        if (meta.style) cardBack = { style: meta.style };
+        else if (meta.svg) cardBack = { svg: `/cosmetics/card-backs/${meta.svg}` };
+      } catch {}
+    }
+
+    let tableFelt: { hex: string } | null = null;
+    if (equippedRow?.table_felt_metadata) {
+      try {
+        const meta = JSON.parse(equippedRow.table_felt_metadata);
+        if (meta.hex) tableFelt = { hex: meta.hex };
+      } catch {}
+    }
+
+    // Resolve cosmetics (frame, emblem, title badge)
+    const cosmetics = await resolvePlayerCosmetics(locals.user.id, db);
 
     // Recent game history (last 20)
     const historyRows = await db
@@ -110,7 +137,15 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     }));
 
     return json({
-      user: { ...locals.user, nameColour },
+      user: {
+        ...locals.user,
+        nameColour,
+        cardBack,
+        tableFelt,
+        frame: cosmetics.frameSvg ? { svg: cosmetics.frameSvg } : null,
+        emblem: cosmetics.emblemSvg ? { svg: cosmetics.emblemSvg } : null,
+        titleBadge: cosmetics.titleBadgeId ? { id: cosmetics.titleBadgeId } : null,
+      },
       stats: profile ? { gamesPlayed: profile.games_played, gamesWon: profile.games_won, chips: profile.chips, xp: profile.xp ?? 0, level: xpToLevel(profile.xp ?? 0) } : null,
       badges,
       gameHistory,
@@ -118,5 +153,5 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     });
   }
 
-  return json({ user: { ...locals.user, nameColour: null }, stats: null, badges });
+  return json({ user: { ...locals.user, nameColour: null, cardBack: null, tableFelt: null, frame: null, emblem: null, titleBadge: null }, stats: null, badges });
 };

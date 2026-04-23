@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
 import type { Card } from '../cards/types';
 import { createDeck, shuffle } from '../cards/deck';
+import { CosmeticsCache } from '../shared/cosmetics';
 
 // --- Constants ---
 
@@ -27,6 +28,10 @@ interface SnapPlayerData {
   isGuest: boolean;
   deck: Card[];
   wonCards: number;
+  frameSvg?: string | null;
+  emblemSvg?: string | null;
+  nameColour?: string | null;
+  titleBadgeId?: string | null;
 }
 
 interface SnapRoomState {
@@ -101,6 +106,9 @@ export class SnapRoom extends DurableObject<Env> {
 
   // Disconnect tracking
   private disconnectTimestamps = new Map<string, number>();
+
+  // Per-DO cosmetics cache
+  private cosmeticsCache = new CosmeticsCache();
 
   // --- State persistence ---
 
@@ -435,9 +443,11 @@ export class SnapRoom extends DurableObject<Env> {
     const existingPlayer = this.players.get(playerId);
 
     if (existingPlayer) {
-      // Reconnection
+      // Reconnection — re-resolve cosmetics in case loadout changed
+      this.cosmeticsCache.invalidate(playerId);
       existingPlayer.connected = true;
       this.disconnectTimestamps.delete(playerId);
+      this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -488,6 +498,8 @@ export class SnapRoom extends DurableObject<Env> {
       this.hostId = playerId;
     }
 
+    this.resolveCosmeticsForPlayer(playerId);
+
     this.sendToWs(ws, {
       type: 'joined',
       playerId,
@@ -495,6 +507,20 @@ export class SnapRoom extends DurableObject<Env> {
     });
     this.broadcastState();
     await this.saveState();
+  }
+
+  private resolveCosmeticsForPlayer(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+      const p = this.players.get(playerId);
+      if (!p) return;
+      p.frameSvg = cosmetics.frameSvg;
+      p.emblemSvg = cosmetics.emblemSvg;
+      p.nameColour = cosmetics.nameColour;
+      p.titleBadgeId = cosmetics.titleBadgeId;
+      this.broadcastState();
+    }).catch(() => {});
   }
 
   private handleDisconnect(playerId: string): void {
@@ -508,6 +534,8 @@ export class SnapRoom extends DurableObject<Env> {
     // Center pad disconnects are handled in webSocketClose/Error
     const player = this.players.get(playerId);
     if (!player) return;
+
+    this.cosmeticsCache.invalidate(playerId);
 
     if (this.phase === 'lobby') {
       // In lobby, remove immediately
@@ -975,6 +1003,10 @@ export class SnapRoom extends DurableObject<Env> {
       connected: p.connected,
       isHost: p.isHost,
       deckSize: p.deck.length,
+      frameSvg: p.frameSvg ?? null,
+      emblemSvg: p.emblemSvg ?? null,
+      nameColour: p.nameColour ?? null,
+      titleBadgeId: p.titleBadgeId ?? null,
     }));
 
     const topCard = this.pile.length > 0 ? this.pile[this.pile.length - 1] : null;

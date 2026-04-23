@@ -605,6 +605,10 @@ export class BlackjackRoom extends CasinoRoom {
       chips: p.chips,
       connected: p.connected,
       isHost: p.isHost,
+      frameSvg: p.frameSvg ?? null,
+      emblemSvg: p.emblemSvg ?? null,
+      nameColour: p.nameColour ?? null,
+      titleBadgeId: p.titleBadgeId ?? null,
     }));
 
     // Hide dealer's hole card unless revealed

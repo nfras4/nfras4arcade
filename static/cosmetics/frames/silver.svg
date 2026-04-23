@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90" width="90" height="90">
+  <defs>
+    <linearGradient id="silver-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c0c0c0"/>
+      <stop offset="100%" stop-color="#808080"/>
+    </linearGradient>
+    <linearGradient id="silver-shine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.7"/>
+      <stop offset="50%" stop-color="#d0d0d0" stop-opacity="0.0"/>
+      <stop offset="100%" stop-color="#606060" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="silver-edge-h" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#909090"/>
+      <stop offset="50%" stop-color="#e0e0e0"/>
+      <stop offset="100%" stop-color="#909090"/>
+    </linearGradient>
+    <linearGradient id="silver-edge-v" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#909090"/>
+      <stop offset="50%" stop-color="#e0e0e0"/>
+      <stop offset="100%" stop-color="#909090"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Corner pieces (30x30 each) -->
+  <!-- top-left -->
+  <rect x="0" y="0" width="30" height="30" fill="url(#silver-grad)"/>
+  <!-- top-right -->
+  <rect x="60" y="0" width="30" height="30" fill="url(#silver-grad)"/>
+  <!-- bottom-left -->
+  <rect x="0" y="60" width="30" height="30" fill="url(#silver-grad)"/>
+  <!-- bottom-right -->
+  <rect x="60" y="60" width="30" height="30" fill="url(#silver-grad)"/>
+
+  <!-- Edge pieces (center slices) -->
+  <!-- top edge -->
+  <rect x="30" y="0" width="30" height="30" fill="url(#silver-edge-h)"/>
+  <!-- bottom edge -->
+  <rect x="30" y="60" width="30" height="30" fill="url(#silver-edge-h)"/>
+  <!-- left edge -->
+  <rect x="0" y="30" width="30" height="30" fill="url(#silver-edge-v)"/>
+  <!-- right edge -->
+  <rect x="60" y="30" width="30" height="30" fill="url(#silver-edge-v)"/>
+
+  <!-- Center transparent (30x30) - no fill so border-image center shows through -->
+
+  <!-- Shine overlay (diagonal highlight) -->
+  <rect x="0" y="0" width="90" height="90" fill="url(#silver-shine)" opacity="0.6"/>
+
+  <!-- Clean geometric line details - outer bevel -->
+  <rect x="2" y="2" width="86" height="86" fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.8" rx="2"/>
+  <rect x="4" y="4" width="82" height="82" fill="none" stroke="#606060" stroke-width="0.75" rx="1"/>
+
+  <!-- Inner bevel line -->
+  <rect x="12" y="12" width="66" height="66" fill="none" stroke="#ffffff" stroke-width="1.25" stroke-opacity="0.9" rx="1"/>
+  <rect x="14" y="14" width="62" height="62" fill="none" stroke="#808080" stroke-width="0.75" rx="1"/>
+
+  <!-- Corner accent diamonds -->
+  <polygon points="15,7 20,12 15,17 10,12" fill="#ffffff" fill-opacity="0.6"/>
+  <polygon points="75,7 80,12 75,17 70,12" fill="#ffffff" fill-opacity="0.6"/>
+  <polygon points="15,73 20,78 15,83 10,78" fill="#ffffff" fill-opacity="0.6"/>
+  <polygon points="75,73 80,78 75,83 70,78" fill="#ffffff" fill-opacity="0.6"/>
+
+  <!-- Center transparent mask (no fill = transparent) -->
+</svg>

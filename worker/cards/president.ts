@@ -421,6 +421,10 @@ export class PresidentRoom extends CardRoom {
       connected: p.connected,
       isHost: p.isHost,
       isBot: p.isBot,
+      frameSvg: p.frameSvg ?? null,
+      emblemSvg: p.emblemSvg ?? null,
+      nameColour: p.nameColour ?? null,
+      titleBadgeId: p.titleBadgeId ?? null,
     }));
 
     return {

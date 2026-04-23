@@ -267,9 +267,14 @@
             {:else}
               <h2 class="display-name" style:color={$currentUser.nameColour || undefined}>{$currentUser.displayName}{#if $currentUser.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner"> &#x1F451;</span>{/if}</h2>
               <p class="email">{$currentUser.email}</p>
-              <button class="btn-secondary btn-small edit-btn" onclick={() => { editingName = true; }}>
-                Edit Profile
-              </button>
+              <div class="profile-action-row">
+                <button class="btn-secondary btn-small edit-btn" onclick={() => { editingName = true; }}>
+                  Edit Profile
+                </button>
+                <button class="btn-secondary btn-small edit-btn" onclick={() => goto('/customize')}>
+                  Customize loadout
+                </button>
+              </div>
             {/if}
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const VALID_SLOTS = ['avatar', 'name_colour', 'card_back', 'table_felt'] as const;
+const VALID_SLOTS = ['avatar', 'name_colour', 'card_back', 'table_felt', 'frame', 'emblem'] as const;
 type EquipSlot = (typeof VALID_SLOTS)[number];
 
 const SLOT_TO_COLUMN: Record<EquipSlot, string> = {
@@ -9,6 +9,8 @@ const SLOT_TO_COLUMN: Record<EquipSlot, string> = {
 	name_colour: 'name_colour_id',
 	card_back: 'card_back_id',
 	table_felt: 'table_felt_id',
+	frame: 'frame_id',
+	emblem: 'emblem_id',
 };
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
@@ -31,7 +33,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	const { slot, itemId } = body;
 
 	if (!slot || !VALID_SLOTS.includes(slot as EquipSlot)) {
-		return json({ error: 'Invalid slot. Must be one of: avatar, name_colour, card_back, table_felt' }, { status: 400 });
+		return json({ error: 'Invalid slot. Must be one of: avatar, name_colour, card_back, table_felt, frame, emblem' }, { status: 400 });
 	}
 
 	const equipSlot = slot as EquipSlot;
@@ -50,6 +52,8 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			return json({ error: 'Item not found or unavailable' }, { status: 400 });
 		}
 
+		// frame slot expects subcategory 'frame', emblem slot expects 'emblem'
+		// other slots use subcategory matching the slot name directly
 		if (item.subcategory !== equipSlot) {
 			return json({ error: `Item subcategory "${item.subcategory}" does not match slot "${equipSlot}"` }, { status: 400 });
 		}
@@ -68,8 +72,8 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 
 	await db
 		.prepare(
-			`INSERT INTO player_equipped (player_id, avatar_id, name_colour_id, card_back_id, table_felt_id)
-			VALUES (?, NULL, NULL, NULL, NULL)
+			`INSERT INTO player_equipped (player_id, avatar_id, name_colour_id, card_back_id, table_felt_id, frame_id, emblem_id, title_badge_id)
+			VALUES (?, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
 			ON CONFLICT (player_id) DO UPDATE SET ${column} = ?`
 		)
 		.bind(locals.user.id, itemId ?? null)

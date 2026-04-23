@@ -6,6 +6,7 @@ import type {
   RoundResult, GameState, ClientMessage, ServerMessage,
 } from '../../src/lib/types';
 import { getRandomWord, getRandomCategory, getCategories } from './words';
+import { CosmeticsCache } from '../shared/cosmetics';
 
 const MAX_MESSAGE_SIZE = 2048;
 const MAX_TEXT_LENGTH = 200;
@@ -59,6 +60,9 @@ export class ImpostorRoom extends DurableObject<Env> {
 
   // Track if state has been loaded from storage
   private initialized = false;
+
+  // Per-DO cosmetics cache
+  private cosmeticsCache = new CosmeticsCache();
 
   private async loadState(): Promise<void> {
     if (this.initialized) return;
@@ -304,9 +308,11 @@ export class ImpostorRoom extends DurableObject<Env> {
 
     if (existingPlayer) {
       // Reconnection — restore player and clear timeout
+      this.cosmeticsCache.invalidate(playerId);
       existingPlayer.player.connected = true;
       existingPlayer.player.connectionStatus = 'connected';
       this.disconnectTimestamps.delete(playerId);
+      this.resolveCosmeticsForPlayer(playerId);
       const joinMsg: ServerMessage = {
         type: 'joined',
         playerId,
@@ -359,6 +365,8 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.hostId = playerId;
     }
 
+    this.resolveCosmeticsForPlayer(playerId);
+
     const joinMsg: ServerMessage = {
       type: 'joined',
       playerId,
@@ -367,6 +375,20 @@ export class ImpostorRoom extends DurableObject<Env> {
     this.sendToWs(ws, joinMsg);
     this.broadcastState();
     await this.saveState();
+  }
+
+  private resolveCosmeticsForPlayer(playerId: string): void {
+    const cp = this.players.get(playerId);
+    if (!cp) return;
+    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+      const p = this.players.get(playerId);
+      if (!p) return;
+      p.player.frameSvg = cosmetics.frameSvg;
+      p.player.emblemSvg = cosmetics.emblemSvg;
+      p.player.nameColour = cosmetics.nameColour;
+      p.player.titleBadgeId = cosmetics.titleBadgeId;
+      this.broadcastState();
+    }).catch(() => {});
   }
 
   private handleDisconnect(playerId: string): void {
@@ -379,6 +401,8 @@ export class ImpostorRoom extends DurableObject<Env> {
 
     const cp = this.players.get(playerId);
     if (!cp) return;
+
+    this.cosmeticsCache.invalidate(playerId);
 
     if (this.phase === 'lobby') {
       // In lobby, remove immediately

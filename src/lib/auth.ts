@@ -6,6 +6,11 @@ export interface AuthUser {
   displayName: string;
   avatar: string | null;
   nameColour: string | null;
+  cardBack: { style: string } | { svg: string } | null;
+  tableFelt: { hex: string } | null;
+  frame: { svg: string } | null;
+  emblem: { svg: string } | null;
+  titleBadge: { id: string } | null;
 }
 
 export interface AuthStats {

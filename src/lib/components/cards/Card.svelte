@@ -14,6 +14,7 @@
     disabled = false,
     onclick = undefined,
     dealDelay = 0,
+    cardBackStyle = null,
   }: {
     card?: { suit: string; rank: string } | null;
     faceUp?: boolean;
@@ -21,7 +22,24 @@
     disabled?: boolean;
     onclick?: (() => void) | undefined;
     dealDelay?: number;
+    /** Equipped card back cosmetic. Supports style-based (CSS class) or SVG-based (background-image). */
+    cardBackStyle?: { style: string } | { svg: string } | null;
   } = $props();
+
+  // TODO: wire feature flag — hardcoded true until COSMETIC_TILES_ENABLED is accessible client-side
+  const cosmeticsEnabled = true;
+
+  let backClass = $derived(
+    cosmeticsEnabled && cardBackStyle && 'style' in cardBackStyle
+      ? `back-pattern back-pattern--${cardBackStyle.style}`
+      : 'back-pattern'
+  );
+
+  let backImgStyle = $derived(
+    cosmeticsEnabled && cardBackStyle && 'svg' in cardBackStyle
+      ? `background-image: url('${cardBackStyle.svg}'); background-size: cover; background-position: center;`
+      : ''
+  );
 
   let isRed = $derived(card?.suit === 'hearts' || card?.suit === 'diamonds');
   let suitPath = $derived(card ? (SUIT_PATHS[card.suit] ?? '') : '');
@@ -43,7 +61,7 @@
       <span class="rank">{card.rank}</span>
       <svg class="suit-icon" viewBox="0 0 24 24"><path d={suitPath}/></svg>
     {:else}
-      <span class="back-pattern"></span>
+      <span class={backClass} style={backImgStyle}></span>
     {/if}
   </button>
 {:else}
@@ -59,7 +77,7 @@
       <span class="rank">{card.rank}</span>
       <svg class="suit-icon" viewBox="0 0 24 24"><path d={suitPath}/></svg>
     {:else}
-      <span class="back-pattern"></span>
+      <span class={backClass} style={backImgStyle}></span>
     {/if}
   </div>
 {/if}
@@ -125,6 +143,46 @@
     );
     border-radius: 2px;
     opacity: 0.3;
+  }
+
+  /* Equipped card back styles — match subcategory metadata {"style":"..."} values */
+  .back-pattern--red_pattern {
+    background: repeating-linear-gradient(
+      45deg,
+      #8b1a1a 0px,
+      #8b1a1a 2px,
+      #c0392b 2px,
+      #c0392b 6px
+    );
+    opacity: 0.85;
+  }
+
+  .back-pattern--blue_pattern {
+    background: repeating-linear-gradient(
+      45deg,
+      #1a3a5c 0px,
+      #1a3a5c 2px,
+      #2980b9 2px,
+      #2980b9 6px
+    );
+    opacity: 0.85;
+  }
+
+  .back-pattern--gold_foil {
+    background: repeating-linear-gradient(
+      45deg,
+      #b8860b 0px,
+      #b8860b 2px,
+      #ffd700 2px,
+      #ffd700 6px
+    );
+    opacity: 0.9;
+  }
+
+  /* SVG card back — background-image applied via inline style; ensure it fills */
+  .back-pattern[style*="background-image"] {
+    opacity: 1;
+    background-repeat: no-repeat;
   }
 
   .rank {

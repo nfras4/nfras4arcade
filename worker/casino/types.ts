@@ -7,12 +7,26 @@ export interface CasinoPlayer {
   isHost: boolean;
   chips: number;
   isGuest: boolean;
+  frameSvg?: string | null;
+  emblemSvg?: string | null;
+  nameColour?: string | null;
+  titleBadgeId?: string | null;
 }
 
 export interface CasinoGameState {
   code: string;
   phase: CasinoPhase;
-  players: { id: string; name: string; chips: number; connected: boolean; isHost: boolean }[];
+  players: {
+    id: string;
+    name: string;
+    chips: number;
+    connected: boolean;
+    isHost: boolean;
+    frameSvg?: string | null;
+    emblemSvg?: string | null;
+    nameColour?: string | null;
+    titleBadgeId?: string | null;
+  }[];
   roundNumber: number;
   minBet: number;
   maxBet: number;

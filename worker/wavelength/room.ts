@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import type { BotPlayer } from '../bots/botPlayer';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { shuffleDeck, type SpectrumCard } from '../../src/lib/wavelength/cards';
+import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 
 // --- Constants ---
 
@@ -24,6 +25,10 @@ interface WavelengthPlayer {
   connected: boolean;
   isHost: boolean;
   isBot: boolean;
+  frameSvg?: string | null;
+  emblemSvg?: string | null;
+  nameColour?: string | null;
+  titleBadgeId?: string | null;
 }
 
 interface RoundResultEntry {
@@ -182,6 +187,9 @@ export class WavelengthRoom extends DurableObject<Env> {
   private disconnectTimestamps = new Map<string, number>();
 
   private spectators = new Map<string, string>();
+
+  // Per-DO cosmetics cache
+  private cosmeticsCache = new CosmeticsCache();
 
   // --- State persistence ---
 
@@ -479,9 +487,11 @@ export class WavelengthRoom extends DurableObject<Env> {
     const existingPlayer = this.players.get(playerId);
 
     if (existingPlayer) {
-      // Reconnection
+      // Reconnection — re-resolve cosmetics in case loadout changed
+      this.cosmeticsCache.invalidate(playerId);
       existingPlayer.connected = true;
       this.disconnectTimestamps.delete(playerId);
+      this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -531,6 +541,8 @@ export class WavelengthRoom extends DurableObject<Env> {
 
     this.scores.set(playerId, 0);
 
+    this.resolveCosmeticsForPlayer(playerId);
+
     this.sendToWs(ws, {
       type: 'joined',
       playerId,
@@ -538,6 +550,27 @@ export class WavelengthRoom extends DurableObject<Env> {
     });
     this.broadcastState();
     await this.saveState();
+  }
+
+  private resolveCosmeticsForPlayer(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (player.isBot) {
+      player.frameSvg = DEFAULT_COSMETICS.frameSvg;
+      player.emblemSvg = DEFAULT_COSMETICS.emblemSvg;
+      player.nameColour = DEFAULT_COSMETICS.nameColour;
+      player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
+      return;
+    }
+    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+      const p = this.players.get(playerId);
+      if (!p) return;
+      p.frameSvg = cosmetics.frameSvg;
+      p.emblemSvg = cosmetics.emblemSvg;
+      p.nameColour = cosmetics.nameColour;
+      p.titleBadgeId = cosmetics.titleBadgeId;
+      this.broadcastState();
+    }).catch(() => {});
   }
 
   private handleDisconnect(playerId: string): void {
@@ -550,6 +583,8 @@ export class WavelengthRoom extends DurableObject<Env> {
 
     const player = this.players.get(playerId);
     if (!player) return;
+
+    this.cosmeticsCache.invalidate(playerId);
 
     if (this.phase === 'lobby') {
       // In lobby, remove immediately
@@ -1317,6 +1352,10 @@ export class WavelengthRoom extends DurableObject<Env> {
       isHost: p.isHost,
       isBot: p.isBot,
       score: this.scores.get(p.id) ?? 0,
+      frameSvg: p.frameSvg ?? null,
+      emblemSvg: p.emblemSvg ?? null,
+      nameColour: p.nameColour ?? null,
+      titleBadgeId: p.titleBadgeId ?? null,
     }));
 
     return {

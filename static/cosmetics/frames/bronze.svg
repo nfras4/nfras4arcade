@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90" width="90" height="90">
+  <defs>
+    <linearGradient id="bronze-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#cd7f32"/>
+      <stop offset="100%" stop-color="#a0522d"/>
+    </linearGradient>
+    <linearGradient id="bronze-shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e8a060" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#7a3a18" stop-opacity="0.4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer border fill -->
+  <rect x="0" y="0" width="90" height="90" fill="url(#bronze-grad)" rx="4"/>
+
+  <!-- Inner cutout (transparent center 30,30 to 60,60) -->
+  <rect x="12" y="12" width="66" height="66" fill="none" rx="2"/>
+
+  <!-- Center transparent hole -->
+  <rect x="30" y="30" width="30" height="30" fill="transparent"/>
+
+  <!-- Top edge bar -->
+  <rect x="30" y="2" width="30" height="10" fill="url(#bronze-grad)"/>
+  <!-- Bottom edge bar -->
+  <rect x="30" y="78" width="30" height="10" fill="url(#bronze-grad)"/>
+  <!-- Left edge bar -->
+  <rect x="2" y="30" width="10" height="30" fill="url(#bronze-grad)"/>
+  <!-- Right edge bar -->
+  <rect x="78" y="30" width="10" height="30" fill="url(#bronze-grad)"/>
+
+  <!-- Shine overlay on top/left edges -->
+  <rect x="0" y="0" width="90" height="4" fill="url(#bronze-shine)" rx="2"/>
+  <rect x="0" y="0" width="4" height="90" fill="url(#bronze-shine)" rx="2"/>
+
+  <!-- Corner pieces (30x30 each) - top-left -->
+  <rect x="0" y="0" width="30" height="30" fill="url(#bronze-grad)" rx="4"/>
+  <!-- Rivet decorations - top-left corner -->
+  <circle cx="8" cy="8" r="3.5" fill="#7a3a18"/>
+  <circle cx="8" cy="8" r="2" fill="#e8a060"/>
+  <circle cx="22" cy="8" r="3.5" fill="#7a3a18"/>
+  <circle cx="22" cy="8" r="2" fill="#e8a060"/>
+  <circle cx="8" cy="22" r="3.5" fill="#7a3a18"/>
+  <circle cx="8" cy="22" r="2" fill="#e8a060"/>
+  <circle cx="22" cy="22" r="3.5" fill="#7a3a18"/>
+  <circle cx="22" cy="22" r="2" fill="#e8a060"/>
+
+  <!-- Corner piece - top-right -->
+  <rect x="60" y="0" width="30" height="30" fill="url(#bronze-grad)" rx="4"/>
+  <circle cx="68" cy="8" r="3.5" fill="#7a3a18"/>
+  <circle cx="68" cy="8" r="2" fill="#e8a060"/>
+  <circle cx="82" cy="8" r="3.5" fill="#7a3a18"/>
+  <circle cx="82" cy="8" r="2" fill="#e8a060"/>
+  <circle cx="68" cy="22" r="3.5" fill="#7a3a18"/>
+  <circle cx="68" cy="22" r="2" fill="#e8a060"/>
+  <circle cx="82" cy="22" r="3.5" fill="#7a3a18"/>
+  <circle cx="82" cy="22" r="2" fill="#e8a060"/>
+
+  <!-- Corner piece - bottom-left -->
+  <rect x="0" y="60" width="30" height="30" fill="url(#bronze-grad)" rx="4"/>
+  <circle cx="8" cy="68" r="3.5" fill="#7a3a18"/>
+  <circle cx="8" cy="68" r="2" fill="#e8a060"/>
+  <circle cx="22" cy="68" r="3.5" fill="#7a3a18"/>
+  <circle cx="22" cy="68" r="2" fill="#e8a060"/>
+  <circle cx="8" cy="82" r="3.5" fill="#7a3a18"/>
+  <circle cx="8" cy="82" r="2" fill="#e8a060"/>
+  <circle cx="22" cy="82" r="3.5" fill="#7a3a18"/>
+  <circle cx="22" cy="82" r="2" fill="#e8a060"/>
+
+  <!-- Corner piece - bottom-right -->
+  <rect x="60" y="60" width="30" height="30" fill="url(#bronze-grad)" rx="4"/>
+  <circle cx="68" cy="68" r="3.5" fill="#7a3a18"/>
+  <circle cx="68" cy="68" r="2" fill="#e8a060"/>
+  <circle cx="82" cy="68" r="3.5" fill="#7a3a18"/>
+  <circle cx="82" cy="68" r="2" fill="#e8a060"/>
+  <circle cx="68" cy="82" r="3.5" fill="#7a3a18"/>
+  <circle cx="68" cy="82" r="2" fill="#e8a060"/>
+  <circle cx="82" cy="82" r="3.5" fill="#7a3a18"/>
+  <circle cx="82" cy="82" r="2" fill="#e8a060"/>
+
+  <!-- Inner border line (decorative inset) -->
+  <rect x="12" y="12" width="66" height="66" fill="none" stroke="#7a3a18" stroke-width="1.5" rx="2"/>
+  <rect x="16" y="16" width="58" height="58" fill="none" stroke="#e8a060" stroke-width="0.75" stroke-opacity="0.5" rx="1"/>
+
+  <!-- Center transparent mask -->
+  <rect x="30" y="30" width="30" height="30" fill="white" fill-opacity="0" style="mix-blend-mode:normal"/>
+</svg>

@@ -93,8 +93,10 @@ export class BaccaratRoom extends CasinoRoom {
     const existing = this.players.get(playerId);
 
     if (existing) {
+      this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
+      this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -119,6 +121,8 @@ export class BaccaratRoom extends CasinoRoom {
     const player = { id: playerId, name, connected: true, isHost, chips, isGuest };
     this.players.set(playerId, player);
     if (isHost) this.hostId = playerId;
+
+    this.resolveCosmeticsForPlayer(playerId);
 
     // Auto-start game when first player joins an idle table
     if (this.phase === 'lobby') {
@@ -516,6 +520,10 @@ export class BaccaratRoom extends CasinoRoom {
       chips: p.chips,
       connected: p.connected,
       isHost: p.isHost,
+      frameSvg: p.frameSvg ?? null,
+      emblemSvg: p.emblemSvg ?? null,
+      nameColour: p.nameColour ?? null,
+      titleBadgeId: p.titleBadgeId ?? null,
     }));
 
     return {

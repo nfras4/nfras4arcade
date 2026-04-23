@@ -9,6 +9,10 @@ export interface Player {
   isHost: boolean;
   connected: boolean;
   connectionStatus: ConnectionStatus;
+  frameSvg?: string | null;
+  emblemSvg?: string | null;
+  nameColour?: string | null;
+  titleBadgeId?: string | null;
 }
 
 export interface HintEntry {

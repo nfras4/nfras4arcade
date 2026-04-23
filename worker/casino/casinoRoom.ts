@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
 import type { CasinoPlayer, CasinoPhase, CasinoGameState, CasinoAction, CasinoStoredState } from './types';
+import { CosmeticsCache } from '../shared/cosmetics';
 
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000;
@@ -31,6 +32,9 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
   private initialized = false;
   private rateLimits: Map<string, number[]> = new Map();
+
+  /** Per-DO cosmetics cache (resolved player cosmetic payloads). */
+  protected cosmeticsCache = new CosmeticsCache();
 
   // --- Abstract methods ---
 
@@ -324,8 +328,11 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     const existing = this.players.get(playerId);
 
     if (existing) {
+      // Reconnection — re-resolve cosmetics in case loadout changed
+      this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
+      this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -366,6 +373,8 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
     if (isHost) this.hostId = playerId;
 
+    this.resolveCosmeticsForPlayer(playerId);
+
     // Update casino_tables registry
     await this.updateTableRegistry();
 
@@ -378,6 +387,25 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     await this.saveState();
   }
 
+  /**
+   * Resolve cosmetics asynchronously for a player, stash on the player record,
+   * and rebroadcast so clients see the cosmetic fields. Guests short-circuit
+   * inside the cache/resolver without a D1 hit.
+   */
+  protected resolveCosmeticsForPlayer(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+      const p = this.players.get(playerId);
+      if (!p) return;
+      p.frameSvg = cosmetics.frameSvg;
+      p.emblemSvg = cosmetics.emblemSvg;
+      p.nameColour = cosmetics.nameColour;
+      p.titleBadgeId = cosmetics.titleBadgeId;
+      this.broadcastState();
+    }).catch(() => {});
+  }
+
   private async handleDisconnect(playerId: string): Promise<void> {
     if (this.spectators.has(playerId)) {
       this.spectators.delete(playerId);
@@ -387,6 +415,8 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
     const player = this.players.get(playerId);
     if (!player) return;
+
+    this.cosmeticsCache.invalidate(playerId);
 
     if (this.phase === 'lobby') {
       this.players.delete(playerId);

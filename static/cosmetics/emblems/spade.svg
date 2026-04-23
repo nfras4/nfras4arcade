@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Spade emblem - works on both light and dark backgrounds -->
+  <!-- Spade head: two overlapping circles + inverted triangle -->
+  <!-- Left lobe -->
+  <circle cx="9" cy="11" r="5" fill="#1a1a2e"/>
+  <!-- Right lobe -->
+  <circle cx="15" cy="11" r="5" fill="#1a1a2e"/>
+  <!-- Top point -->
+  <polygon points="12,3 17,11 7,11" fill="#1a1a2e"/>
+  <!-- Stem -->
+  <path d="M10.5,16 C10.5,16 10,19 8,20 L16,20 C14,19 13.5,16 13.5,16 Z" fill="#1a1a2e"/>
+  <!-- White outline for visibility on dark backgrounds -->
+  <circle cx="9" cy="11" r="5" fill="none" stroke="#ffffff" stroke-width="0.75" stroke-opacity="0.5"/>
+  <circle cx="15" cy="11" r="5" fill="none" stroke="#ffffff" stroke-width="0.75" stroke-opacity="0.5"/>
+  <!-- Highlight glint -->
+  <ellipse cx="10" cy="8.5" rx="2" ry="1.2" fill="#ffffff" fill-opacity="0.15" transform="rotate(-20,10,8.5)"/>
+</svg>

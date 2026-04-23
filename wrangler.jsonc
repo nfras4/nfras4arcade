@@ -68,6 +68,8 @@
   // Environment variables available in the Worker via env.VARIABLE_NAME
   // Secrets go in .dev.vars (local) or `wrangler secret put` (production)
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    // Feature flag: cosmetic tile rendering. Set to "false" in production until verified.
+    "COSMETIC_TILES_ENABLED": "true"
   }
 }

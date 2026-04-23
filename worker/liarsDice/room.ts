@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { validateBid, countBidFace, nextInTurnOrder } from './logic';
 import { decideLiarsDiceAction } from '../bots/liarsDiceBot';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
+import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 
 // --- Constants ---
 
@@ -34,6 +35,10 @@ interface Player {
   isBot: boolean;
   dice: number[];
   eliminated: boolean;
+  frameSvg?: string | null;
+  emblemSvg?: string | null;
+  nameColour?: string | null;
+  titleBadgeId?: string | null;
 }
 
 interface Bid {
@@ -91,6 +96,10 @@ interface ClientState {
     diceCount: number;
     eliminated: boolean;
     chips: number;
+    frameSvg?: string | null;
+    emblemSvg?: string | null;
+    nameColour?: string | null;
+    titleBadgeId?: string | null;
   }[];
   hostId: string;
   turnOrder: string[];
@@ -151,6 +160,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private spectators = new Map<string, string>();
   private disconnectTimestamps = new Map<string, number>();
   private rateLimits = new Map<string, number[]>();
+  private cosmeticsCache = new CosmeticsCache();
 
   // --- Persistence ---
 
@@ -399,8 +409,10 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
     const existing = this.players.get(playerId);
     if (existing) {
+      this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
+      this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId) });
       this.broadcastState();
       await this.saveState();
@@ -446,9 +458,32 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       this.playerChips[playerId] = DEFAULT_BUY_IN;
     }
 
+    this.resolveCosmeticsForPlayer(playerId);
+
     this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId) });
     this.broadcastState();
     await this.saveState();
+  }
+
+  private resolveCosmeticsForPlayer(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    if (player.isBot) {
+      player.frameSvg = DEFAULT_COSMETICS.frameSvg;
+      player.emblemSvg = DEFAULT_COSMETICS.emblemSvg;
+      player.nameColour = DEFAULT_COSMETICS.nameColour;
+      player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
+      return;
+    }
+    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+      const p = this.players.get(playerId);
+      if (!p) return;
+      p.frameSvg = cosmetics.frameSvg;
+      p.emblemSvg = cosmetics.emblemSvg;
+      p.nameColour = cosmetics.nameColour;
+      p.titleBadgeId = cosmetics.titleBadgeId;
+      this.broadcastState();
+    }).catch(() => {});
   }
 
   private handleDisconnect(playerId: string): void {
@@ -459,6 +494,8 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     }
     const player = this.players.get(playerId);
     if (!player) return;
+
+    this.cosmeticsCache.invalidate(playerId);
 
     if (this.phase === 'lobby') {
       this.players.delete(playerId);
@@ -940,6 +977,10 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         diceCount: p.dice.length,
         eliminated: p.eliminated,
         chips: this.playerChips[p.id] ?? 0,
+        frameSvg: p.frameSvg ?? null,
+        emblemSvg: p.emblemSvg ?? null,
+        nameColour: p.nameColour ?? null,
+        titleBadgeId: p.titleBadgeId ?? null,
       })),
       hostId: this.hostId,
       turnOrder: [...this.turnOrder],

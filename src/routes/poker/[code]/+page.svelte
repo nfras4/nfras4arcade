@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
-  import { isLoggedIn, userStats } from '$lib/auth';
+  import { isLoggedIn, userStats, currentUser } from '$lib/auth';
   import { getGuestDisplayName } from '$lib/guest';
   import { fireWinConfetti } from '$lib/vfx';
   import Card from '$lib/components/cards/Card.svelte';
@@ -91,6 +91,12 @@
   let callAmount = $derived(Math.min(toCall, myChips));
   let minRaise = $derived(currentBet + bigBlindAmount);
   let maxRaise = $derived(myChips + myBet);
+
+  // Cosmetics: card back and table felt from auth store
+  // TODO: wire feature flag — COSMETIC_TILES_ENABLED hardcoded true until accessible client-side
+  let myCardBackStyle = $derived($currentUser?.cardBack ?? null);
+  let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
+  let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
 
   // Sync chips to nav bar
   $effect(() => {
@@ -228,7 +234,7 @@
   <div class="error-toast">{$error}</div>
 {/if}
 
-<div class="game-page">
+<div class="game-page" style={tableFeltStyle}>
   {#if !state}
     <div class="loading">
       <p>Connecting...</p>
@@ -367,6 +373,7 @@
               blindLabel={getBlindLabel(player.id)}
               folded={playerFolded[player.id] ?? false}
               allIn={playerAllIn[player.id] ?? false}
+              cardBackStyle={myCardBackStyle}
             />
           {/each}
         </div>
@@ -483,6 +490,7 @@
     flex-direction: column;
     align-items: center;
     padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
+    background-color: var(--table-felt-bg, transparent);
   }
 
   .loading {

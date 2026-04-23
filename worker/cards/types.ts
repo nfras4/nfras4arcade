@@ -17,12 +17,27 @@ export interface CardPlayer {
   connected: boolean;
   isHost: boolean;
   isBot?: boolean;
+  frameSvg?: string | null;
+  emblemSvg?: string | null;
+  nameColour?: string | null;
+  titleBadgeId?: string | null;
 }
 
 export interface CardGameState {
   code: string;
   phase: CardGamePhase;
-  players: { id: string; name: string; cardCount: number; connected: boolean; isHost: boolean; isBot?: boolean }[];
+  players: {
+    id: string;
+    name: string;
+    cardCount: number;
+    connected: boolean;
+    isHost: boolean;
+    isBot?: boolean;
+    frameSvg?: string | null;
+    emblemSvg?: string | null;
+    nameColour?: string | null;
+    titleBadgeId?: string | null;
+  }[];
   turnOrder: string[];
   currentTurn: string | null;
   roundNumber: number;

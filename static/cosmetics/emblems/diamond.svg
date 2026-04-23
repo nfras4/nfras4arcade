@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Diamond emblem - cyan, recognizable at 18px -->
+  <!-- Main diamond shape -->
+  <polygon points="12,3 20,10 12,21 4,10" fill="#00ccdd"/>
+  <!-- Upper facet (lighter) -->
+  <polygon points="12,3 20,10 12,10" fill="#66eeff" opacity="0.8"/>
+  <!-- Lower-left facet -->
+  <polygon points="4,10 12,10 12,21" fill="#008899" opacity="0.7"/>
+  <!-- Center highlight line -->
+  <line x1="12" y1="3" x2="12" y2="10" stroke="#ffffff" stroke-width="0.75" opacity="0.7"/>
+  <!-- Sparkle top-left -->
+  <line x1="4" y1="4" x2="6" y2="6" stroke="#ffffff" stroke-width="1" stroke-linecap="round"/>
+  <line x1="5" y1="3" x2="5" y2="7" stroke="#ffffff" stroke-width="0.75" stroke-linecap="round"/>
+  <!-- Thin outline for legibility on dark bg -->
+  <polygon points="12,3 20,10 12,21 4,10" fill="none" stroke="#006677" stroke-width="0.75"/>
+</svg>

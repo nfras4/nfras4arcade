@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 90" width="90" height="90">
+  <defs>
+    <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffd700"/>
+      <stop offset="50%" stop-color="#f0c020"/>
+      <stop offset="100%" stop-color="#b8860b"/>
+    </linearGradient>
+    <linearGradient id="gold-shine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fff8c0" stop-opacity="0.8"/>
+      <stop offset="40%" stop-color="#ffd700" stop-opacity="0.0"/>
+      <stop offset="100%" stop-color="#8b6000" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="gold-edge-h" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#b8860b"/>
+      <stop offset="50%" stop-color="#ffd700"/>
+      <stop offset="100%" stop-color="#b8860b"/>
+    </linearGradient>
+    <linearGradient id="gold-edge-v" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#b8860b"/>
+      <stop offset="50%" stop-color="#ffd700"/>
+      <stop offset="100%" stop-color="#b8860b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Corner pieces (30x30 each) -->
+  <rect x="0" y="0" width="30" height="30" fill="url(#gold-grad)"/>
+  <rect x="60" y="0" width="30" height="30" fill="url(#gold-grad)"/>
+  <rect x="0" y="60" width="30" height="30" fill="url(#gold-grad)"/>
+  <rect x="60" y="60" width="30" height="30" fill="url(#gold-grad)"/>
+
+  <!-- Edge pieces -->
+  <rect x="30" y="0" width="30" height="30" fill="url(#gold-edge-h)"/>
+  <rect x="30" y="60" width="30" height="30" fill="url(#gold-edge-h)"/>
+  <rect x="0" y="30" width="30" height="30" fill="url(#gold-edge-v)"/>
+  <rect x="60" y="30" width="30" height="30" fill="url(#gold-edge-v)"/>
+
+  <!-- Shine overlay -->
+  <rect x="0" y="0" width="90" height="90" fill="url(#gold-shine)" opacity="0.7"/>
+
+  <!-- Outer bevel lines -->
+  <rect x="2" y="2" width="86" height="86" fill="none" stroke="#fff8c0" stroke-width="1.25" stroke-opacity="0.9" rx="2"/>
+  <rect x="4" y="4" width="82" height="82" fill="none" stroke="#8b6000" stroke-width="0.75" rx="1"/>
+
+  <!-- Inner bevel line -->
+  <rect x="12" y="12" width="66" height="66" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-opacity="0.85" rx="1"/>
+  <rect x="14" y="14" width="62" height="62" fill="none" stroke="#b8860b" stroke-width="0.75" rx="1"/>
+
+  <!-- Laurel/filigree motifs on edge centers -->
+  <!-- Top center laurel sprig -->
+  <g transform="translate(45,15)">
+    <ellipse cx="-7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(-30)"/>
+    <ellipse cx="-7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(-30)"/>
+    <ellipse cx="7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(30)"/>
+    <ellipse cx="7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(30)"/>
+    <circle cx="0" cy="0" r="2.5" fill="#fff8c0"/>
+    <line x1="-12" y1="3" x2="12" y2="3" stroke="#8b6000" stroke-width="0.75"/>
+  </g>
+  <!-- Bottom center laurel sprig -->
+  <g transform="translate(45,75) scale(1,-1)">
+    <ellipse cx="-7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(-30)"/>
+    <ellipse cx="-7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(-30)"/>
+    <ellipse cx="7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(30)"/>
+    <ellipse cx="7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(30)"/>
+    <circle cx="0" cy="0" r="2.5" fill="#fff8c0"/>
+    <line x1="-12" y1="3" x2="12" y2="3" stroke="#8b6000" stroke-width="0.75"/>
+  </g>
+  <!-- Left center laurel sprig -->
+  <g transform="translate(15,45) rotate(-90)">
+    <ellipse cx="-7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(-30)"/>
+    <ellipse cx="-7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(-30)"/>
+    <ellipse cx="7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(30)"/>
+    <ellipse cx="7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(30)"/>
+    <circle cx="0" cy="0" r="2.5" fill="#fff8c0"/>
+  </g>
+  <!-- Right center laurel sprig -->
+  <g transform="translate(75,45) rotate(90)">
+    <ellipse cx="-7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(-30)"/>
+    <ellipse cx="-7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(-30)"/>
+    <ellipse cx="7" cy="0" rx="5" ry="3" fill="#8b6000" opacity="0.7" transform="rotate(30)"/>
+    <ellipse cx="7" cy="0" rx="4" ry="2" fill="#ffd700" transform="rotate(30)"/>
+    <circle cx="0" cy="0" r="2.5" fill="#fff8c0"/>
+  </g>
+
+  <!-- Corner filigree scrolls -->
+  <!-- Top-left corner -->
+  <path d="M 6,20 C 6,14 10,10 14,10 C 18,10 20,14 18,17" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 20,6 C 14,6 10,10 10,14 C 10,18 14,20 17,18" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="15" cy="15" r="2" fill="#fff8c0"/>
+  <!-- Top-right corner -->
+  <path d="M 84,20 C 84,14 80,10 76,10 C 72,10 70,14 72,17" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 70,6 C 76,6 80,10 80,14 C 80,18 76,20 73,18" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="75" cy="15" r="2" fill="#fff8c0"/>
+  <!-- Bottom-left corner -->
+  <path d="M 6,70 C 6,76 10,80 14,80 C 18,80 20,76 18,73" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 20,84 C 14,84 10,80 10,76 C 10,72 14,70 17,72" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="15" cy="75" r="2" fill="#fff8c0"/>
+  <!-- Bottom-right corner -->
+  <path d="M 84,70 C 84,76 80,80 76,80 C 72,80 70,76 72,73" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 70,84 C 76,84 80,80 80,76 C 80,72 76,70 73,72" fill="none" stroke="#fff8c0" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="75" cy="75" r="2" fill="#fff8c0"/>
+</svg>

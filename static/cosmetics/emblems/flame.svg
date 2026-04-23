@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Flame emblem - orange, recognizable at 18px, uses currentColor fallback via fill -->
+  <path d="M12 2
+    C12 2 14 5 13.5 7.5
+    C15 6 15.5 4 15.5 4
+    C17 6.5 18 9 17 12
+    C16 15.5 13.5 17.5 12 18
+    C10.5 17.5 8 15.5 7 12
+    C6 9 7 6.5 8.5 4
+    C8.5 4 9 6 10.5 7.5
+    C10 5 12 2 12 2Z"
+    fill="#ff6600"/>
+  <path d="M12 8
+    C12 8 13 10 12.5 11.5
+    C13.5 10.5 13.5 9 13.5 9
+    C14.5 10 15 11.5 14 13
+    C13.2 14.5 12 15 12 15
+    C12 15 10.8 14.5 10 13
+    C9 11.5 9.5 10 10.5 9
+    C10.5 9 10.5 10.5 11.5 11.5
+    C11 10 12 8 12 8Z"
+    fill="#ffaa00"/>
+  <ellipse cx="12" cy="13.5" rx="2" ry="1.5" fill="#ffdd44" opacity="0.7"/>
+</svg>

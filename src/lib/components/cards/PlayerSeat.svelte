@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Card from './Card.svelte';
+
   let {
     name = '',
     cardCount = 0,
@@ -17,6 +19,7 @@
     blindLabel = undefined,
     folded = false,
     allIn = false,
+    cardBackStyle = null,
   }: {
     name?: string;
     cardCount?: number;
@@ -35,6 +38,8 @@
     blindLabel?: string | undefined;
     folded?: boolean;
     allIn?: boolean;
+    /** Equipped card back cosmetic to show on face-down cards for this player's seat. */
+    cardBackStyle?: { style: string } | { svg: string } | null;
   } = $props();
 </script>
 
@@ -46,7 +51,18 @@
     <span class="blind-label">{blindLabel}</span>
   {/if}
   <span class="seat-name" class:folded-name={folded}>{name}</span>
-  <span class="seat-cards">{cardCount} cards</span>
+  {#if cardCount > 0}
+    <div class="seat-cards-row">
+      {#each { length: Math.min(cardCount, 4) } as _, i}
+        <Card faceUp={false} {cardBackStyle} />
+      {/each}
+      {#if cardCount > 4}
+        <span class="seat-cards-extra">+{cardCount - 4}</span>
+      {/if}
+    </div>
+  {:else}
+    <span class="seat-cards">{cardCount} cards</span>
+  {/if}
   {#if chipCount !== undefined}
     <span class="seat-score">{chipCount} chips</span>
   {/if}
@@ -116,6 +132,25 @@
   .seat-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
   .folded-name { text-decoration: line-through; }
   .seat-cards { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
+
+  .seat-cards-row {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Scale down face-down cards to fit the compact seat */
+  .seat-cards-row :global(.card-face) {
+    width: 22px;
+    height: 32px;
+  }
+
+  .seat-cards-extra {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
   .seat-score { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
   .seat-penalty { font-size: 0.75rem; color: #e74c3c; font-weight: 600; }
   .seat-bet {

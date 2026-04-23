@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <!-- Star emblem - yellow, recognizable at 18px -->
+  <!-- 5-point star using polygon -->
+  <polygon
+    points="12,2 14.9,9.2 22.5,9.2 16.5,13.8 18.8,21 12,16.5 5.2,21 7.5,13.8 1.5,9.2 9.1,9.2"
+    fill="#ffdd00"/>
+  <!-- Inner highlight for dimensionality -->
+  <polygon
+    points="12,4.5 14.1,10.2 19.5,10.2 15.2,13.3 16.8,19 12,15.8 7.2,19 8.8,13.3 4.5,10.2 9.9,10.2"
+    fill="#fff176" fill-opacity="0.5"/>
+  <!-- Top gleam -->
+  <polygon points="12,2 13,6 12,5 11,6" fill="#ffffff" fill-opacity="0.6"/>
+  <!-- Thin dark outline for contrast on both light and dark backgrounds -->
+  <polygon
+    points="12,2 14.9,9.2 22.5,9.2 16.5,13.8 18.8,21 12,16.5 5.2,21 7.5,13.8 1.5,9.2 9.1,9.2"
+    fill="none" stroke="#cc9900" stroke-width="0.75"/>
+</svg>

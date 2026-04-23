@@ -191,6 +191,7 @@
           {/if}
         </span>
       {/if}
+      <a href="/customize" class="nav-link nav-customize-link" title="Customize">Customize</a>
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
         <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
@@ -451,11 +452,18 @@
     font-size: 0.5rem;
   }
 
+  .nav-customize-link {
+    padding: 0.5rem 0.6rem;
+  }
+
   @media (max-width: 480px) {
     .nav-display-name {
       display: none;
     }
     .nav-chips-group {
+      display: none;
+    }
+    .nav-customize-link {
       display: none;
     }
   }

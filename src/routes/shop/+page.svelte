@@ -348,6 +348,24 @@
 {/if}
 
 <style>
+  :root {
+    --shop-gold: #f39c12;
+    --shop-gold-03: rgba(243, 156, 18, 0.03);
+    --shop-gold-06: rgba(243, 156, 18, 0.06);
+    --shop-gold-08: rgba(243, 156, 18, 0.08);
+    --shop-gold-16: rgba(243, 156, 18, 0.16);
+    --shop-gold-18: rgba(243, 156, 18, 0.18);
+    --shop-gold-30: rgba(243, 156, 18, 0.3);
+    --shop-gold-35: rgba(243, 156, 18, 0.35);
+    --shop-gold-40: rgba(243, 156, 18, 0.4);
+    --danger-red: #e74c3c;
+    --danger-red-08: rgba(231, 76, 60, 0.08);
+    --danger-red-30: rgba(231, 76, 60, 0.3);
+    --green-chip-08: rgba(61, 214, 140, 0.08);
+    --green-chip-30: rgba(61, 214, 140, 0.3);
+    --modal-scrim-65: rgba(0, 0, 0, 0.65);
+  }
+
   .shop-page {
     position: relative;
     z-index: 1;
@@ -425,10 +443,10 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.95rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
-  .chips-icon { color: #f39c12; }
+  .chips-icon { color: var(--shop-gold); }
 
   /* Notices */
   .notice {
@@ -440,14 +458,14 @@
   }
 
   .notice-error {
-    background: rgba(231, 76, 60, 0.08);
-    border: 1px solid rgba(231, 76, 60, 0.3);
-    color: #e74c3c;
+    background: var(--danger-red-08);
+    border: 1px solid var(--danger-red-30);
+    color: var(--danger-red);
   }
 
   .notice-success {
-    background: rgba(61, 214, 140, 0.08);
-    border: 1px solid rgba(61, 214, 140, 0.3);
+    background: var(--green-chip-08);
+    border: 1px solid var(--green-chip-30);
     color: var(--green, #3dd68c);
   }
 
@@ -475,9 +493,9 @@
   }
 
   .tab-btn.active {
-    color: #f39c12;
-    border-color: rgba(243, 156, 18, 0.4);
-    background: rgba(243, 156, 18, 0.06);
+    color: var(--shop-gold);
+    border-color: var(--shop-gold-40);
+    background: var(--shop-gold-06);
   }
 
   .tab-btn:hover:not(.active) {
@@ -503,13 +521,13 @@
   }
 
   .item-card:hover {
-    border-color: rgba(243, 156, 18, 0.3);
+    border-color: var(--shop-gold-30);
     transform: translateY(-2px);
   }
 
   .item-card.owned {
-    border-color: rgba(243, 156, 18, 0.35);
-    background: rgba(243, 156, 18, 0.03);
+    border-color: var(--shop-gold-35);
+    background: var(--shop-gold-03);
   }
 
   .item-header {
@@ -530,11 +548,11 @@
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #f39c12;
+    color: var(--shop-gold);
     padding: 0.15rem 0.4rem;
-    border: 1px solid rgba(243, 156, 18, 0.4);
+    border: 1px solid var(--shop-gold-40);
     border-radius: 2px;
-    background: rgba(243, 156, 18, 0.08);
+    background: var(--shop-gold-08);
   }
 
   .item-body {
@@ -585,10 +603,10 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
-  .price-icon { color: #f39c12; }
+  .price-icon { color: var(--shop-gold); }
 
   .item-actions {
     display: flex;
@@ -606,14 +624,14 @@
     border-radius: 2px;
     cursor: pointer;
     transition: background 0.15s ease;
-    border: 1px solid rgba(243, 156, 18, 0.35);
-    background: rgba(243, 156, 18, 0.08);
-    color: #f39c12;
+    border: 1px solid var(--shop-gold-35);
+    background: var(--shop-gold-08);
+    color: var(--shop-gold);
   }
 
   .buy-btn:hover:not(:disabled),
   .equip-btn:hover:not(:disabled) {
-    background: rgba(243, 156, 18, 0.16);
+    background: var(--shop-gold-16);
   }
 
   .buy-btn:disabled {
@@ -622,9 +640,9 @@
   }
 
   .equip-btn.equipped {
-    background: rgba(243, 156, 18, 0.18);
-    border-color: #f39c12;
-    color: #f39c12;
+    background: var(--shop-gold-18);
+    border-color: var(--shop-gold);
+    color: var(--shop-gold);
   }
 
   .equip-btn:disabled {
@@ -693,7 +711,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--modal-scrim-65);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -753,7 +771,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   .modal-balance {

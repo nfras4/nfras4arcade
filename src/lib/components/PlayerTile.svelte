@@ -115,6 +115,16 @@
 </div>
 
 <style>
+  :root {
+    --winner-gold: #ffd700;
+    --winner-gold-40: rgba(255, 215, 0, 0.4);
+    --winner-gold-55: rgba(255, 215, 0, 0.55);
+    --winner-gold-60: rgba(255, 215, 0, 0.6);
+    --winner-gold-70: rgba(255, 215, 0, 0.7);
+    --felt-green-glow-35: rgba(108, 180, 130, 0.35);
+    --felt-green-glow-70: rgba(108, 180, 130, 0.7);
+  }
+
   .tile {
     position: relative;
     display: flex;
@@ -173,7 +183,7 @@
   .status-on-turn .status-dot { color: var(--accent, #6cb482); }
   .status-disconnected .status-dot { color: var(--text-subtle, #6b7280); }
   .status-spectating .status-dot { color: var(--text-subtle, #6b7280); }
-  .status-winner .status-dot { color: #ffd700; }
+  .status-winner .status-dot { color: var(--winner-gold); }
   .is-bot .status-dot { color: var(--text-muted, #9ca3af); }
 
   .emblem {
@@ -279,24 +289,24 @@
   }
 
   .size-sm.status-on-turn .glow-layer {
-    box-shadow: 0 0 12px 2px rgba(255, 215, 0, 0.55);
+    box-shadow: 0 0 12px 2px var(--winner-gold-55);
     animation: glowPulse 1.6s ease-in-out infinite;
   }
 
   .glow-winner {
-    box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.6);
+    box-shadow: 0 0 18px 4px var(--winner-gold-60);
   }
 
   .status-disconnected { opacity: 0.4; }
   .status-spectating { filter: saturate(0.5); }
 
   @keyframes ringPulse {
-    0%, 100% { box-shadow: 0 0 6px rgba(108, 180, 130, 0.35); }
-    50% { box-shadow: 0 0 14px rgba(108, 180, 130, 0.7); }
+    0%, 100% { box-shadow: 0 0 6px var(--felt-green-glow-35); }
+    50% { box-shadow: 0 0 14px var(--felt-green-glow-70); }
   }
   @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 8px 1px rgba(255, 215, 0, 0.4); }
-    50% { box-shadow: 0 0 16px 3px rgba(255, 215, 0, 0.7); }
+    0%, 100% { box-shadow: 0 0 8px 1px var(--winner-gold-40); }
+    50% { box-shadow: 0 0 16px 3px var(--winner-gold-70); }
   }
 
   @media (prefers-reduced-motion: reduce) {

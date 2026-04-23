@@ -802,6 +802,17 @@
 </div>
 
 <style>
+  :root {
+    --on-accent-dark: #000;
+    --on-accent-light: #fff;
+    --accused-red: #ff0033;
+    --accused-red-glow-30: rgba(255, 0, 51, 0.3);
+    --accused-red-glow-60: rgba(255, 0, 51, 0.6);
+    --green-chip-05: rgba(61, 214, 140, 0.05);
+    --scrim-40: rgba(0, 0, 0, 0.4);
+    --bottom-shadow-15: rgba(0, 0, 0, 0.15);
+  }
+
   .game-page {
     min-height: 100dvh;
     display: flex;
@@ -916,7 +927,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     background: var(--yellow);
-    color: #000;
+    color: var(--on-accent-dark);
     padding: 0.1rem 0.4rem;
     clip-path: var(--clip-btn);
   }
@@ -942,13 +953,13 @@
 
   .reconnecting-badge {
     background: var(--yellow, #f1c40f);
-    color: #000;
+    color: var(--on-accent-dark);
     animation: pulse 1.5s ease-in-out infinite;
   }
 
   .disconnected-badge {
     background: var(--red, #e74c3c);
-    color: #fff;
+    color: var(--on-accent-light);
   }
 
   @keyframes pulse {
@@ -1615,8 +1626,8 @@
     font-weight: 700;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: #ff0033;
-    text-shadow: 0 0 20px rgba(255, 0, 51, 0.6), 0 0 40px rgba(255, 0, 51, 0.3);
+    color: var(--accused-red);
+    text-shadow: 0 0 20px var(--accused-red-glow-60), 0 0 40px var(--accused-red-glow-30);
     animation: impostorReveal 0.6s ease-out both;
   }
 
@@ -1716,7 +1727,7 @@
   }
 
   .correct-vote {
-    background: rgba(61, 214, 140, 0.05);
+    background: var(--green-chip-05);
     padding-left: 0.5rem;
     padding-right: 0.5rem;
     border-radius: 2px;
@@ -1907,7 +1918,7 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     background: var(--red, #e74c3c);
-    color: #fff;
+    color: var(--on-accent-light);
     padding: 0.1rem 0.4rem;
     clip-path: var(--clip-btn);
   }
@@ -1954,7 +1965,7 @@
       display: block;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.4);
+      background: var(--scrim-40);
       z-index: 49;
       animation: fadeBackdrop 0.2s ease;
     }
@@ -1970,7 +1981,7 @@
       border-left: none;
       border-top: none;
       border-radius: 12px 12px 0 0;
-      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 -4px 20px var(--bottom-shadow-15);
     }
 
     .chat-drag-handle {

@@ -360,6 +360,29 @@
 </div>
 
 <style>
+  :root {
+    --bot-purple: #9b59b6;
+    --bot-purple-15: rgba(155, 89, 182, 0.15);
+    --danger-red: #e74c3c;
+    --danger-red-10: rgba(231, 76, 60, 0.1);
+    --danger-red-30: rgba(231, 76, 60, 0.3);
+    --panel-overlay-06: rgba(233, 69, 96, 0.06);
+    --panel-overlay-20: rgba(233, 69, 96, 0.2);
+    --role-president: #4ade80;
+    --role-neutral: #facc15;
+    --role-scum: #f87171;
+    --felt-green-10: rgba(108, 180, 130, 0.1);
+    --felt-green-15: rgba(108, 180, 130, 0.15);
+    --felt-green-40: rgba(108, 180, 130, 0.4);
+    --victor-gold: #ffcc00;
+    --victor-gold-glow: rgba(255, 204, 0, 0.5);
+    --loser-pink: #ff2d55;
+    --loser-pink-glow-30: rgba(255, 45, 85, 0.3);
+    --loser-pink-glow-60: rgba(255, 45, 85, 0.6);
+    --bottom-shadow-15: rgba(0, 0, 0, 0.15);
+    --yellow-alert-30: rgba(234, 179, 8, 0.3);
+  }
+
   .game-page {
     position: relative;
     z-index: 1;
@@ -432,7 +455,7 @@
   .host-badge { background: var(--accent-faint); color: var(--accent); }
   .owner-crown { font-size: 0.85rem; margin-left: -0.25rem; }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
-  .bot-badge { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
+  .bot-badge { background: var(--bot-purple-15); color: var(--bot-purple); }
 
   .bot-controls {
     display: flex;
@@ -447,12 +470,12 @@
   }
 
   .btn-danger {
-    color: #e74c3c !important;
-    border-color: rgba(231, 76, 60, 0.3) !important;
+    color: var(--danger-red) !important;
+    border-color: var(--danger-red-30) !important;
   }
 
   .btn-danger:hover {
-    background: rgba(231, 76, 60, 0.1) !important;
+    background: var(--danger-red-10) !important;
   }
 
   .player-count {
@@ -468,8 +491,8 @@
     gap: 0.5rem;
     margin-top: 0.5rem;
     padding: 0.75rem 1rem;
-    background: rgba(233, 69, 96, 0.06);
-    border: 1px solid rgba(233, 69, 96, 0.2);
+    background: var(--panel-overlay-06);
+    border: 1px solid var(--panel-overlay-20);
     border-radius: 4px;
   }
 
@@ -575,14 +598,14 @@
     transition: transform 0.2s;
   }
 
-  .result-row.role-president { border-left-color: #4ade80; }
-  .result-row.role-neutral { border-left-color: #facc15; }
-  .result-row.role-scum { border-left-color: #f87171; }
+  .result-row.role-president { border-left-color: var(--role-president); }
+  .result-row.role-neutral { border-left-color: var(--role-neutral); }
+  .result-row.role-scum { border-left-color: var(--role-scum); }
 
   .result-row.result-winner {
-    background: rgba(108, 180, 130, 0.1);
-    border-color: rgba(108, 180, 130, 0.4);
-    box-shadow: 0 0 16px rgba(108, 180, 130, 0.15);
+    background: var(--felt-green-10);
+    border-color: var(--felt-green-40);
+    box-shadow: 0 0 16px var(--felt-green-15);
     padding: 1rem 1rem;
   }
 
@@ -624,9 +647,9 @@
     text-transform: uppercase;
   }
 
-  .result-title.role-president { color: #4ade80; }
-  .result-title.role-neutral { color: #facc15; }
-  .result-title.role-scum { color: #f87171; }
+  .result-title.role-president { color: var(--role-president); }
+  .result-title.role-neutral { color: var(--role-neutral); }
+  .result-title.role-scum { color: var(--role-scum); }
 
   .result-context {
     font-size: 0.8rem;
@@ -653,14 +676,14 @@
 
   .combo-triple {
     font-size: 1.3rem;
-    color: #ffcc00;
-    text-shadow: 0 0 12px rgba(255, 204, 0, 0.5);
+    color: var(--victor-gold);
+    text-shadow: 0 0 12px var(--victor-gold-glow);
   }
 
   .combo-quad {
     font-size: 1.8rem;
-    color: #ff2d55;
-    text-shadow: 0 0 20px rgba(255, 45, 85, 0.6), 0 0 40px rgba(255, 45, 85, 0.3);
+    color: var(--loser-pink);
+    text-shadow: 0 0 20px var(--loser-pink-glow-60), 0 0 40px var(--loser-pink-glow-30);
     animation: quadIn 0.5s ease-out both;
   }
 
@@ -701,7 +724,7 @@
       padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom, 0.75rem));
       background: var(--bg-card);
       border-top: 1px solid var(--border);
-      box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+      box-shadow: 0 -4px 12px var(--bottom-shadow-15);
     }
 
     .action-bar .btn-primary,
@@ -748,7 +771,7 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--yellow, #eab308);
-    border: 1px solid rgba(234, 179, 8, 0.3);
+    border: 1px solid var(--yellow-alert-30);
     border-radius: 2px;
     padding: 0.3rem 0.75rem;
     text-align: center;

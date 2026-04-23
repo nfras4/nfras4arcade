@@ -64,6 +64,11 @@
 </div>
 
 <style>
+  :root {
+    --danger-red: #e74c3c;
+    --danger-red-15: rgba(231, 76, 60, 0.15);
+  }
+
   .table-area {
     display: flex;
     flex-direction: column;
@@ -77,8 +82,8 @@
   }
 
   .table-area.warning {
-    border-color: #e74c3c;
-    box-shadow: 0 0 12px rgba(231, 76, 60, 0.15);
+    border-color: var(--danger-red);
+    box-shadow: 0 0 12px var(--danger-red-15);
   }
 
   .pile-label {
@@ -91,7 +96,7 @@
   }
 
   .warning-alert {
-    color: #e74c3c;
+    color: var(--danger-red);
     font-weight: 700;
     letter-spacing: 0.08em;
     animation: pulse 1s ease-in-out infinite;

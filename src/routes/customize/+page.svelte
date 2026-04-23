@@ -443,7 +443,7 @@
                 >
                   <div class="emblem-swatch">
                     {#if emblem.svgPath}
-                      <img src={emblem.svgPath} alt="" aria-hidden="true" />
+                      <img src={emblem.svgPath} alt="{emblem.name} emblem" />
                     {:else}
                       <span class="picker-icon" aria-hidden="true">{iconChar(emblem.icon)}</span>
                     {/if}

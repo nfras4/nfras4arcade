@@ -4,7 +4,7 @@ import { socket } from './ws';
 
 export const gameState = writable<GameState | null>(null);
 export const playerId = writable<string | null>(null);
-export const chatMessages = writable<Array<{ name: string; text: string; timestamp: number }>>([]);
+export const chatMessages = writable<Array<{ playerId?: string; name: string; text: string; timestamp: number }>>([]);
 export const error = writable<string | null>(null);
 export const connected = writable(false);
 export const votesIn = writable(0);
@@ -61,7 +61,7 @@ export function initSocketListeners(): () => void {
       case 'chat_message':
         chatMessages.update(msgs => [
           ...msgs,
-          { name: msg.name, text: msg.text, timestamp: msg.timestamp }
+          { playerId: msg.playerId, name: msg.name, text: msg.text, timestamp: msg.timestamp }
         ]);
         break;
 

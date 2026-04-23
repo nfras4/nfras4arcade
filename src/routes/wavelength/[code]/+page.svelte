@@ -372,6 +372,7 @@
     {#if state.phase === 'lobby'}
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Lobby</h2>
+        <!-- TODO: wire NameFrame (deferred, see deep-interview-nameframe-rollout.md). Dial + psychic pointer layout requires bespoke wrapper. -->
         <div class="player-list">
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>

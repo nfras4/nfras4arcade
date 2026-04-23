@@ -6,8 +6,10 @@
   import { writable } from 'svelte/store';
   import Hand from '$lib/components/cards/Hand.svelte';
   import PlayerSeat from '$lib/components/cards/PlayerSeat.svelte';
+  import NameFrame from '$lib/components/NameFrame.svelte';
   import TablePile from '$lib/components/cards/TablePile.svelte';
   import { fireWinConfetti } from '$lib/vfx';
+  import { currentUser } from '$lib/auth';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/president');
@@ -147,6 +149,11 @@
     return state?.players?.find((p: any) => p.id === id)?.name ?? 'Unknown';
   }
 
+  // Cosmetics: card back and table felt from auth store
+  let myCardBackStyle = $derived($currentUser?.cardBack ?? null);
+  let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
+  let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
+
   let addingBot = $state(false);
 
   async function addBot() {
@@ -166,7 +173,7 @@
   <div class="error-toast">{$error}</div>
 {/if}
 
-<div class="game-page">
+<div class="game-page" style={tableFeltStyle}>
   {#if !state}
     <div class="loading">
       <p>Connecting...</p>
@@ -180,7 +187,15 @@
         <div class="player-list">
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
-              <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+              <NameFrame
+                name={player.name}
+                frameSvg={player.frameSvg}
+                emblemSvg={player.emblemSvg}
+                nameColour={player.nameColour}
+                isHost={player.isHost}
+                isBot={player.isBot}
+                compact
+              />
               {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
               {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
               {#if player.isHost}<span class="host-badge">HOST</span>{/if}
@@ -245,6 +260,13 @@
               finished={finishOrder.includes(player.id)}
               finishPosition={finishOrder.includes(player.id) ? finishOrder.indexOf(player.id) : undefined}
               passed={passedPlayers.has(player.id)}
+              frameSvg={player.frameSvg}
+              emblemSvg={player.emblemSvg}
+              nameColour={player.nameColour}
+              titleText={null}
+              isHost={player.isHost}
+              isBot={player.isBot}
+              cardBackStyle={myCardBackStyle}
             />
           {/each}
         </div>
@@ -346,6 +368,7 @@
     flex-direction: column;
     align-items: center;
     padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
+    background-color: var(--table-felt-bg, transparent);
   }
 
   .loading {

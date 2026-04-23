@@ -302,6 +302,7 @@
         <div class="top-bar-left">
           <button class="leave-btn" onclick={leaveGame}>Leave</button>
         </div>
+        <!-- TODO: wire NameFrame (deferred, see deep-interview-nameframe-rollout.md). Bet-grid-centric layout; names are secondary visual element. -->
         <div class="player-chips-strip">
           {#each state.players as player}
             <div class="player-chip-item" class:disconnected={!player.connected}>

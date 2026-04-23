@@ -1,5 +1,6 @@
 <script lang="ts">
   import Card from './Card.svelte';
+  import NameFrame from '$lib/components/NameFrame.svelte';
 
   let {
     name = '',
@@ -20,6 +21,11 @@
     folded = false,
     allIn = false,
     cardBackStyle = null,
+    frameSvg = null,
+    emblemSvg = null,
+    nameColour = null,
+    titleText = null,
+    isBot = false,
   }: {
     name?: string;
     cardCount?: number;
@@ -40,6 +46,11 @@
     allIn?: boolean;
     /** Equipped card back cosmetic to show on face-down cards for this player's seat. */
     cardBackStyle?: { style: string } | { svg: string } | null;
+    frameSvg?: string | null;
+    emblemSvg?: string | null;
+    nameColour?: string | null;
+    titleText?: string | null;
+    isBot?: boolean;
   } = $props();
 </script>
 
@@ -50,7 +61,9 @@
   {#if blindLabel}
     <span class="blind-label">{blindLabel}</span>
   {/if}
-  <span class="seat-name" class:folded-name={folded}>{name}</span>
+  <div class="seat-name-wrap" class:folded-name={folded}>
+    <NameFrame {name} {frameSvg} {emblemSvg} {nameColour} {titleText} size="pill" {isHost} {isBot} />
+  </div>
   {#if cardCount > 0}
     <div class="seat-cards-row">
       {#each { length: Math.min(cardCount, 4) } as _, i}
@@ -129,8 +142,8 @@
     50% { box-shadow: 0 0 16px rgba(108, 180, 130, 0.5); }
   }
 
-  .seat-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
-  .folded-name { text-decoration: line-through; }
+  .seat-name-wrap { font-size: 0.9rem; }
+  .folded-name :global(.name) { text-decoration: line-through; }
   .seat-cards { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
 
   .seat-cards-row {

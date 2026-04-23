@@ -5,6 +5,8 @@
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
   import { fireWinConfetti } from '$lib/vfx';
+  import { currentUser } from '$lib/auth';
+  import NameFrame from '$lib/components/NameFrame.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/connect-four');
@@ -120,13 +122,16 @@
   async function removeAllBots() {
     await fetch(`/api/remove-bots?room=${code}&game=connect-four`, { method: 'POST' });
   }
+
+  let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
+  let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
 </script>
 
 {#if $error}
   <div class="error-toast">{$error}</div>
 {/if}
 
-<div class="game-page">
+<div class="game-page" style={tableFeltStyle}>
   {#if !state}
     <div class="loading">
       <p>Connecting...</p>
@@ -140,7 +145,7 @@
         <div class="player-list">
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
-              <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+              <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
               {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
               {#if player.isHost}<span class="host-badge">HOST</span>{/if}
@@ -204,7 +209,7 @@
             {@const piece = state.tableState.pieces[player.id]}
             <div class="score-item" class:active={state.currentTurn === player.id}>
               <span class="piece-dot piece-{piece}"></span>
-              <span class="score-name">{player.name}{player.id === pid ? ' (you)' : ''}</span>
+              <NameFrame name={player.name + (player.id === pid ? ' (you)' : '')} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               <span class="score-value">{scores[player.id] ?? 0}</span>
             </div>
           {/each}
@@ -276,7 +281,7 @@
             {@const piece = state.tableState.pieces[player.id]}
             <div class="score-item" class:winner={player.id === winnerId}>
               <span class="piece-dot piece-{piece}"></span>
-              <span class="score-name">{player.name}{player.id === pid ? ' (you)' : ''}</span>
+              <NameFrame name={player.name + (player.id === pid ? ' (you)' : '')} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               <span class="score-value">{scores[player.id] ?? 0}</span>
             </div>
           {/each}
@@ -299,7 +304,7 @@
         <div class="score-bar">
           {#each state.players as player}
             <div class="score-item">
-              <span class="score-name">{player.name}</span>
+              <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               <span class="score-value">{scores[player.id] ?? 0} wins</span>
             </div>
           {/each}
@@ -323,6 +328,7 @@
     flex-direction: column;
     align-items: center;
     padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
+    background-color: var(--table-felt-bg, transparent);
   }
 
   .loading {

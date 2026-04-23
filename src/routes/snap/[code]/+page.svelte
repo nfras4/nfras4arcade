@@ -124,6 +124,7 @@
     <div class="snap-container center-playing" class:snap-flash={snapFlash}>
       <!-- Player status bar -->
       <div class="center-status-bar">
+        <!-- TODO: wire NameFrame (deferred, see deep-interview-nameframe-rollout.md). Center-pad + per-device split architecture requires separate design pass. -->
         {#each state.players as player (player.id)}
           <span class="center-player-chip" class:disconnected={!player.connected}>
             {player.name}: {player.deckSize}

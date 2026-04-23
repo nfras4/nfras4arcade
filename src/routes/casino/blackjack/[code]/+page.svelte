@@ -4,8 +4,9 @@
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
-  import { isLoggedIn, userStats } from '$lib/auth';
+  import { isLoggedIn, userStats, currentUser } from '$lib/auth';
   import Card from '$lib/components/cards/Card.svelte';
+  import NameFrame from '$lib/components/NameFrame.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/blackjack');
@@ -112,6 +113,11 @@
   // Bet constraints
   let minBet = $derived(state?.minBet ?? 10);
   let maxBet = $derived(state?.maxBet ?? 500);
+
+  // Cosmetics: card back and table felt from auth store
+  let myCardBackStyle = $derived($currentUser?.cardBack ?? null);
+  let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
+  let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
 
   // Auto-place bet when returning to betting phase after a round
   $effect(() => {
@@ -252,7 +258,7 @@
   <div class="error-toast">{$error}</div>
 {/if}
 
-<div class="game-page">
+<div class="game-page" style={tableFeltStyle}>
   {#if !state}
     <div class="loading">
       <p>Connecting...</p>
@@ -270,7 +276,7 @@
         <div class="player-list">
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
-              <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+              <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} isHost={player.isHost} />
               {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
               {#if player.isHost}<span class="host-badge">HOST</span>{/if}
               {#if !player.connected}<span class="dc-badge">DC</span>{/if}
@@ -308,7 +314,7 @@
         <div class="player-chips-bar">
           {#each state.players as player}
             <div class="chip-pill" class:active-player={betsPlaced[player.id] !== undefined}>
-              <span class="chip-pill-name">{player.name}</span>
+              <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} />
               <span class="chip-pill-chips">{player.chips ?? 0}</span>
               {#if betsPlaced[player.id] !== undefined}
                 <span class="chip-pill-bet">bet {betsPlaced[player.id]}</span>
@@ -392,7 +398,7 @@
           </div>
           <div class="card-row">
             {#each dealerHand as card, i}
-              <Card {card} faceUp={dealerRevealed || i === 0} dealDelay={i * 120} />
+              <Card {card} faceUp={dealerRevealed || i === 0} dealDelay={i * 120} cardBackStyle={(!dealerRevealed && i > 0) ? myCardBackStyle : null} />
             {/each}
             {#if dealerHand.length === 0}
               <span class="no-cards">Waiting for deal...</span>
@@ -474,7 +480,7 @@
                 {@const theirHands = playerHands[player.id] ?? []}
                 <div class="other-player-block">
                   <div class="other-player-header">
-                    <span class="other-player-name">{player.name}</span>
+                    <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} />
                     <span class="other-player-chips">{player.chips ?? 0} chips</span>
                     {#if currentPlayerId === player.id}
                       <span class="active-indicator">Active</span>
@@ -534,7 +540,7 @@
             {@const theirHands = playerHands[player.id] ?? []}
             <div class="result-player-block" class:is-me={player.id === pid}>
               <div class="result-player-header">
-                <span class="result-player-name">{player.name}</span>
+                <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} />
                 <span class="result-payout" class:payout-pos={playerPayout > 0} class:payout-neg={playerPayout < 0}>
                   {playerPayout > 0 ? '+' : ''}{playerPayout}
                 </span>
@@ -593,7 +599,7 @@
         <h2 class="geo-title phase-title">Game Over</h2>
         {#each state.players as player}
           <div class="result-row" class:result-winner={(player.chips ?? 0) > 0}>
-            <span class="result-name">{player.name}</span>
+            <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} />
             <span class="result-chips-final">{player.chips ?? 0} chips</span>
           </div>
         {/each}
@@ -613,6 +619,7 @@
     flex-direction: column;
     align-items: center;
     padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
+    background-color: var(--table-felt-bg, transparent);
   }
 
   .loading {

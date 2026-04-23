@@ -8,11 +8,25 @@
     isHost, myTurn, currentTurnPlayer, isSpectator,
     initSocketListeners, resetStores
   } from '$lib/stores';
-  import { isLoggedIn } from '$lib/auth';
-  import type { GameMode } from '$lib/types';
+  import { isLoggedIn, currentUser } from '$lib/auth';
+  import type { GameMode, Player } from '$lib/types';
   import { fireWinConfetti, fireImpostorVfx } from '$lib/vfx';
+  import NameFrame from '$lib/components/NameFrame.svelte';
 
   const code = $page.params.code!;
+
+  // Helper: resolve cosmetic props from a player ID
+  function lookupCosmetics(id: string | undefined, players: Player[]) {
+    if (!id) return { frameSvg: null, emblemSvg: null, nameColour: null, titleBadgeId: null };
+    const p = players.find(x => x.id === id);
+    return p
+      ? { frameSvg: p.frameSvg ?? null, emblemSvg: p.emblemSvg ?? null, nameColour: p.nameColour ?? null, titleBadgeId: p.titleBadgeId ?? null }
+      : { frameSvg: null, emblemSvg: null, nameColour: null, titleBadgeId: null };
+  }
+
+  // Table felt (ADR-4: all phases)
+  let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
+  let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
 
   let hintInput = $state('');
   let chatInput = $state('');
@@ -151,9 +165,16 @@
   }
 
   let votedForName = $state('');
+  let votedForCosmetics = $state<{ frameSvg: string | null; emblemSvg: string | null; nameColour: string | null }>({ frameSvg: null, emblemSvg: null, nameColour: null });
 
   function vote(targetId: string, targetName: string) {
     socket.send({ type: 'vote', targetId });
+    const targetPlayer = $gameState?.players.find(p => p.id === targetId);
+    votedForCosmetics = {
+      frameSvg: targetPlayer?.frameSvg ?? null,
+      emblemSvg: targetPlayer?.emblemSvg ?? null,
+      nameColour: targetPlayer?.nameColour ?? null,
+    };
     votedForName = targetName;
   }
 
@@ -258,7 +279,7 @@
   {liveAnnouncement}
 </div>
 
-<div class="game-page">
+<div class="game-page" style={tableFeltStyle}>
   <!-- Header -->
   <header class="game-header">
     <div class="header-left">
@@ -303,7 +324,7 @@
           <div class="player-list">
             {#each $gameState.players as player}
               <div class="player-chip" class:host={player.isHost} class:reconnecting={player.connectionStatus === 'reconnecting'} class:disconnected={player.connectionStatus === 'disconnected'} class:owner-name={player.name === 'nfras4'}>
-                {player.name}
+                <NameFrame name={player.name} frameSvg={player.frameSvg ?? null} emblemSvg={player.emblemSvg ?? null} nameColour={player.nameColour ?? null} />
                 {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
                 {#if player.isHost}<span class="host-badge">HOST</span>{/if}
                 {#if player.connectionStatus === 'reconnecting'}
@@ -415,8 +436,9 @@
                 {#if roundHints.length > 0}
                   <div class="hints-round-divider">Round {i + 1}</div>
                   {#each roundHints as hint}
+                    {@const c = lookupCosmetics(hint.playerId, $gameState.players)}
                     <div class="hint-bubble previous" class:mine={hint.playerId === $playerId}>
-                      <span class="bubble-name">{hint.playerName}</span>
+                      <span class="bubble-name"><NameFrame name={hint.playerName} frameSvg={c.frameSvg} emblemSvg={c.emblemSvg} nameColour={c.nameColour} /></span>
                       <div class="bubble-body">{hint.text}</div>
                     </div>
                   {/each}
@@ -429,8 +451,9 @@
                 <div class="hints-round-divider">Round {$gameState.hintRound}</div>
               {/if}
               {#each $gameState.hints as hint}
+                {@const c = lookupCosmetics(hint.playerId, $gameState.players)}
                 <div class="hint-bubble fade-in" class:mine={hint.playerId === $playerId}>
-                  <span class="bubble-name">{hint.playerName}</span>
+                  <span class="bubble-name"><NameFrame name={hint.playerName} frameSvg={c.frameSvg} emblemSvg={c.emblemSvg} nameColour={c.nameColour} /></span>
                   <div class="bubble-body">{hint.text}</div>
                 </div>
               {/each}
@@ -482,8 +505,9 @@
               {#if roundHints.length > 0}
                 <div class="hints-round-divider">Round {i + 1}</div>
                 {#each roundHints as hint}
+                  {@const c = lookupCosmetics(hint.playerId, $gameState.players)}
                   <div class="hint-bubble" class:mine={hint.playerId === $playerId}>
-                    <span class="bubble-name">{hint.playerName}</span>
+                    <span class="bubble-name"><NameFrame name={hint.playerName} frameSvg={c.frameSvg} emblemSvg={c.emblemSvg} nameColour={c.nameColour} /></span>
                     <div class="bubble-body">{hint.text}</div>
                   </div>
                 {/each}
@@ -492,8 +516,9 @@
             {#if $gameState.hints.length > 0}
               <div class="hints-round-divider">Round {$gameState.hintRound}</div>
               {#each $gameState.hints as hint}
+                {@const c = lookupCosmetics(hint.playerId, $gameState.players)}
                 <div class="hint-bubble" class:mine={hint.playerId === $playerId}>
-                  <span class="bubble-name">{hint.playerName}</span>
+                  <span class="bubble-name"><NameFrame name={hint.playerName} frameSvg={c.frameSvg} emblemSvg={c.emblemSvg} nameColour={c.nameColour} /></span>
                   <div class="bubble-body">{hint.text}</div>
                 </div>
               {/each}
@@ -547,7 +572,7 @@
                   aria-label="Vote for {player.name}"
                 >
                   <span class="vote-avatar">{player.name.charAt(0).toUpperCase()}</span>
-                  <span class="vote-name">{player.name}</span>
+                  <span class="vote-name"><NameFrame name={player.name} frameSvg={player.frameSvg ?? null} emblemSvg={player.emblemSvg ?? null} nameColour={player.nameColour ?? null} /></span>
                 </button>
               {/each}
             </div>
@@ -555,7 +580,7 @@
           {:else}
             <div class="voted-confirmation fade-in">
               <div class="vote-check">&#10003;</div>
-              <p>Voted for <strong>{votedForName}</strong></p>
+              <p>Voted for <NameFrame name={votedForName} frameSvg={votedForCosmetics.frameSvg} emblemSvg={votedForCosmetics.emblemSvg} nameColour={votedForCosmetics.nameColour} /></p>
               <div class="vote-progress">
                 <div class="vote-progress-bar">
                   <div
@@ -571,7 +596,7 @@
                   {@const hasVoted = $votedPlayerIds.includes(p.id)}
                   <div class="who-voted-row" class:voted={hasVoted}>
                     <span class="who-voted-box" aria-hidden="true">{hasVoted ? '☑' : '☐'}</span>
-                    <span class="who-voted-name">{p.name}</span>
+                    <span class="who-voted-name"><NameFrame name={p.name} frameSvg={p.frameSvg ?? null} emblemSvg={p.emblemSvg ?? null} nameColour={p.nameColour ?? null} /></span>
                     {#if !hasVoted}<span class="who-voted-waiting">waiting...</span>{/if}
                   </div>
                 {/each}
@@ -585,6 +610,7 @@
         <div class="phase-content phase-enter">
           {#if $gameState.roundResult}
             {@const result = $gameState.roundResult}
+            {@const iC = lookupCosmetics(result.impostorId, $gameState.players)}
 
             <!-- Celebration particles -->
             <div class="particles" aria-hidden="true">
@@ -607,7 +633,7 @@
               <div class="reveal-details">
                 <div class="reveal-detail-card">
                   <span class="reveal-detail-label">Impostor</span>
-                  <span class="reveal-detail-value impostor-name">{result.impostorName}</span>
+                  <span class="reveal-detail-value impostor-name"><NameFrame name={result.impostorName} frameSvg={iC.frameSvg} emblemSvg={iC.emblemSvg} nameColour={iC.nameColour} /></span>
                 </div>
                 <div class="reveal-detail-card">
                   <span class="reveal-detail-label">Secret Word</span>
@@ -622,10 +648,12 @@
               <div class="vote-breakdown">
                 <h3>Vote Breakdown</h3>
                 {#each result.votes as v, i}
+                  {@const vC = lookupCosmetics(v.voterId, $gameState.players)}
+                  {@const tC = lookupCosmetics(v.targetId, $gameState.players)}
                   <div class="vote-row stagger-item" style="animation-delay: {i * 0.05}s" class:correct-vote={v.targetId === result.impostorId}>
-                    <span class="voter-name">{v.voterName}</span>
+                    <span class="voter-name"><NameFrame name={v.voterName} frameSvg={vC.frameSvg} emblemSvg={vC.emblemSvg} nameColour={vC.nameColour} /></span>
                     <span class="vote-arrow">&#8594;</span>
-                    <strong class:correct={v.targetId === result.impostorId}>{v.targetName}</strong>
+                    <strong class:correct={v.targetId === result.impostorId}><NameFrame name={v.targetName} frameSvg={tC.frameSvg} emblemSvg={tC.emblemSvg} nameColour={tC.nameColour} /></strong>
                   </div>
                 {/each}
               </div>
@@ -658,6 +686,7 @@
 
           {#if $gameState.roundResult}
             {@const result = $gameState.roundResult}
+            {@const iC = lookupCosmetics(result.impostorId, $gameState.players)}
 
             <div class="reveal-card postgame-card" class:caught={result.impostorCaught} class:escaped={!result.impostorCaught}>
               <div class="reveal-headline">
@@ -672,7 +701,7 @@
               <div class="reveal-details">
                 <div class="reveal-detail-card">
                   <span class="reveal-detail-label">Impostor</span>
-                  <span class="reveal-detail-value impostor-name">{result.impostorName}</span>
+                  <span class="reveal-detail-value impostor-name"><NameFrame name={result.impostorName} frameSvg={iC.frameSvg} emblemSvg={iC.emblemSvg} nameColour={iC.nameColour} /></span>
                 </div>
                 <div class="reveal-detail-card">
                   <span class="reveal-detail-label">Secret Word</span>
@@ -686,7 +715,7 @@
                 {#each $gameState.players as player}
                   <div class="postgame-player-row">
                     <span class="postgame-player-name" class:impostor-highlight={player.id === result.impostorId}>
-                      {player.name}
+                      <NameFrame name={player.name} frameSvg={player.frameSvg ?? null} emblemSvg={player.emblemSvg ?? null} nameColour={player.nameColour ?? null} />
                       {#if player.id === result.impostorId}
                         <span class="impostor-tag">Impostor</span>
                       {/if}
@@ -705,10 +734,12 @@
               <div class="vote-breakdown">
                 <h4 class="postgame-section-title">Votes</h4>
                 {#each result.votes as v}
+                  {@const vC = lookupCosmetics(v.voterId, $gameState.players)}
+                  {@const tC = lookupCosmetics(v.targetId, $gameState.players)}
                   <div class="vote-row" class:correct-vote={v.targetId === result.impostorId}>
-                    <span class="voter-name">{v.voterName}</span>
+                    <span class="voter-name"><NameFrame name={v.voterName} frameSvg={vC.frameSvg} emblemSvg={vC.emblemSvg} nameColour={vC.nameColour} /></span>
                     <span class="vote-arrow">&#8594;</span>
-                    <strong class:correct={v.targetId === result.impostorId}>{v.targetName}</strong>
+                    <strong class:correct={v.targetId === result.impostorId}><NameFrame name={v.targetName} frameSvg={tC.frameSvg} emblemSvg={tC.emblemSvg} nameColour={tC.nameColour} /></strong>
                   </div>
                 {/each}
               </div>
@@ -739,10 +770,11 @@
         <div class="chat-drag-handle" onclick={() => showChat = false}>
           <div class="drag-bar"></div>
         </div>
-        <div class="chat-messages" bind:this={chatContainer}>
+        <div class="chat-messages nameframe-compact" bind:this={chatContainer}>
           {#each $chatMessages as msg}
+            {@const cC = lookupCosmetics(msg.playerId, $gameState?.players ?? [])}
             <div class="chat-msg">
-              <strong>{msg.name}</strong>
+              <strong><NameFrame name={msg.name} frameSvg={null} emblemSvg={null} nameColour={cC.nameColour} /></strong>
               <span>{msg.text}</span>
             </div>
           {/each}
@@ -771,6 +803,7 @@
     display: flex;
     flex-direction: column;
     padding-top: 4.5rem;
+    background-color: var(--table-felt-bg, transparent);
   }
 
   /* ─── Header ─────────────────────────────────────────── */

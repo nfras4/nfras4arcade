@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
+  import { currentUser } from '$lib/auth';
+  import NameFrame from '$lib/components/NameFrame.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/liars-dice');
@@ -17,6 +19,9 @@
     diceCount: number;
     eliminated: boolean;
     chips: number;
+    frameSvg?: string | null;
+    emblemSvg?: string | null;
+    nameColour?: string | null;
   }
 
   interface RoundResult {
@@ -182,6 +187,9 @@
     const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
     return faces[n] ?? String(n);
   }
+
+  let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
+  let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
 </script>
 
 {#if $errorMsg}
@@ -189,7 +197,7 @@
 {/if}
 
 {#if state}
-  <div class="game">
+  <div class="game" style={tableFeltStyle}>
     <header class="header">
       <div class="room-code">
         Room <strong>{state.code}</strong>
@@ -213,7 +221,7 @@
           class:disconnected={!p.connected}
         >
           <div class="player-head">
-            <span class="player-name">{p.name}{p.isHost ? ' ★' : ''}</span>
+            <NameFrame name={p.name} frameSvg={p.frameSvg} emblemSvg={p.emblemSvg} nameColour={p.nameColour} titleText={null} isHost={p.isHost} isBot={p.isBot} />
             <span class="player-chips">{p.chips.toLocaleString()}</span>
           </div>
           <div class="player-dice-count">
@@ -221,6 +229,7 @@
               <span class="out-tag">OUT</span>
             {:else}
               {#each Array(p.diceCount) as _, i (i)}
+                <!-- TODO: card back on hidden cups -- deferred, see deep-interview-nameframe-rollout.md ADR-3 -->
                 <span class="small-die">⚂</span>
               {/each}
               {#if p.diceCount === 0 && state.phase === 'lobby'}
@@ -369,7 +378,7 @@
           {#each state.players as p (p.id)}
             {#if state.lastRoundResult && state.lastRoundResult.revealedDice[p.id]}
               <div class="reveal-row">
-                <span class="reveal-name">{p.name}</span>
+                <NameFrame name={p.name} frameSvg={p.frameSvg} emblemSvg={p.emblemSvg} nameColour={p.nameColour} titleText={null} isHost={p.isHost} isBot={p.isBot} />
                 <span class="reveal-dice">
                   {#each state.lastRoundResult.revealedDice[p.id] as d, i (i)}
                     <span
@@ -423,6 +432,7 @@
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+    background-color: var(--table-felt-bg, transparent);
   }
 
   .header {

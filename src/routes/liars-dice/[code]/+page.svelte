@@ -217,6 +217,7 @@
         <div
           class="player-tile"
           class:active={state.currentTurnId === p.id && state.phase === 'playing'}
+          aria-current={(state.currentTurnId === p.id && state.phase === 'playing') ? 'true' : 'false'}
           class:eliminated={p.eliminated}
           class:disconnected={!p.connected}
         >
@@ -251,23 +252,23 @@
           <div class="setting">
             <span class="setting-label">Mode</span>
             <div class="btn-group">
-              <button class:selected={state.gameMode === 'casual'} onclick={() => setMode('casual')}>Casual</button>
-              <button class:selected={state.gameMode === 'competitive'} onclick={() => setMode('competitive')}>Competitive</button>
+              <button class:selected={state.gameMode === 'casual'} aria-pressed={state.gameMode === 'casual'} onclick={() => setMode('casual')}>Casual</button>
+              <button class:selected={state.gameMode === 'competitive'} aria-pressed={state.gameMode === 'competitive'} onclick={() => setMode('competitive')}>Competitive</button>
             </div>
           </div>
           <div class="setting">
             <span class="setting-label">Ante</span>
             <div class="btn-group">
               {#each ANTE_OPTIONS as a (a)}
-                <button class:selected={state.ante === a} onclick={() => setAnte(a)}>{a}</button>
+                <button class:selected={state.ante === a} aria-pressed={state.ante === a} onclick={() => setAnte(a)}>{a}</button>
               {/each}
             </div>
           </div>
           <div class="setting">
             <span class="setting-label">Wilds</span>
             <div class="btn-group">
-              <button class:selected={!state.onesWild} onclick={() => setOnesWild(false)}>Off</button>
-              <button class:selected={state.onesWild} onclick={() => setOnesWild(true)}>Ones wild</button>
+              <button class:selected={!state.onesWild} aria-pressed={!state.onesWild} onclick={() => setOnesWild(false)}>Off</button>
+              <button class:selected={state.onesWild} aria-pressed={state.onesWild} onclick={() => setOnesWild(true)}>Ones wild</button>
             </div>
           </div>
           <div class="setting">
@@ -340,6 +341,7 @@
                 {#each [1,2,3,4,5,6] as f (f)}
                   <button
                     class:selected={bidFace === f}
+                    aria-pressed={bidFace === f}
                     onclick={() => bidFace = f}
                     disabled={state.currentBid ? f < state.currentBid.face : false}
                   >{dieFace(f)}</button>

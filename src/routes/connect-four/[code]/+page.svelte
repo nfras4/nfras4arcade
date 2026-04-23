@@ -207,7 +207,7 @@
         <div class="score-bar">
           {#each state.players as player}
             {@const piece = state.tableState.pieces[player.id]}
-            <div class="score-item" class:active={state.currentTurn === player.id}>
+            <div class="score-item" class:active={state.currentTurn === player.id} aria-current={(state.currentTurn === player.id) ? 'true' : 'false'}>
               <span class="piece-dot piece-{piece}"></span>
               <NameFrame name={player.name + (player.id === pid ? ' (you)' : '')} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               <span class="score-value">{scores[player.id] ?? 0}</span>

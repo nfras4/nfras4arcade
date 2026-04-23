@@ -342,7 +342,7 @@
 
               <label>
                 Category
-                <select onchange={(e) => selectCategory(e.currentTarget.value)}>
+                <select aria-label="Category" onchange={(e) => selectCategory(e.currentTarget.value)}>
                   <option value="">Random</option>
                   {#each categories as cat}
                     <option value={cat} selected={$gameState.category === cat}>{cat}</option>
@@ -355,12 +355,14 @@
                 <div class="mode-toggle">
                   <button
                     class:active={$gameState.mode === 'text'}
+                    aria-pressed={$gameState.mode === 'text'}
                     onclick={() => selectMode('text')}
                   >
                     Text Chat
                   </button>
                   <button
                     class:active={$gameState.mode === 'voice'}
+                    aria-pressed={$gameState.mode === 'voice'}
                     onclick={() => selectMode('voice')}
                   >
                     Voice / IRL
@@ -465,6 +467,7 @@
             {#if $gameState.mode === 'text'}
               <div class="hint-input">
                 <input
+                  aria-label="Your hint"
                   value={hintInput} oninput={(e) => hintInput = e.currentTarget.value}
                   placeholder="Type your hint..."
                   maxlength="200"
@@ -784,6 +787,7 @@
         </div>
         <div class="chat-input-row">
           <input
+            aria-label="Chat message"
             value={chatInput} oninput={(e) => chatInput = e.currentTarget.value}
             placeholder="Type a message..."
             onkeydown={handleChatKey}

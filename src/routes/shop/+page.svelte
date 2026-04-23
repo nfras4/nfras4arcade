@@ -239,6 +239,7 @@
           <button
             class="tab-btn"
             class:active={activeTab === tab.id}
+            aria-pressed={activeTab === tab.id}
             onclick={() => { activeTab = tab.id; errorMsg = ''; }}
           >
             {tab.label}

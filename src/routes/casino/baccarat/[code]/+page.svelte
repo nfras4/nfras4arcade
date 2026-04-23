@@ -266,6 +266,7 @@
               <button
                 class="bet-type-btn bet-type-player"
                 class:selected={myBetType === 'player'}
+                aria-pressed={myBetType === 'player'}
                 onclick={() => placeBet('player')}
               >
                 <span class="bet-type-name">Player</span>
@@ -274,6 +275,7 @@
               <button
                 class="bet-type-btn bet-type-tie"
                 class:selected={myBetType === 'tie'}
+                aria-pressed={myBetType === 'tie'}
                 onclick={() => placeBet('tie')}
               >
                 <span class="bet-type-name">Tie</span>
@@ -282,6 +284,7 @@
               <button
                 class="bet-type-btn bet-type-banker"
                 class:selected={myBetType === 'banker'}
+                aria-pressed={myBetType === 'banker'}
                 onclick={() => placeBet('banker')}
               >
                 <span class="bet-type-name">Banker</span>
@@ -294,6 +297,7 @@
                 <button
                   class="preset-btn"
                   class:active={betInput === preset}
+                  aria-pressed={betInput === preset}
                   onclick={() => setBetPreset(preset)}
                   disabled={preset > myChips || preset < minBet || preset > maxBet}
                 >

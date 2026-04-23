@@ -348,6 +348,7 @@
                 <button
                   class="preset-btn"
                   class:active={betInput === preset}
+                  aria-pressed={betInput === preset}
                   onclick={() => setBetPreset(preset)}
                   disabled={preset > myChips || preset < minBet || preset > maxBet}
                 >
@@ -573,6 +574,7 @@
               <button
                 class="preset-btn preset-sm"
                 class:active={betInput === preset}
+                aria-pressed={betInput === preset}
                 onclick={() => setBetPreset(preset)}
                 disabled={preset > myChips || preset < minBet || preset > maxBet}
               >

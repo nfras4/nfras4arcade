@@ -83,6 +83,16 @@
 {/if}
 
 <style>
+  :root {
+    --card-back-red-dark: #8b1a1a;
+    --card-back-red: #c0392b;
+    --card-back-blue-dark: #1a3a5c;
+    --card-back-blue: #2980b9;
+    --card-back-gold-dark: #b8860b;
+    --card-back-gold: #ffd700;
+    --suit-red: #e63232;
+  }
+
   .card-face {
     width: 68px;
     height: 94px;
@@ -149,10 +159,10 @@
   .back-pattern--red_pattern {
     background: repeating-linear-gradient(
       45deg,
-      #8b1a1a 0px,
-      #8b1a1a 2px,
-      #c0392b 2px,
-      #c0392b 6px
+      var(--card-back-red-dark) 0px,
+      var(--card-back-red-dark) 2px,
+      var(--card-back-red) 2px,
+      var(--card-back-red) 6px
     );
     opacity: 0.85;
   }
@@ -160,10 +170,10 @@
   .back-pattern--blue_pattern {
     background: repeating-linear-gradient(
       45deg,
-      #1a3a5c 0px,
-      #1a3a5c 2px,
-      #2980b9 2px,
-      #2980b9 6px
+      var(--card-back-blue-dark) 0px,
+      var(--card-back-blue-dark) 2px,
+      var(--card-back-blue) 2px,
+      var(--card-back-blue) 6px
     );
     opacity: 0.85;
   }
@@ -171,10 +181,10 @@
   .back-pattern--gold_foil {
     background: repeating-linear-gradient(
       45deg,
-      #b8860b 0px,
-      #b8860b 2px,
-      #ffd700 2px,
-      #ffd700 6px
+      var(--card-back-gold-dark) 0px,
+      var(--card-back-gold-dark) 2px,
+      var(--card-back-gold) 2px,
+      var(--card-back-gold) 6px
     );
     opacity: 0.9;
   }
@@ -200,8 +210,8 @@
     flex-shrink: 0;
   }
 
-  .red .rank { color: #e63232; }
-  .red .suit-icon { fill: #e63232; }
+  .red .rank { color: var(--suit-red); }
+  .red .suit-icon { fill: var(--suit-red); }
 
   @keyframes dealIn {
     from {

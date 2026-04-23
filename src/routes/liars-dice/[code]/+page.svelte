@@ -427,6 +427,12 @@
 {/if}
 
 <style>
+  :root {
+    --danger-bg-deep: #6b1f1f;
+    --danger-text-pale: #f5d2d2;
+    --danger-border-mid: #8a3030;
+  }
+
   .game {
     max-width: 560px;
     margin: 0 auto;
@@ -785,9 +791,9 @@
   .btn-full { width: 100%; padding: 0.85rem 1rem; font-size: 0.95rem; }
 
   .btn-danger {
-    background: #6b1f1f;
-    color: #f5d2d2;
-    border: 1px solid #8a3030;
+    background: var(--danger-bg-deep);
+    color: var(--danger-text-pale);
+    border: 1px solid var(--danger-border-mid);
     cursor: pointer;
   }
 

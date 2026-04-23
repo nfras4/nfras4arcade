@@ -476,6 +476,29 @@
 </div>
 
 <style>
+  :root {
+    --shop-gold: #f39c12;
+    --shop-gold-end: #f5c842;
+    --shop-gold-04: rgba(243, 156, 18, 0.04);
+    --shop-gold-06: rgba(243, 156, 18, 0.06);
+    --shop-gold-15: rgba(243, 156, 18, 0.15);
+    --shop-gold-30: rgba(243, 156, 18, 0.3);
+    --shop-gold-50: rgba(243, 156, 18, 0.5);
+    --bet-banker-red: #e74c3c;
+    --bet-banker-red-10: rgba(231, 76, 60, 0.1);
+    --bet-banker-red-40: rgba(231, 76, 60, 0.4);
+    --bet-player-blue: #4a9eff;
+    --bet-player-blue-10: rgba(74, 158, 255, 0.1);
+    --bet-player-blue-40: rgba(74, 158, 255, 0.4);
+    --bet-tie-green: #2ecc71;
+    --bet-tie-green-10: rgba(46, 204, 113, 0.1);
+    --bet-tie-green-40: rgba(46, 204, 113, 0.4);
+    --bet-tie-glow: rgba(46, 204, 113, 0.4);
+    --overlay-04: rgba(255, 255, 255, 0.04);
+    --overlay-05: rgba(255, 255, 255, 0.05);
+    --overlay-06: rgba(255, 255, 255, 0.06);
+  }
+
   .game-page {
     position: relative;
     z-index: 1;
@@ -507,7 +530,7 @@
   .phase-title {
     font-size: 1.25rem;
     letter-spacing: 0.12em;
-    color: #f39c12;
+    color: var(--shop-gold);
     text-align: center;
   }
 
@@ -528,7 +551,7 @@
   .room-code-value {
     font-size: 1rem;
     letter-spacing: 0.2em;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   /* Player list (lobby) */
@@ -556,7 +579,7 @@
     color: var(--text);
   }
 
-  .owner-name { color: #f39c12; }
+  .owner-name { color: var(--shop-gold); }
   .owner-crown { font-size: 0.8rem; }
 
   .chip-count {
@@ -575,7 +598,7 @@
     border-radius: 2px;
   }
 
-  .host-badge { background: rgba(243, 156, 18, 0.15); color: #f39c12; }
+  .host-badge { background: var(--shop-gold-15); color: var(--shop-gold); }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
 
   .player-count {
@@ -612,8 +635,8 @@
   }
 
   .chip-pill.active-player {
-    border-color: rgba(243, 156, 18, 0.5);
-    background: rgba(243, 156, 18, 0.06);
+    border-color: var(--shop-gold-50);
+    background: var(--shop-gold-06);
   }
 
   .chip-pill-name { color: var(--text); font-weight: 500; }
@@ -637,7 +660,7 @@
   .phase-label {
     font-size: 0.9rem;
     letter-spacing: 0.12em;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   .chips-display {
@@ -660,7 +683,7 @@
 
   .countdown-fill {
     height: 100%;
-    background: linear-gradient(90deg, #f39c12, #f5c842);
+    background: linear-gradient(90deg, var(--shop-gold), var(--shop-gold-end));
     border-radius: 2px;
     transition: width 0.2s linear;
   }
@@ -675,7 +698,7 @@
     color: var(--text-muted);
   }
 
-  .countdown-text.countdown-urgent { color: #e74c3c; }
+  .countdown-text.countdown-urgent { color: var(--bet-banker-red); }
 
   /* Bet confirmed */
   .bet-confirmed {
@@ -685,7 +708,7 @@
     gap: 0.5rem;
     padding: 1.25rem;
     background: var(--bg-card);
-    border: 1px solid rgba(243, 156, 18, 0.3);
+    border: 1px solid var(--shop-gold-30);
     border-radius: 4px;
   }
 
@@ -710,7 +733,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1.25rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     line-height: 1;
   }
 
@@ -767,12 +790,12 @@
 
   .bet-type-btn:hover:not(:disabled) {
     border-color: var(--border-bright);
-    background: rgba(255,255,255,0.04);
+    background: var(--overlay-04);
   }
 
   .bet-type-btn.selected {
     border-color: currentColor;
-    background: rgba(255,255,255,0.06);
+    background: var(--overlay-06);
   }
 
   .bet-type-name {
@@ -792,13 +815,13 @@
   }
 
   /* Bet type color theming */
-  .bet-type-player { color: #4a9eff; }
-  .bet-type-banker { color: #e74c3c; }
-  .bet-type-tie { color: #2ecc71; }
+  .bet-type-player { color: var(--bet-player-blue); }
+  .bet-type-banker { color: var(--bet-banker-red); }
+  .bet-type-tie { color: var(--bet-tie-green); }
 
-  .bet-type-btn.bet-type-player.selected .bet-type-name { color: #4a9eff; }
-  .bet-type-btn.bet-type-banker.selected .bet-type-name { color: #e74c3c; }
-  .bet-type-btn.bet-type-tie.selected .bet-type-name { color: #2ecc71; }
+  .bet-type-btn.bet-type-player.selected .bet-type-name { color: var(--bet-player-blue); }
+  .bet-type-btn.bet-type-banker.selected .bet-type-name { color: var(--bet-banker-red); }
+  .bet-type-btn.bet-type-tie.selected .bet-type-name { color: var(--bet-tie-green); }
 
   /* Bet presets */
   .bet-presets {
@@ -823,9 +846,9 @@
   }
 
   .preset-btn.active {
-    background: rgba(243, 156, 18, 0.15);
-    border-color: rgba(243, 156, 18, 0.5);
-    color: #f39c12;
+    background: var(--shop-gold-15);
+    border-color: var(--shop-gold-50);
+    color: var(--shop-gold);
   }
 
   .preset-btn:hover:not(:disabled):not(.active) {
@@ -847,7 +870,7 @@
   .bet-slider {
     flex: 1;
     height: 4px;
-    accent-color: #f39c12;
+    accent-color: var(--shop-gold);
     cursor: pointer;
     border: none;
     background: none;
@@ -883,7 +906,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1.5rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     line-height: 1;
   }
 
@@ -921,13 +944,13 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1.25rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     line-height: 1;
   }
 
   .hand-value.winner-hand {
-    color: #2ecc71;
-    text-shadow: 0 0 8px rgba(46, 204, 113, 0.4);
+    color: var(--bet-tie-green);
+    text-shadow: 0 0 8px var(--bet-tie-glow);
   }
 
   .hand-divider {
@@ -963,18 +986,18 @@
   }
 
   .winner-banner.winner-blue {
-    background: rgba(74, 158, 255, 0.1);
-    border-color: rgba(74, 158, 255, 0.4);
+    background: var(--bet-player-blue-10);
+    border-color: var(--bet-player-blue-40);
   }
 
   .winner-banner.winner-red {
-    background: rgba(231, 76, 60, 0.1);
-    border-color: rgba(231, 76, 60, 0.4);
+    background: var(--bet-banker-red-10);
+    border-color: var(--bet-banker-red-40);
   }
 
   .winner-banner.winner-green {
-    background: rgba(46, 204, 113, 0.1);
-    border-color: rgba(46, 204, 113, 0.4);
+    background: var(--bet-tie-green-10);
+    border-color: var(--bet-tie-green-40);
   }
 
   .winner-label {
@@ -1001,8 +1024,8 @@
   }
 
   .result-player-block.is-me {
-    border-color: rgba(243, 156, 18, 0.3);
-    background: rgba(243, 156, 18, 0.04);
+    border-color: var(--shop-gold-30);
+    background: var(--shop-gold-04);
   }
 
   .result-player-header {
@@ -1027,7 +1050,7 @@
     text-transform: uppercase;
     padding: 0.1rem 0.35rem;
     border-radius: 2px;
-    background: rgba(255,255,255,0.05);
+    background: var(--overlay-05);
   }
 
   .result-payout {
@@ -1036,8 +1059,8 @@
     font-weight: 700;
   }
 
-  .result-payout.payout-pos { color: #2ecc71; }
-  .result-payout.payout-neg { color: #e74c3c; }
+  .result-payout.payout-pos { color: var(--bet-tie-green); }
+  .result-payout.payout-neg { color: var(--bet-banker-red); }
 
   .result-chips-after {
     font-family: 'Rajdhani', system-ui, sans-serif;
@@ -1088,6 +1111,6 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.875rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 </style>

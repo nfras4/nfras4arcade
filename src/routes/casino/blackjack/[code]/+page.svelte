@@ -348,6 +348,7 @@
                 <button
                   class="preset-btn"
                   class:active={betInput === preset}
+                  aria-pressed={betInput === preset}
                   onclick={() => setBetPreset(preset)}
                   disabled={preset > myChips || preset < minBet || preset > maxBet}
                 >
@@ -573,6 +574,7 @@
               <button
                 class="preset-btn preset-sm"
                 class:active={betInput === preset}
+                aria-pressed={betInput === preset}
                 onclick={() => setBetPreset(preset)}
                 disabled={preset > myChips || preset < minBet || preset > maxBet}
               >
@@ -611,6 +613,37 @@
 </div>
 
 <style>
+  :root {
+    --shop-gold: #f39c12;
+    --shop-gold-04: rgba(243, 156, 18, 0.04);
+    --shop-gold-06: rgba(243, 156, 18, 0.06);
+    --shop-gold-10: rgba(243, 156, 18, 0.1);
+    --shop-gold-12: rgba(243, 156, 18, 0.12);
+    --shop-gold-15: rgba(243, 156, 18, 0.15);
+    --shop-gold-22: rgba(243, 156, 18, 0.22);
+    --shop-gold-30: rgba(243, 156, 18, 0.3);
+    --shop-gold-40: rgba(243, 156, 18, 0.4);
+    --shop-gold-50: rgba(243, 156, 18, 0.5);
+    --shop-gold-70: rgba(243, 156, 18, 0.7);
+    --bust-red: #e74c3c;
+    --bust-red-10: rgba(231, 76, 60, 0.1);
+    --bust-red-25: rgba(231, 76, 60, 0.25);
+    --bust-red-30: rgba(231, 76, 60, 0.3);
+    --felt-green: #6cb482;
+    --felt-green-10: rgba(108, 180, 130, 0.1);
+    --felt-green-12: rgba(108, 180, 130, 0.12);
+    --felt-green-15: rgba(108, 180, 130, 0.15);
+    --felt-green-20: rgba(108, 180, 130, 0.2);
+    --felt-green-30: rgba(108, 180, 130, 0.3);
+    --felt-green-40: rgba(108, 180, 130, 0.4);
+    --split-purple: #9b59b6;
+    --split-purple-10: rgba(155, 89, 182, 0.1);
+    --split-purple-20: rgba(155, 89, 182, 0.2);
+    --split-purple-30: rgba(155, 89, 182, 0.3);
+    --board-blue-25: rgba(74, 144, 217, 0.25);
+    --board-blue-40: rgba(74, 144, 217, 0.4);
+  }
+
   .game-page {
     position: relative;
     z-index: 1;
@@ -642,7 +675,7 @@
   .phase-title {
     font-size: 1.25rem;
     letter-spacing: 0.12em;
-    color: #f39c12;
+    color: var(--shop-gold);
     text-align: center;
   }
 
@@ -663,7 +696,7 @@
   .room-code-value {
     font-size: 1rem;
     letter-spacing: 0.2em;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   /* Player list (lobby) */
@@ -691,7 +724,7 @@
     color: var(--text);
   }
 
-  .owner-name { color: #f39c12; }
+  .owner-name { color: var(--shop-gold); }
   .owner-crown { font-size: 0.8rem; }
 
   .chip-count {
@@ -710,7 +743,7 @@
     border-radius: 2px;
   }
 
-  .host-badge { background: rgba(243, 156, 18, 0.15); color: #f39c12; }
+  .host-badge { background: var(--shop-gold-15); color: var(--shop-gold); }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
 
   .player-count {
@@ -747,8 +780,8 @@
   }
 
   .chip-pill.active-player {
-    border-color: rgba(243, 156, 18, 0.5);
-    background: rgba(243, 156, 18, 0.06);
+    border-color: var(--shop-gold-50);
+    background: var(--shop-gold-06);
   }
 
   .chip-pill-name { color: var(--text); font-weight: 500; }
@@ -756,7 +789,7 @@
   .chip-pill-bet {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   /* Phase title row */
@@ -770,7 +803,7 @@
   .phase-label {
     font-size: 0.9rem;
     letter-spacing: 0.12em;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   .chips-display {
@@ -788,7 +821,7 @@
     gap: 0.5rem;
     padding: 1.25rem;
     background: var(--bg-card);
-    border: 1px solid rgba(243, 156, 18, 0.3);
+    border: 1px solid var(--shop-gold-30);
     border-radius: 4px;
   }
 
@@ -802,7 +835,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 2rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     line-height: 1;
   }
 
@@ -839,9 +872,9 @@
   }
 
   .preset-btn.active {
-    background: rgba(243, 156, 18, 0.15);
-    border-color: rgba(243, 156, 18, 0.5);
-    color: #f39c12;
+    background: var(--shop-gold-15);
+    border-color: var(--shop-gold-50);
+    color: var(--shop-gold);
   }
 
   .preset-btn:hover:not(:disabled):not(.active) {
@@ -863,7 +896,7 @@
   .bet-slider {
     flex: 1;
     height: 4px;
-    accent-color: #f39c12;
+    accent-color: var(--shop-gold);
     cursor: pointer;
     border: none;
     background: none;
@@ -897,7 +930,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1.5rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     line-height: 1;
   }
 
@@ -935,11 +968,11 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     line-height: 1;
   }
 
-  .hand-value.bust { color: #e74c3c; }
+  .hand-value.bust { color: var(--bust-red); }
 
   .hand-value-hidden {
     font-family: 'Rajdhani', system-ui, sans-serif;
@@ -982,12 +1015,12 @@
   }
 
   .hand-block.active-hand {
-    border-color: rgba(243, 156, 18, 0.5);
-    box-shadow: 0 0 12px rgba(243, 156, 18, 0.1);
+    border-color: var(--shop-gold-50);
+    box-shadow: 0 0 12px var(--shop-gold-10);
   }
 
   .hand-block.stood { opacity: 0.65; }
-  .hand-block.busted { opacity: 0.5; border-color: rgba(231, 76, 60, 0.3); }
+  .hand-block.busted { opacity: 0.5; border-color: var(--bust-red-30); }
 
   .hand-meta {
     display: flex;
@@ -1021,7 +1054,7 @@
     border-radius: 2px;
   }
 
-  .hand-status.bust-label { color: #e74c3c; background: rgba(231, 76, 60, 0.1); }
+  .hand-status.bust-label { color: var(--bust-red); background: var(--bust-red-10); }
 
   /* Action buttons */
   .action-buttons {
@@ -1049,12 +1082,12 @@
   }
 
   .btn-hit {
-    background: rgba(243, 156, 18, 0.12);
-    color: #f39c12;
-    border-color: rgba(243, 156, 18, 0.4);
+    background: var(--shop-gold-12);
+    color: var(--shop-gold);
+    border-color: var(--shop-gold-40);
   }
 
-  .btn-hit:hover { background: rgba(243, 156, 18, 0.22); border-color: rgba(243, 156, 18, 0.7); }
+  .btn-hit:hover { background: var(--shop-gold-22); border-color: var(--shop-gold-70); }
 
   .btn-stand {
     background: var(--bg-card);
@@ -1065,20 +1098,20 @@
   .btn-stand:hover { background: var(--bg-input); color: var(--text); }
 
   .btn-double {
-    background: rgba(108, 180, 130, 0.1);
-    color: #6cb482;
-    border-color: rgba(108, 180, 130, 0.3);
+    background: var(--felt-green-10);
+    color: var(--felt-green);
+    border-color: var(--felt-green-30);
   }
 
-  .btn-double:hover { background: rgba(108, 180, 130, 0.2); }
+  .btn-double:hover { background: var(--felt-green-20); }
 
   .btn-split {
-    background: rgba(155, 89, 182, 0.1);
-    color: #9b59b6;
-    border-color: rgba(155, 89, 182, 0.3);
+    background: var(--split-purple-10);
+    color: var(--split-purple);
+    border-color: var(--split-purple-30);
   }
 
-  .btn-split:hover { background: rgba(155, 89, 182, 0.2); }
+  .btn-split:hover { background: var(--split-purple-20); }
 
   /* Turn indicator */
   .turn-indicator {
@@ -1132,9 +1165,9 @@
     font-size: 0.65rem;
     font-weight: 700;
     letter-spacing: 0.1em;
-    color: #f39c12;
+    color: var(--shop-gold);
     padding: 0.1rem 0.35rem;
-    background: rgba(243, 156, 18, 0.12);
+    background: var(--shop-gold-12);
     border-radius: 2px;
   }
 
@@ -1167,7 +1200,7 @@
     margin-left: auto;
   }
 
-  .hand-value-small.bust { color: #e74c3c; }
+  .hand-value-small.bust { color: var(--bust-red); }
 
   .other-no-cards {
     font-size: 0.75rem;
@@ -1193,8 +1226,8 @@
   }
 
   .result-player-block.is-me {
-    border-color: rgba(243, 156, 18, 0.3);
-    background: rgba(243, 156, 18, 0.04);
+    border-color: var(--shop-gold-30);
+    background: var(--shop-gold-04);
   }
 
   .result-player-header {
@@ -1216,8 +1249,8 @@
     font-weight: 700;
   }
 
-  .result-payout.payout-pos { color: #6cb482; }
-  .result-payout.payout-neg { color: #e74c3c; }
+  .result-payout.payout-pos { color: var(--felt-green); }
+  .result-payout.payout-neg { color: var(--bust-red); }
 
   .result-chips-after {
     font-family: 'Rajdhani', system-ui, sans-serif;
@@ -1249,21 +1282,21 @@
   }
 
   .result-gold {
-    background: rgba(243, 156, 18, 0.15);
-    color: #f39c12;
-    border: 1px solid rgba(243, 156, 18, 0.4);
+    background: var(--shop-gold-15);
+    color: var(--shop-gold);
+    border: 1px solid var(--shop-gold-40);
   }
 
   .result-green {
-    background: rgba(108, 180, 130, 0.12);
-    color: #6cb482;
-    border: 1px solid rgba(108, 180, 130, 0.3);
+    background: var(--felt-green-12);
+    color: var(--felt-green);
+    border: 1px solid var(--felt-green-30);
   }
 
   .result-red {
-    background: rgba(231, 76, 60, 0.1);
-    color: #e74c3c;
-    border: 1px solid rgba(231, 76, 60, 0.25);
+    background: var(--bust-red-10);
+    color: var(--bust-red);
+    border: 1px solid var(--bust-red-25);
   }
 
   .result-neutral {
@@ -1307,7 +1340,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1.1rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
     min-width: 36px;
     text-align: right;
   }
@@ -1351,7 +1384,7 @@
     top: 0;
     left: 0;
     height: 100%;
-    background: linear-gradient(90deg, rgba(74, 144, 217, 0.4), rgba(74, 144, 217, 0.25));
+    background: linear-gradient(90deg, var(--board-blue-40), var(--board-blue-25));
     transition: width 0.2s linear;
   }
 
@@ -1370,7 +1403,7 @@
   }
 
   .countdown-urgent {
-    color: #e74c3c;
+    color: var(--bust-red);
     animation: pulse 0.5s ease-in-out infinite alternate;
   }
 
@@ -1404,9 +1437,9 @@
   }
 
   .result-row.result-winner {
-    background: rgba(108, 180, 130, 0.1);
-    border-color: rgba(108, 180, 130, 0.4);
-    box-shadow: 0 0 16px rgba(108, 180, 130, 0.15);
+    background: var(--felt-green-10);
+    border-color: var(--felt-green-40);
+    box-shadow: 0 0 16px var(--felt-green-15);
   }
 
   .result-name {
@@ -1419,7 +1452,7 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.9rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--shop-gold);
   }
 
   /* Field label */

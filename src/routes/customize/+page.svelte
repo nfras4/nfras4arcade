@@ -443,7 +443,7 @@
                 >
                   <div class="emblem-swatch">
                     {#if emblem.svgPath}
-                      <img src={emblem.svgPath} alt="" aria-hidden="true" />
+                      <img src={emblem.svgPath} alt="{emblem.name} emblem" />
                     {:else}
                       <span class="picker-icon" aria-hidden="true">{iconChar(emblem.icon)}</span>
                     {/if}
@@ -515,6 +515,15 @@
 </div>
 
 <style>
+  :root {
+    --danger-red: #e74c3c;
+    --danger-red-08: rgba(231, 76, 60, 0.08);
+    --danger-red-30: rgba(231, 76, 60, 0.3);
+    --green-chip-08: rgba(61, 214, 140, 0.08);
+    --green-chip-30: rgba(61, 214, 140, 0.3);
+    --row-alt: rgba(255, 255, 255, 0.03);
+  }
+
   .customize-page {
     position: relative;
     z-index: 1;
@@ -596,13 +605,13 @@
     animation: fadeUp 0.3s ease both;
   }
   .notice-error {
-    background: rgba(231, 76, 60, 0.08);
-    border: 1px solid rgba(231, 76, 60, 0.3);
-    color: #e74c3c;
+    background: var(--danger-red-08);
+    border: 1px solid var(--danger-red-30);
+    color: var(--danger-red);
   }
   .notice-success {
-    background: rgba(61, 214, 140, 0.08);
-    border: 1px solid rgba(61, 214, 140, 0.3);
+    background: var(--green-chip-08);
+    border: 1px solid var(--green-chip-30);
     color: var(--green, #3dd68c);
   }
 

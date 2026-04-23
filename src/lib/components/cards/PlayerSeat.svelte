@@ -109,6 +109,14 @@
 </div>
 
 <style>
+  :root {
+    --felt-green-glow-20: rgba(108, 180, 130, 0.2);
+    --felt-green-glow-25: rgba(108, 180, 130, 0.25);
+    --felt-green-glow-50: rgba(108, 180, 130, 0.5);
+    --danger-red: #e74c3c;
+    --seat-badge-on-accent: #0c0e10;
+  }
+
   .seat {
     display: flex;
     flex-direction: column;
@@ -126,7 +134,7 @@
   .seat.active {
     border-color: var(--accent);
     background: var(--accent-faint);
-    box-shadow: 0 0 12px rgba(108, 180, 130, 0.25);
+    box-shadow: 0 0 12px var(--felt-green-glow-25);
   }
   .seat.finished { opacity: 0.5; }
   .seat.passed { opacity: 0.6; }
@@ -138,8 +146,8 @@
   }
 
   @keyframes allInPulse {
-    0%, 100% { box-shadow: 0 0 6px rgba(108, 180, 130, 0.2); }
-    50% { box-shadow: 0 0 16px rgba(108, 180, 130, 0.5); }
+    0%, 100% { box-shadow: 0 0 6px var(--felt-green-glow-20); }
+    50% { box-shadow: 0 0 16px var(--felt-green-glow-50); }
   }
 
   .seat-name-wrap { font-size: 0.9rem; }
@@ -165,7 +173,7 @@
     font-weight: 600;
   }
   .seat-score { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; }
-  .seat-penalty { font-size: 0.75rem; color: #e74c3c; font-weight: 600; }
+  .seat-penalty { font-size: 0.75rem; color: var(--danger-red); font-weight: 600; }
   .seat-bet {
     font-size: 0.75rem;
     color: var(--accent);
@@ -209,7 +217,7 @@
     width: 20px;
     height: 20px;
     background: var(--yellow);
-    color: #0c0e10;
+    color: var(--seat-badge-on-accent);
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.65rem;
     font-weight: 700;

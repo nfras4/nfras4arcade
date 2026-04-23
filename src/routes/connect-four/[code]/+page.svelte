@@ -207,7 +207,7 @@
         <div class="score-bar">
           {#each state.players as player}
             {@const piece = state.tableState.pieces[player.id]}
-            <div class="score-item" class:active={state.currentTurn === player.id}>
+            <div class="score-item" class:active={state.currentTurn === player.id} aria-current={(state.currentTurn === player.id) ? 'true' : 'false'}>
               <span class="piece-dot piece-{piece}"></span>
               <NameFrame name={player.name + (player.id === pid ? ' (you)' : '')} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               <span class="score-value">{scores[player.id] ?? 0}</span>
@@ -320,6 +320,33 @@
 </div>
 
 <style>
+  :root {
+    --player-red: #e74c3c;
+    --player-red-10: rgba(231, 76, 60, 0.1);
+    --player-red-30: rgba(231, 76, 60, 0.3);
+    --player-red-bright: #ff6b6b;
+    --player-red-deep: #c0392b;
+    --player-yellow: #f1c40f;
+    --player-yellow-bright: #ffd93d;
+    --player-yellow-deep: #d4ac0d;
+    --board-blue-main: #1a3a6e;
+    --board-blue-deep: #0d1b2a;
+    --board-blue-mid: #162d50;
+    --bot-purple: #9b59b6;
+    --bot-purple-15: rgba(155, 89, 182, 0.15);
+    --panel-overlay-06: rgba(233, 69, 96, 0.06);
+    --panel-overlay-20: rgba(233, 69, 96, 0.2);
+    --felt-green-10: rgba(108, 180, 130, 0.1);
+    --felt-green-40: rgba(108, 180, 130, 0.4);
+    --felt-green-glow-30: rgba(108, 180, 130, 0.3);
+    --felt-green-glow-60: rgba(108, 180, 130, 0.6);
+    --shadow-dark-20: rgba(0, 0, 0, 0.2);
+    --shadow-dark-30: rgba(0, 0, 0, 0.3);
+    --highlight-white-10: rgba(255, 255, 255, 0.1);
+    --highlight-white-50: rgba(255, 255, 255, 0.5);
+    --yellow-alert-30: rgba(234, 179, 8, 0.3);
+  }
+
   .game-page {
     position: relative;
     z-index: 1;
@@ -392,7 +419,7 @@
   .host-badge { background: var(--accent-faint); color: var(--accent); }
   .owner-crown { font-size: 0.85rem; margin-left: -0.25rem; }
   .dc-badge { background: var(--bg-input); color: var(--text-subtle); }
-  .bot-badge { background: rgba(155, 89, 182, 0.15); color: #9b59b6; }
+  .bot-badge { background: var(--bot-purple-15); color: var(--bot-purple); }
 
   .bot-controls {
     display: flex;
@@ -407,12 +434,12 @@
   }
 
   .btn-danger {
-    color: #e74c3c !important;
-    border-color: rgba(231, 76, 60, 0.3) !important;
+    color: var(--player-red) !important;
+    border-color: var(--player-red-30) !important;
   }
 
   .btn-danger:hover {
-    background: rgba(231, 76, 60, 0.1) !important;
+    background: var(--player-red-10) !important;
   }
 
   .player-count {
@@ -428,8 +455,8 @@
     gap: 0.5rem;
     margin-top: 0.5rem;
     padding: 0.75rem 1rem;
-    background: rgba(233, 69, 96, 0.06);
-    border: 1px solid rgba(233, 69, 96, 0.2);
+    background: var(--panel-overlay-06);
+    border: 1px solid var(--panel-overlay-20);
     border-radius: 4px;
   }
 
@@ -490,8 +517,8 @@
     border-radius: 50%;
   }
 
-  .piece-indicator.piece-1 { background: #e74c3c; }
-  .piece-indicator.piece-2 { background: #f1c40f; }
+  .piece-indicator.piece-1 { background: var(--player-red); }
+  .piece-indicator.piece-2 { background: var(--player-yellow); }
 
   /* Score bar */
   .score-bar {
@@ -518,8 +545,8 @@
   }
 
   .score-item.winner {
-    border-color: rgba(108, 180, 130, 0.4);
-    background: rgba(108, 180, 130, 0.1);
+    border-color: var(--felt-green-40);
+    background: var(--felt-green-10);
   }
 
   .piece-dot {
@@ -529,8 +556,8 @@
     flex-shrink: 0;
   }
 
-  .piece-dot.piece-1 { background: #e74c3c; }
-  .piece-dot.piece-2 { background: #f1c40f; }
+  .piece-dot.piece-1 { background: var(--player-red); }
+  .piece-dot.piece-2 { background: var(--player-yellow); }
 
   .score-name {
     flex: 1;
@@ -560,19 +587,19 @@
     grid-template-columns: repeat(7, 1fr);
     grid-template-rows: repeat(6, 1fr);
     gap: 4px;
-    background: #1a3a6e;
+    background: var(--board-blue-main);
     padding: 8px;
     border-radius: 8px;
     width: 100%;
     max-width: min(380px, calc(100vw - 2rem));
     aspect-ratio: 7 / 6;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 20px var(--shadow-dark-30), inset 0 1px 0 var(--highlight-white-10);
   }
 
   .cell {
     aspect-ratio: 1;
     border-radius: 50%;
-    background: #0d1b2a;
+    background: var(--board-blue-deep);
     border: none;
     padding: 0;
     cursor: default;
@@ -596,18 +623,18 @@
   }
 
   .cell.clickable:hover {
-    background: #162d50;
+    background: var(--board-blue-mid);
   }
 
   /* Pieces */
   .cell.cell-1 .piece {
-    background: radial-gradient(circle at 35% 35%, #ff6b6b, #e74c3c 50%, #c0392b);
-    box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    background: radial-gradient(circle at 35% 35%, var(--player-red-bright), var(--player-red) 50%, var(--player-red-deep));
+    box-shadow: inset 0 -2px 4px var(--shadow-dark-30), 0 1px 3px var(--shadow-dark-20);
   }
 
   .cell.cell-2 .piece {
-    background: radial-gradient(circle at 35% 35%, #ffd93d, #f1c40f 50%, #d4ac0d);
-    box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.2), 0 1px 3px rgba(0, 0, 0, 0.2);
+    background: radial-gradient(circle at 35% 35%, var(--player-yellow-bright), var(--player-yellow) 50%, var(--player-yellow-deep));
+    box-shadow: inset 0 -2px 4px var(--shadow-dark-20), 0 1px 3px var(--shadow-dark-20);
   }
 
   /* Preview piece (ghost) */
@@ -616,17 +643,17 @@
   }
 
   .cell.preview-1 .piece {
-    background: radial-gradient(circle at 35% 35%, #ff6b6b, #e74c3c 50%, #c0392b);
+    background: radial-gradient(circle at 35% 35%, var(--player-red-bright), var(--player-red) 50%, var(--player-red-deep));
   }
 
   .cell.preview-2 .piece {
-    background: radial-gradient(circle at 35% 35%, #ffd93d, #f1c40f 50%, #d4ac0d);
+    background: radial-gradient(circle at 35% 35%, var(--player-yellow-bright), var(--player-yellow) 50%, var(--player-yellow-deep));
   }
 
   /* Win highlight */
   .cell.win-cell .piece {
     animation: winPulse 0.8s ease-in-out infinite alternate;
-    box-shadow: 0 0 12px rgba(108, 180, 130, 0.6), 0 0 24px rgba(108, 180, 130, 0.3);
+    box-shadow: 0 0 12px var(--felt-green-glow-60), 0 0 24px var(--felt-green-glow-30);
   }
 
   /* Last move indicator */
@@ -636,7 +663,7 @@
     width: 20%;
     height: 20%;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--highlight-white-50);
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -714,7 +741,7 @@
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--yellow, #eab308);
-    border: 1px solid rgba(234, 179, 8, 0.3);
+    border: 1px solid var(--yellow-alert-30);
     border-radius: 2px;
     padding: 0.3rem 0.75rem;
     text-align: center;

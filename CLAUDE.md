@@ -202,6 +202,7 @@ The `nfras4` account gets a crown emoji (👑) next to their name in all game lo
 Clash Royale Cards, Animals, Food & Drinks, Movies & Shows, Professions, Sports, Landmarks, Video Games
 
 ## Recent deployments
+- **2026-04-23** - Deployed to nfras4arcade. Summary: Add Liar's Dice party game (2-6 players) with bots, ones-wild variant, Silver Tongue badge (b_liars_dice_win), dedicated leaderboard (/api/leaderboard/liars-dice), and strict wikiHow common-hand rules (face and count non-decreasing, at least one strict increase). Migration 0017 adds liars_dice_wins column + badge row. 26 bun:test assertions. Branch: `main`, commit: `5b5b05f`.
 - **2026-04-20** - Deployed to nfras4arcade. Summary: Fix Ella's World render crash — route every ZONES[] lookup in dungeon +page.svelte and combat.svelte.ts through new getZone(idx) helper in zones.ts, since ELLA_ZONE lives at id 50 and is never appended to ZONES[]. Branch: `main`, commit: `9f9655f`.
 - **2026-04-20** - Deployed to nfras4arcade. Summary: Add arcade chip leaderboard on landing page (TOP CHIPS + BIGGEST WINS). Migration 0015 adds biggest_win + biggest_win_game on player_profiles; tracked per-round at settlement for poker/blackjack/roulette/baccarat and on every positive credit in snap/impostor/cards/slots. New /api/leaderboard/chips endpoint. Branch: `main`, commit: `27f83aa`.
 - **2026-04-17** - Deployed to nfras4arcade. Summary: Tune slots paytable to 106.7% RTP (cherry 2/7/20, lemon 4/11/26, orange 7/16/40, gem 11/27/65, star 13/40/97); remove RTP display from slots UI. Branch: `main`, commit: `a9fdc74`.

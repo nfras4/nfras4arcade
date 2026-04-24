@@ -1,4 +1,12 @@
 // Cosmetic payload shape sent in every DO player broadcast
+
+function resolveSvgPath(raw: string, subcategory: 'frames' | 'emblems'): string {
+  if (raw.startsWith('data:') || raw.startsWith('http') || raw.startsWith('/')) {
+    return raw;
+  }
+  return `/cosmetics/${subcategory}/${raw}`;
+}
+
 export interface CosmeticPayload {
   frameSvg: string | null;    // resolved URL path e.g. "/cosmetics/frames/bronze.svg"
   emblemSvg: string | null;   // resolved URL path e.g. "/cosmetics/emblems/flame.svg"
@@ -66,7 +74,7 @@ export async function resolvePlayerCosmetics(
       try {
         const meta = JSON.parse(row.frame_metadata) as FrameMeta;
         if (meta.svg) {
-          frameSvg = `/cosmetics/frames/${meta.svg}`;
+          frameSvg = resolveSvgPath(meta.svg, 'frames');
         }
       } catch {
         // malformed metadata, leave null
@@ -78,7 +86,7 @@ export async function resolvePlayerCosmetics(
       try {
         const meta = JSON.parse(row.emblem_metadata) as EmblemMeta;
         if (meta.svg) {
-          emblemSvg = `/cosmetics/emblems/${meta.svg}`;
+          emblemSvg = resolveSvgPath(meta.svg, 'emblems');
         }
       } catch {
         // malformed metadata, leave null

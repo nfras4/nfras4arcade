@@ -50,7 +50,7 @@
     title_badge_id?: string | null;
   }
 
-  type TabId = 'frame' | 'emblem' | 'title';
+  type TabId = 'frame' | 'emblem' | 'colour' | 'title';
 
   interface OwnedCosmetic {
     id: string;
@@ -92,6 +92,7 @@
   const tabs: { id: TabId; label: string }[] = [
     { id: 'frame', label: 'Frame' },
     { id: 'emblem', label: 'Emblem' },
+    { id: 'colour', label: 'Name Colour' },
     { id: 'title', label: 'Title' },
   ];
 
@@ -108,6 +109,10 @@
     try {
       const meta: ShopItemMetadata = JSON.parse(metadataStr);
       if (!meta.svg) return null;
+      // Pass-through for data URIs, absolute URLs, and pre-built paths
+      if (meta.svg.startsWith('data:') || meta.svg.startsWith('http') || meta.svg.startsWith('/')) {
+        return meta.svg;
+      }
       return `/cosmetics/${subcategory}s/${meta.svg}`;
     } catch {
       return null;
@@ -199,7 +204,8 @@
 
   let previewLevel = $derived(xpToLevel($userStats?.xp ?? 0));
   let previewName = $derived($currentUser?.displayName || 'You');
-  let previewColour = $derived($currentUser?.nameColour || null);
+  let previewColourOverride: string | null = $state(null);
+  let previewColour = $derived(previewColourOverride ?? $currentUser?.nameColour ?? null);
   let previewTitleText = $derived(
     earnedTitles.find((t) => t.slug === previewTitleSlug)?.label ?? null
   );
@@ -343,6 +349,82 @@
 
   function isTitleEquipped(slug: string | null): boolean {
     return (equipped.title_badge_id ?? null) === slug;
+  }
+
+  interface OwnedColour {
+    id: string;
+    name: string;
+    hex: string;
+    level_requirement?: number;
+  }
+
+  let ownedColours = $derived<OwnedColour[]>(
+    inventory
+      .filter((row) => row.item.subcategory === 'name_colour')
+      .map((row) => {
+        let hex = '#ffffff';
+        try {
+          const meta = JSON.parse(row.item.metadata ?? '{}');
+          if (meta.hex) hex = meta.hex;
+        } catch {}
+        return { id: row.item.id, name: row.item.name, hex };
+      })
+  );
+
+  interface LockedColour extends OwnedColour { tier: 'hero' | 'minor'; level_requirement: number; price: number; }
+
+  let lockedColours = $derived<LockedColour[]>(
+    levelRewards
+      .filter((item) => item.subcategory === 'name_colour' && !ownedItemIds.has(item.id))
+      .sort((a, b) => a.level_requirement - b.level_requirement)
+      .map((item) => {
+        let hex = '#ffffff';
+        try {
+          const meta = JSON.parse(item.metadata ?? '{}');
+          if (meta.hex) hex = meta.hex;
+        } catch {}
+        return { id: item.id, name: item.name, hex, tier: item.tier, level_requirement: item.level_requirement, price: item.price };
+      })
+  );
+
+  async function equipColour(item: OwnedColour | null) {
+    const targetId = item?.id ?? null;
+    const prevId = equipped.name_colour_id;
+    const prevColour = previewColourOverride;
+
+    pendingId = item?.id ?? '__none_colour';
+    errorMsg = '';
+
+    equipped = { ...equipped, name_colour_id: targetId };
+    // Optimistic preview
+    previewColourOverride = item?.hex ?? null;
+
+    try {
+      const res = await fetch('/api/shop/equip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: 'name_colour', itemId: targetId }),
+      });
+      const data: { success?: boolean; error?: string } = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'Equip failed');
+      }
+      successMsg = targetId ? `Equipped ${item?.name}` : 'Name colour cleared';
+      setTimeout(() => { successMsg = ''; }, 2000);
+      // Refresh currentUser so preview picks up the new colour from /api/auth/me
+      await fetchUser();
+      previewColourOverride = null;
+    } catch (err) {
+      equipped = { ...equipped, name_colour_id: prevId };
+      previewColourOverride = prevColour;
+      errorMsg = err instanceof Error ? err.message : 'Equip failed';
+    }
+
+    pendingId = null;
+  }
+
+  function isColourEquipped(id: string | null): boolean {
+    return (equipped.name_colour_id ?? null) === id;
   }
 </script>
 
@@ -569,6 +651,69 @@
                   </div>
                   <span class="picker-name">{item.name}</span>
                   <span class="locked-label">{lockedTooltip(item)}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {:else if activeTab === 'colour'}
+        <div
+          class="picker-panel"
+          role="tabpanel"
+          id="panel-colour"
+          aria-labelledby="tab-colour"
+        >
+          {#if ownedColours.length === 0 && lockedColours.length === 0}
+            <div class="empty-state card">
+              <p>You don't own any name colours yet.</p>
+              <a class="btn-primary" href="/shop">Visit the shop</a>
+            </div>
+          {:else}
+            <div class="picker-grid" role="radiogroup" aria-label="Name Colour">
+              <button
+                class="picker-card none-card"
+                role="radio"
+                aria-checked={isColourEquipped(null)}
+                class:selected={isColourEquipped(null)}
+                disabled={pendingId === '__none_colour'}
+                onclick={() => equipColour(null)}
+                aria-label="Default name colour"
+              >
+                <span class="picker-none" aria-hidden="true">∅</span>
+                <span class="picker-name">Default</span>
+                {#if isColourEquipped(null)}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                {#if pendingId === '__none_colour'}<span class="picker-loader" aria-hidden="true"></span>{/if}
+              </button>
+              {#each ownedColours as colour}
+                {@const selected = isColourEquipped(colour.id)}
+                <button
+                  class="picker-card"
+                  role="radio"
+                  aria-checked={selected}
+                  class:selected
+                  disabled={pendingId === colour.id}
+                  onclick={() => equipColour(colour)}
+                  aria-label="Equip {colour.name}"
+                >
+                  <span class="colour-swatch" style:background={colour.hex} aria-hidden="true"></span>
+                  <span class="picker-name" style:color={colour.hex}>{colour.name}</span>
+                  {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                  {#if pendingId === colour.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
+                </button>
+              {/each}
+              {#each lockedColours as item}
+                <div
+                  class="picker-card locked-card"
+                  aria-label="{item.name} — {item.tier === 'hero' ? `Unlocks at Level ${item.level_requirement}` : `Unlocks at Level ${item.level_requirement} or buy for ${item.price} chips`}"
+                  title={item.tier === 'hero' ? `Unlocks at Level ${item.level_requirement}` : `Unlocks at Level ${item.level_requirement} or buy for ${item.price} chips`}
+                  role="img"
+                >
+                  {#if item.tier === 'hero'}
+                    <span class="hero-badge" aria-hidden="true">HERO</span>
+                  {/if}
+                  <span class="colour-swatch" style:background={item.hex} aria-hidden="true"></span>
+                  <span class="picker-name">{item.name}</span>
+                  <span class="locked-label">{item.tier === 'hero' ? `Unlocks at Level ${item.level_requirement}` : `Unlocks at Level ${item.level_requirement} or buy for ${item.price} chips`}</span>
                 </div>
               {/each}
             </div>
@@ -920,6 +1065,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .colour-swatch {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid var(--border-bright);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3) inset;
+    flex: 0 0 auto;
   }
 
   .emblem-swatch img {

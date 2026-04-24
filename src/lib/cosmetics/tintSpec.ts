@@ -24,19 +24,19 @@ const TIER_SPECS: Record<string, TintSpec> = {
 	'/cosmetics/frames/bronze.svg': {
 		tier: 'bronze',
 		tintRgb: '166 124 82',
-		opacity: 0.15,
+		opacity: 0.21,
 		pattern: 'none'
 	},
 	'/cosmetics/frames/silver.svg': {
 		tier: 'silver',
 		tintRgb: '192 192 192',
-		opacity: 0.18,
+		opacity: 0.25,
 		pattern: 'diagonals'
 	},
 	'/cosmetics/frames/gold.svg': {
 		tier: 'gold',
 		tintRgb: '255 215 0',
-		opacity: 0.2,
+		opacity: 0.28,
 		pattern: 'shimmer'
 	}
 };
@@ -44,7 +44,7 @@ const TIER_SPECS: Record<string, TintSpec> = {
 const FALLBACK: TintSpec = {
 	tier: 'none',
 	tintRgb: '107 114 128',
-	opacity: 0.15,
+	opacity: 0.21,
 	pattern: 'none'
 };
 

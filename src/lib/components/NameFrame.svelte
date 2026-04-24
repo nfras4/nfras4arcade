@@ -96,7 +96,7 @@
     border: 1px solid var(--name-frame-default-border, #334155);
     background-image: linear-gradient(
       90deg,
-      rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.15)) 0%,
+      rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.21)) 0%,
       transparent 70%
     );
   }
@@ -110,7 +110,7 @@
       ),
       linear-gradient(
         90deg,
-        rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.18)) 0%,
+        rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.25)) 0%,
         transparent 70%
       );
   }
@@ -124,7 +124,7 @@
       ),
       linear-gradient(
         90deg,
-        rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.2)) 0%,
+        rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.28)) 0%,
         transparent 70%
       );
   }

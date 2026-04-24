@@ -314,7 +314,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       existingPlayer.player.connected = true;
       existingPlayer.player.connectionStatus = 'connected';
       this.disconnectTimestamps.delete(playerId);
-      this.resolveCosmeticsForPlayer(playerId);
+      await this.resolveCosmeticsForPlayer(playerId);
       const joinMsg: ServerMessage = {
         type: 'joined',
         playerId,
@@ -367,7 +367,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.hostId = playerId;
     }
 
-    this.resolveCosmeticsForPlayer(playerId);
+    await this.resolveCosmeticsForPlayer(playerId);
 
     const joinMsg: ServerMessage = {
       type: 'joined',
@@ -379,18 +379,20 @@ export class ImpostorRoom extends DurableObject<Env> {
     await this.saveState();
   }
 
-  private resolveCosmeticsForPlayer(playerId: string): void {
+  private async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
     const cp = this.players.get(playerId);
     if (!cp) return;
-    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+    try {
+      const cosmetics = await this.cosmeticsCache.get(playerId, this.env.DB);
       const p = this.players.get(playerId);
       if (!p) return;
       p.player.frameSvg = cosmetics.frameSvg;
       p.player.emblemSvg = cosmetics.emblemSvg;
       p.player.nameColour = cosmetics.nameColour;
       p.player.titleBadgeId = cosmetics.titleBadgeId;
-      this.broadcastState();
-    }).catch(() => {});
+    } catch (err) {
+      console.error('resolveCosmeticsForPlayer failed', { playerId, err });
+    }
   }
 
   private handleDisconnect(playerId: string): void {
@@ -990,6 +992,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
       const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
+      const xpGainedMap = new Map<string, { xpGain: number; newXp: number }>();
 
       // End the game session
       if (this.gameSessionId) {
@@ -1022,6 +1025,7 @@ export class ImpostorRoom extends DurableObject<Env> {
         // XP: +50 for participating, +50 bonus for winning
         const xpGain = isWinner ? 100 : 50;
         const { grants: impostorGrants, stmts: grantStmts, newXp: impostorNewXp } = await checkLevelGrants(db, id, xpGain);
+        xpGainedMap.set(id, { xpGain, newXp: impostorNewXp });
         if (impostorGrants.length > 0) levelUpMap.set(id, { grants: impostorGrants, newXp: impostorNewXp, xpGain });
         stmts.push(...grantStmts);
         stmts.push(
@@ -1104,7 +1108,10 @@ export class ImpostorRoom extends DurableObject<Env> {
         await db.batch(stmts);
       }
 
-      // Send level-up notifications to players who leveled up
+      // Send xp_gained to every player, then level_up if applicable
+      for (const [id, { xpGain, newXp }] of xpGainedMap) {
+        this.sendTo(id, { type: 'xp_gained', amount: xpGain, newXp });
+      }
       for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
         const oldLevel = xpToLevel(newXp - xpGain);
         const newLevel = xpToLevel(newXp);

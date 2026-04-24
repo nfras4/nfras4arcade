@@ -3,9 +3,11 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { CardGameSocket } from '$lib/cardSocket';
+  import { dispatchRelayMessages } from '$lib/levelUpDispatch';
   import { isLoggedIn } from '$lib/auth';
   import { fireWinConfetti } from '$lib/vfx';
   import SnapCard from '$lib/components/snap/SnapCard.svelte';
+  import NameFrame from '$lib/components/NameFrame.svelte';
 
   const code = $page.params.code!;
   const urlParams = new URLSearchParams($page.url.search);
@@ -44,6 +46,7 @@
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => { error = null; }, 4000);
       }
+      dispatchRelayMessages(msg);
     });
 
     socket.connect(code, !$isLoggedIn)
@@ -187,7 +190,7 @@
           <ul class="player-list">
             {#each state.players as player (player.id)}
               <li class="player-item" class:disconnected={!player.connected}>
-                <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+                <NameFrame name={player.name} frameSvg={player.frameSvg ?? null} emblemSvg={player.emblemSvg ?? null} nameColour={player.nameColour ?? null} />
                 {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
                 {#if player.isHost}<span class="host-badge">Host</span>{/if}
                 {#if player.id === myPlayerId}<span class="you-badge">You</span>{/if}

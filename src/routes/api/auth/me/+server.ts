@@ -100,7 +100,10 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       try {
         const meta = JSON.parse(equippedRow.card_back_metadata);
         if (meta.style) cardBack = { style: meta.style };
-        else if (meta.svg) cardBack = { svg: `/cosmetics/card-backs/${meta.svg}` };
+        else if (meta.svg) {
+          console.warn(`[auth/me] card_back with meta.svg encountered (${meta.svg}) — no SVG assets exist yet`);
+          cardBack = { svg: `/cosmetics/card-backs/${meta.svg}` };
+        }
       } catch {}
     }
 

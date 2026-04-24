@@ -147,28 +147,24 @@
     <section class="games-section">
       <div class="game-grid">
         {#each games as game}
-          <div
-            class="game-card card"
-            role="button"
-            tabindex="0"
-            onclick={() => goto(game.route)}
-            onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}
-          >
-            <div class="game-card-inner">
-              <h3 class="game-name geo-title">{game.name}</h3>
-              <p class="game-desc">{game.description}</p>
-              <div class="game-meta">
-                <span class="game-players">{formatPlayers(game.minPlayers, game.maxPlayers)}</span>
-                {#if game.minPlayers >= 3}
-                  <span class="game-tag multiplayer-tag">Multiplayer</span>
-                {/if}
-                <span class="game-type" style="color: {getTypeColor(game.type)}; border-color: {getTypeColor(game.type)}50;">{game.type}</span>
+          <div class="game-card card">
+            <a href={game.route} class="game-card-link" aria-label={game.name}>
+              <div class="game-card-inner">
+                <h3 class="game-name geo-title">{game.name}</h3>
+                <p class="game-desc">{game.description}</p>
+                <div class="game-meta">
+                  <span class="game-players">{formatPlayers(game.minPlayers, game.maxPlayers)}</span>
+                  {#if game.minPlayers >= 3}
+                    <span class="game-tag multiplayer-tag">Multiplayer</span>
+                  {/if}
+                  <span class="game-type" style="color: {getTypeColor(game.type)}; border-color: {getTypeColor(game.type)}50;">{game.type}</span>
+                </div>
               </div>
-            </div>
+            </a>
             <div class="game-card-footer">
               <button
                 class="solo-btn"
-                onclick={(e) => { e.stopPropagation(); playSolo(game); }}
+                onclick={() => playSolo(game)}
                 disabled={creatingSolo === game.id}
               >
                 {#if game.soloAction === 'tutorial'}
@@ -270,19 +266,47 @@
   }
 
   .game-card {
+    position: relative;
     text-align: left;
     background: var(--bg-card);
     border: none;
     font-family: inherit;
-    cursor: pointer;
     transition: background 0.15s ease, transform 0.15s ease;
     display: flex;
     flex-direction: column;
   }
 
-  .game-card:hover:not(.coming-soon) {
+  .game-card:hover:not(.coming-soon),
+  .game-card:focus-within:not(.coming-soon) {
     background: var(--bg-hover);
     transform: translateY(-2px);
+  }
+
+  .game-card-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    position: relative;
+    flex: 1;
+  }
+
+  .game-card-link::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .game-card-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .game-card-footer {
+    position: relative;
+    z-index: 1;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
   }
 
   .game-card-inner {
@@ -290,17 +314,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    flex: 1;
-  }
-
-  .game-card-footer {
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border);
   }
 
   .solo-btn {
     width: 100%;
     padding: 0.5rem 0.75rem;
+    min-height: 44px;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.7rem;
     font-weight: 700;

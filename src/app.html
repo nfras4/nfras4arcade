@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -20,12 +20,17 @@
     </script>
     <div style="display: contents">%sveltekit.body%</div>
     <script>
-      window.addEventListener('error', function(e) {
-        document.body.innerHTML += '<pre style="color:red;padding:2rem;font-size:14px;">JS ERROR: ' + e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '') + '</pre>';
-      });
-      window.addEventListener('unhandledrejection', function(e) {
-        document.body.innerHTML += '<pre style="color:orange;padding:2rem;font-size:14px;">PROMISE ERROR: ' + (e.reason?.message || e.reason) + '\n' + (e.reason?.stack || '') + '</pre>';
-      });
+      (function() {
+        var h = location.hostname;
+        var isDev = h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.local');
+        if (!isDev) return;
+        window.addEventListener('error', function(e) {
+          document.body.innerHTML += '<pre style="color:red;padding:2rem;font-size:14px;">JS ERROR: ' + e.message + '\n' + (e.filename || '') + ':' + (e.lineno || '') + '</pre>';
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+          document.body.innerHTML += '<pre style="color:orange;padding:2rem;font-size:14px;">PROMISE ERROR: ' + (e.reason?.message || e.reason) + '\n' + (e.reason?.stack || '') + '</pre>';
+        });
+      })();
     </script>
   </body>
 </html>

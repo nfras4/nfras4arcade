@@ -2,6 +2,7 @@
   import '../app.css';
   import { goto } from '$app/navigation';
   import LevelUpToast from '$lib/components/LevelUpToast.svelte';
+  import XpGainedToast from '$lib/components/XpGainedToast.svelte';
   import { page } from '$app/stores';
   import { currentUser, userStats, isLoggedIn, logout, fetchUser } from '$lib/auth';
   import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
@@ -151,13 +152,12 @@
   {/if}
 
   <div class="nav-right">
-    <button
-      class="theme-toggle"
-      onclick={toggleTheme}
-      aria-label="Toggle {theme === 'dark' ? 'light' : 'dark'} mode"
-      title="Toggle theme"
-    >
-      {theme === 'dark' ? 'light' : 'dark'}
+    <button class="theme-toggle" onclick={toggleTheme} aria-label="Switch to {theme === 'dark' ? 'light' : 'dark'} mode" title="Toggle theme">
+      {#if theme === 'dark'}
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      {:else}
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      {/if}
     </button>
 
     {#if $isLoggedIn}
@@ -195,7 +195,9 @@
       <a href="/customize" class="nav-link nav-customize-link" title="Customize">Customize</a>
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
-        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
+        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M3 8l3 6h12l3-6-5 3-4-6-4 6z"/></svg>
+        </span>{/if}
       </a>
       <button class="nav-logout-btn" onclick={handleLogout} title="Log out">
         Log Out
@@ -206,8 +208,12 @@
   </div>
 </nav>
 
+<a href="#main-content" class="skip-link">Skip to main content</a>
 <LevelUpToast />
-{@render children()}
+<XpGainedToast />
+<main id="main-content">
+  {@render children()}
+</main>
 
 
 <style>
@@ -220,8 +226,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1.25rem;
-    height: 3.25rem;
+    padding: env(safe-area-inset-top) 1.25rem 0;
+    height: calc(3.25rem + env(safe-area-inset-top));
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
   }
@@ -237,7 +243,6 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    overflow: hidden;
     min-width: 0;
   }
 
@@ -380,6 +385,7 @@
     padding: 0.1rem 0.35rem;
     border: 1px solid rgba(234, 179, 8, 0.3);
     border-radius: 2px;
+    font-variant-numeric: tabular-nums;
   }
 
   .nav-chips {
@@ -393,6 +399,7 @@
     letter-spacing: 0.06em;
     color: var(--accent);
     cursor: default;
+    font-variant-numeric: tabular-nums;
   }
 
   .chip-icon {
@@ -544,6 +551,25 @@
     z-index: 60;
   }
 
-  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #5a8a5a); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  .skip-link {
+    position: absolute;
+    top: -999px;
+    left: 0;
+    background: var(--accent);
+    color: var(--btn-primary-text);
+    padding: 0.75rem 1rem;
+    z-index: 100;
+    text-decoration: none;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+  }
+  .skip-link:focus {
+    top: 0;
+  }
 </style>

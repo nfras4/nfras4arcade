@@ -106,7 +106,9 @@
         aria-label="Casino – 5 games"
       >
         <div class="cat-glyph casino-glyph" aria-hidden="true">
-          <span class="suit-cluster" aria-hidden="true">♠</span>
+          <svg viewBox="0 0 40 40" width="28" height="28" fill="currentColor" aria-hidden="true">
+            <path d="M20 6c-3.2 4.4-9 9-9 14.4 0 3.3 2.5 5.8 5.5 5.8 1.6 0 2.9-.7 3.5-1.8L18 32h4l-2-7.6c.6 1.1 1.9 1.8 3.5 1.8 3 0 5.5-2.5 5.5-5.8 0-5.4-5.8-10-9-14.4z"/>
+          </svg>
         </div>
         <div class="cat-text">
           <h2 class="cat-title geo-title">Casino</h2>
@@ -169,7 +171,12 @@
               <div class="lb-row">
                 <span class="lb-pos lb-pos-{i + 1}">{i + 1}</span>
                 <span class="lb-pname">{row.player_name}</span>
-                <span class="lb-val">⚡{row.prestige_tokens}</span>
+                <span class="lb-val">
+                  <svg class="lb-val-icon" viewBox="0 0 24 24" width="10" height="10" fill="currentColor" aria-hidden="true">
+                    <path d="M13 2 L4 14 h7 L9 22 l9-12 h-7 z"/>
+                  </svg>
+                  {row.prestige_tokens}
+                </span>
               </div>
             {:else}
               <div class="lb-empty">No entries yet</div>
@@ -186,6 +193,33 @@
             {:else}
               <div class="lb-empty">No entries yet</div>
             {/each}
+          </div>
+        </div>
+      </section>
+    {:else}
+      <section class="lb-widget" aria-label="The Dungeon leaderboard loading">
+        <div class="lb-widget-hdr">
+          <span class="lb-widget-title">THE DUNGEON — TOP PLAYERS</span>
+          <a href="/dungeon" class="lb-play-link">PLAY NOW →</a>
+        </div>
+        <div class="lb-cols">
+          <div class="lb-col">
+            <div class="lb-col-title">DEEPEST ZONE</div>
+            <div class="lb-skeleton">
+              {#each Array(5) as _}<div class="lb-skeleton-row"></div>{/each}
+            </div>
+          </div>
+          <div class="lb-col">
+            <div class="lb-col-title">MOST PRESTIGE</div>
+            <div class="lb-skeleton">
+              {#each Array(5) as _}<div class="lb-skeleton-row"></div>{/each}
+            </div>
+          </div>
+          <div class="lb-col">
+            <div class="lb-col-title">HIGHEST LEVEL</div>
+            <div class="lb-skeleton">
+              {#each Array(5) as _}<div class="lb-skeleton-row"></div>{/each}
+            </div>
           </div>
         </div>
       </section>
@@ -224,6 +258,27 @@
             {:else}
               <div class="lb-empty">No entries yet</div>
             {/each}
+          </div>
+        </div>
+      </section>
+    {:else if !chipLb}
+      <section class="lb-widget chip-widget" aria-label="Arcade chip leaderboard loading">
+        <div class="lb-widget-hdr">
+          <span class="lb-widget-title">ARCADE CHIPS — TOP PLAYERS</span>
+          <a href="/casino" class="lb-play-link">PLAY NOW →</a>
+        </div>
+        <div class="lb-cols lb-cols-2">
+          <div class="lb-col">
+            <div class="lb-col-title">TOP CHIPS</div>
+            <div class="lb-skeleton">
+              {#each Array(5) as _}<div class="lb-skeleton-row"></div>{/each}
+            </div>
+          </div>
+          <div class="lb-col">
+            <div class="lb-col-title">BIGGEST WINS</div>
+            <div class="lb-skeleton">
+              {#each Array(5) as _}<div class="lb-skeleton-row"></div>{/each}
+            </div>
           </div>
         </div>
       </section>
@@ -342,28 +397,28 @@
 
   /* ── Casino card overrides ───────────────────────────── */
   .casino-card::before {
-    background: linear-gradient(135deg, rgba(243,156,18,0.35), var(--border));
+    background: linear-gradient(135deg, var(--casino-border), var(--border));
   }
 
   .casino-card::after {
-    background: linear-gradient(90deg, #f39c12 0%, transparent 70%);
+    background: linear-gradient(90deg, var(--casino) 0%, transparent 70%);
   }
 
   .casino-card:hover {
-    box-shadow: 0 0 20px rgba(243,156,18,0.12);
+    filter: drop-shadow(0 0 12px var(--casino-glow));
   }
 
   /* ── RPG card ────────────────────────────────────────── */
   .rpg-card::before {
-    background: linear-gradient(135deg, #1a3a1a, #0a1a0a);
+    background: linear-gradient(135deg, var(--rpg-panel-from), var(--rpg-panel-to));
   }
 
   .rpg-card::after {
-    background: linear-gradient(90deg, rgba(64,192,64,0.08) 0%, transparent 70%);
+    background: linear-gradient(90deg, var(--rpg-faint) 0%, transparent 70%);
   }
 
   .rpg-card:hover {
-    box-shadow: 0 0 20px rgba(64,192,64,0.12);
+    filter: drop-shadow(0 0 12px var(--rpg-glow));
   }
 
   /* ── Glyph / icon area ───────────────────────────────── */
@@ -384,18 +439,18 @@
   }
 
   .casino-glyph {
-    color: #f39c12;
-    background: rgba(243,156,18,0.08);
-    border: 1px solid rgba(243,156,18,0.25);
+    color: var(--casino);
+    background: var(--casino-faint);
+    border: 1px solid var(--casino-border-soft);
   }
 
   .rpg-glyph {
-    color: #40c060;
-    background: rgba(64,192,64,0.08);
-    border: 1px solid rgba(64,192,64,0.25);
+    color: var(--rpg);
+    background: var(--rpg-faint);
+    border: 1px solid var(--rpg-border);
   }
 
-  .rpg-arrow { color: #40c060; }
+  .rpg-arrow { color: var(--rpg); }
 
   .suit-cluster {
     font-size: 2rem;
@@ -437,7 +492,7 @@
   }
 
   .casino-count {
-    color: #f39c12;
+    color: var(--casino);
   }
 
   /* ── Arrow ───────────────────────────────────────────── */
@@ -450,7 +505,7 @@
   }
 
   .casino-arrow {
-    color: #f39c12;
+    color: var(--casino);
   }
 
   .category-card:hover .cat-arrow {
@@ -480,7 +535,7 @@
   }
 
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-  button:active:not(:disabled) { transform: scale(0.99) translateY(-1px); transition: transform 0.1s; }
+  button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
 
   /* ── Dungeon Leaderboard Widget ──────────────────────── */
   .lb-widget {
@@ -497,7 +552,7 @@
   }
   .lb-widget-title {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.12em;
     color: var(--text-muted);
@@ -505,7 +560,7 @@
   }
   .lb-play-link {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.65rem;
+    font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -524,7 +579,7 @@
   }
   .lb-col-title {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.6rem;
+    font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     color: var(--accent);
@@ -539,13 +594,15 @@
     gap: 0.4rem;
     padding: 0.2rem 0;
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.65rem;
+    font-size: 0.75rem;
   }
   .lb-pos { width: 14px; text-align: right; color: var(--text-subtle); font-weight: 600; }
   .lb-pos-1 { color: #f0c030; }
   .lb-pos-2 { color: #aaa; }
   .lb-pos-3 { color: #c87432; }
   .lb-pname { flex: 1; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lb-val { color: var(--accent); font-weight: 600; }
-  .lb-empty { font-size: 0.6rem; color: var(--text-subtle); font-family: 'Rajdhani', system-ui, sans-serif; }
+  .lb-val { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .lb-empty { font-size: 0.75rem; color: var(--text-subtle); font-family: 'Rajdhani', system-ui, sans-serif; }
+  .lb-skeleton { display: flex; flex-direction: column; gap: 0.3rem; }
+  .lb-skeleton-row { height: 14px; background: linear-gradient(90deg, var(--bg-hover) 0%, var(--bg-input) 50%, var(--bg-hover) 100%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; border-radius: 2px; }
 </style>

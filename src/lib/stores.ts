@@ -86,10 +86,13 @@ export function initSocketListeners(): () => void {
         connected.set(false);
         break;
 
+      case 'xp_gained':
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('xpgained', { detail: { amount: msg.amount, newXp: msg.newXp } }));
+        }
+        break;
+
       case 'level_up':
-        // Dispatch a window CustomEvent so LevelUpToast (mounted at layout level) can show it.
-        // TODO: the other 5 game routes (snap, wavelength, liar's dice, cards, casino) need the
-        // same one-liner added to their own WS message handlers when each game's owner touches it next.
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('levelup', { detail: { newLevel: msg.newLevel, rewards: msg.rewards } }));
         }

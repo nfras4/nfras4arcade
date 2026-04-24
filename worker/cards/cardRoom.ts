@@ -394,7 +394,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
-      this.resolveCosmeticsForPlayer(playerId);
+      await this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -441,7 +441,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.hostId = playerId;
     }
 
-    this.resolveCosmeticsForPlayer(playerId);
+    await this.resolveCosmeticsForPlayer(playerId);
 
     this.sendToWs(ws, {
       type: 'joined',
@@ -453,11 +453,11 @@ export abstract class CardRoom extends DurableObject<Env> {
   }
 
   /**
-   * Resolve cosmetics asynchronously for a player, stash on the player record,
-   * and rebroadcast so clients see the cosmetic fields. Guests short-circuit
-   * inside the cache/resolver without a D1 hit.
+   * Resolve cosmetics for a player and stash on the player record before the
+   * caller broadcasts state. Guests short-circuit inside the cache/resolver
+   * without a D1 hit.
    */
-  protected resolveCosmeticsForPlayer(playerId: string): void {
+  protected async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
     // Bots never have cosmetics — apply defaults synchronously
@@ -468,15 +468,17 @@ export abstract class CardRoom extends DurableObject<Env> {
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
       return;
     }
-    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+    try {
+      const cosmetics = await this.cosmeticsCache.get(playerId, this.env.DB);
       const p = this.players.get(playerId);
       if (!p) return;
       p.frameSvg = cosmetics.frameSvg;
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
-      this.broadcastState();
-    }).catch(() => {});
+    } catch (err) {
+      console.error('resolveCosmeticsForPlayer failed', { playerId, err });
+    }
   }
 
   private async handleDisconnect(playerId: string): Promise<void> {
@@ -698,6 +700,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
       const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
+      const xpGainedMap = new Map<string, { xpGain: number; newXp: number }>();
 
       if (this.gameSessionId) {
         stmts.push(
@@ -724,6 +727,7 @@ export abstract class CardRoom extends DurableObject<Env> {
         // XP: +50 for participating, +50 bonus for winning
         const xpGain = id === winnerId ? 100 : 50;
         const { grants: cardsGrants, stmts: grantStmts, newXp: cardsNewXp } = await checkLevelGrants(db, id, xpGain);
+        xpGainedMap.set(id, { xpGain, newXp: cardsNewXp });
         if (cardsGrants.length > 0) levelUpMap.set(id, { grants: cardsGrants, newXp: cardsNewXp, xpGain });
         stmts.push(...grantStmts);
         stmts.push(
@@ -770,7 +774,10 @@ export abstract class CardRoom extends DurableObject<Env> {
 
       if (stmts.length > 0) await db.batch(stmts);
 
-      // Send level-up notifications to players who leveled up
+      // Send xp_gained to every player, then level_up if applicable
+      for (const [id, { xpGain, newXp }] of xpGainedMap) {
+        this.sendTo(id, { type: 'xp_gained', amount: xpGain, newXp });
+      }
       for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
         const oldLevel = xpToLevel(newXp - xpGain);
         const newLevel = xpToLevel(newXp);

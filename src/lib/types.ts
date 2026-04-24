@@ -107,4 +107,5 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'lobby_dissolved'; message: string }
   | { type: 'pong' }
-  | { type: 'level_up'; newLevel: number; rewards: LevelUpReward[] };
+  | { type: 'level_up'; newLevel: number; rewards: LevelUpReward[] }
+  | { type: 'xp_gained'; amount: number; newXp: number };

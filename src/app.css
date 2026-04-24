@@ -17,11 +17,26 @@
   --red: #e94560;
   --text: #d8dce8;
   --text-muted: #a8b8c4;
-  --text-subtle: #7a8c9c;
+  --text-subtle: #8fa3b5;
   --border: rgba(120, 140, 130, 0.1);
   --border-bright: rgba(120, 140, 130, 0.2);
   --radius: 4px;
   --radius-sm: 2px;
+
+  --casino: #f39c12;
+  --casino-hover: #f5ad3a;
+  --casino-border: rgba(243, 156, 18, 0.3);
+  --casino-border-soft: rgba(243, 156, 18, 0.25);
+  --casino-faint: rgba(243, 156, 18, 0.08);
+  --casino-glow: rgba(243, 156, 18, 0.2);
+  --casino-glow-hover: rgba(243, 156, 18, 0.3);
+
+  --rpg: #40c060;
+  --rpg-border: rgba(64, 192, 64, 0.25);
+  --rpg-faint: rgba(64, 192, 64, 0.08);
+  --rpg-glow: rgba(64, 192, 64, 0.12);
+  --rpg-panel-from: #1a3a1a;
+  --rpg-panel-to: #0a1a0a;
 
   --clip-card: polygon(8px 0%, calc(100% - 8px) 0%, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0% calc(100% - 8px), 0% 8px);
   --clip-btn: polygon(6px 0%, calc(100% - 6px) 0%, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0% calc(100% - 6px), 0% 6px);
@@ -59,6 +74,21 @@
   --btn-primary-text: #ffffff;
   --btn-primary-bg-hover: #3a8464;
 
+  --casino: #b26a08;
+  --casino-hover: #c57d14;
+  --casino-border: rgba(178, 106, 8, 0.35);
+  --casino-border-soft: rgba(178, 106, 8, 0.3);
+  --casino-faint: rgba(178, 106, 8, 0.1);
+  --casino-glow: rgba(178, 106, 8, 0.18);
+  --casino-glow-hover: rgba(178, 106, 8, 0.28);
+
+  --rpg: #2e8a3e;
+  --rpg-border: rgba(46, 138, 62, 0.3);
+  --rpg-faint: rgba(46, 138, 62, 0.08);
+  --rpg-glow: rgba(46, 138, 62, 0.12);
+  --rpg-panel-from: #c8e4c8;
+  --rpg-panel-to: #d8ecd8;
+
   --bg-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Cpolygon points='0,0 120,0 60,80' fill='%23e8ecf4'/%3E%3Cpolygon points='120,0 200,0 160,70' fill='%23dde2ee'/%3E%3Cpolygon points='200,0 320,0 260,90' fill='%23d2d9e8'/%3E%3Cpolygon points='320,0 400,0 400,60 360,80' fill='%23e8ecf4'/%3E%3Cpolygon points='60,80 120,0 180,100' fill='%23d2d9e8'/%3E%3Cpolygon points='120,0 200,0 180,100 160,70' fill='%23f3f5fb'/%3E%3Cpolygon points='160,70 200,0 260,90' fill='%23dde2ee'/%3E%3Cpolygon points='200,0 320,0 260,90' fill='%23e8ecf4'/%3E%3Cpolygon points='260,90 320,0 360,80' fill='%23d2d9e8'/%3E%3Cpolygon points='320,0 400,0 360,80' fill='%23f3f5fb'/%3E%3Cpolygon points='0,0 60,80 0,140' fill='%23dde2ee'/%3E%3Cpolygon points='0,140 60,80 100,160' fill='%23d2d9e8'/%3E%3Cpolygon points='60,80 180,100 100,160' fill='%23e8ecf4'/%3E%3Cpolygon points='180,100 260,90 200,180' fill='%23dde2ee'/%3E%3Cpolygon points='260,90 360,80 300,170' fill='%23d2d9e8'/%3E%3Cpolygon points='360,80 400,60 400,160 340,170' fill='%23e8ecf4'/%3E%3Cpolygon points='100,160 180,100 160,200' fill='%23f3f5fb'/%3E%3Cpolygon points='180,100 200,180 160,200' fill='%23dde2ee'/%3E%3Cpolygon points='200,180 260,90 300,170' fill='%23e8ecf4'/%3E%3Cpolygon points='300,170 260,90 340,170' fill='%23d2d9e8'/%3E%3Cpolygon points='340,170 360,80 400,160' fill='%23f3f5fb'/%3E%3Cpolygon points='0,140 100,160 60,240' fill='%23e8ecf4'/%3E%3Cpolygon points='60,240 100,160 160,200 120,260' fill='%23d2d9e8'/%3E%3Cpolygon points='160,200 200,180 220,260' fill='%23dde2ee'/%3E%3Cpolygon points='200,180 300,170 240,260' fill='%23e8ecf4'/%3E%3Cpolygon points='300,170 340,170 380,240' fill='%23d2d9e8'/%3E%3Cpolygon points='340,170 400,160 400,240 380,240' fill='%23f3f5fb'/%3E%3Cpolygon points='0,140 0,240 60,240' fill='%23dde2ee'/%3E%3Cpolygon points='0,240 60,240 40,320' fill='%23d2d9e8'/%3E%3Cpolygon points='60,240 120,260 80,320' fill='%23e8ecf4'/%3E%3Cpolygon points='120,260 220,260 160,340' fill='%23dde2ee'/%3E%3Cpolygon points='220,260 240,260 280,330' fill='%23d2d9e8'/%3E%3Cpolygon points='240,260 380,240 320,330' fill='%23e8ecf4'/%3E%3Cpolygon points='380,240 400,240 400,320 360,320' fill='%23f3f5fb'/%3E%3Cpolygon points='0,240 0,320 40,320' fill='%23f3f5fb'/%3E%3Cpolygon points='40,320 80,320 60,400 0,400' fill='%23e8ecf4'/%3E%3Cpolygon points='80,320 160,340 120,400' fill='%23dde2ee'/%3E%3Cpolygon points='160,340 280,330 200,400' fill='%23d2d9e8'/%3E%3Cpolygon points='280,330 360,320 320,400' fill='%23e8ecf4'/%3E%3Cpolygon points='360,320 400,320 400,400 320,400' fill='%23f3f5fb'/%3E%3C/svg%3E");
 }
 
@@ -93,6 +123,10 @@ body::before {
   opacity: 0.6;
   pointer-events: none;
   z-index: 0;
+}
+
+[data-theme="light"] body::before {
+  opacity: 0.9;
 }
 
 /* Subtle radial gradient overlay */
@@ -303,4 +337,13 @@ input::placeholder {
 .owner-name {
   color: #e74c3c !important;
   text-shadow: 0 0 6px rgba(231, 76, 60, 0.4), 0 0 12px rgba(231, 76, 60, 0.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

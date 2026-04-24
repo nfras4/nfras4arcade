@@ -334,7 +334,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
-      this.resolveCosmeticsForPlayer(playerId);
+      await this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -375,7 +375,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
     if (isHost) this.hostId = playerId;
 
-    this.resolveCosmeticsForPlayer(playerId);
+    await this.resolveCosmeticsForPlayer(playerId);
 
     // Update casino_tables registry
     await this.updateTableRegistry();
@@ -390,22 +390,24 @@ export abstract class CasinoRoom extends DurableObject<Env> {
   }
 
   /**
-   * Resolve cosmetics asynchronously for a player, stash on the player record,
-   * and rebroadcast so clients see the cosmetic fields. Guests short-circuit
-   * inside the cache/resolver without a D1 hit.
+   * Resolve cosmetics for a player and stash on the player record before the
+   * caller broadcasts state. Guests short-circuit inside the cache/resolver
+   * without a D1 hit.
    */
-  protected resolveCosmeticsForPlayer(playerId: string): void {
+  protected async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
-    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+    try {
+      const cosmetics = await this.cosmeticsCache.get(playerId, this.env.DB);
       const p = this.players.get(playerId);
       if (!p) return;
       p.frameSvg = cosmetics.frameSvg;
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
-      this.broadcastState();
-    }).catch(() => {});
+    } catch (err) {
+      console.error('resolveCosmeticsForPlayer failed', { playerId, err });
+    }
   }
 
   private async handleDisconnect(playerId: string): Promise<void> {
@@ -554,6 +556,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
       const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
+      const xpGainedMap = new Map<string, { xpGain: number; newXp: number }>();
 
       for (const [id, player] of this.players) {
         if (player.isGuest || id.startsWith('guest_')) continue;
@@ -573,6 +576,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
         const xpGain = won ? 100 : 50;
         const { grants: casinoGrants, stmts: grantStmts, newXp: casinoNewXp } = await checkLevelGrants(db, id, xpGain);
+        xpGainedMap.set(id, { xpGain, newXp: casinoNewXp });
         if (casinoGrants.length > 0) levelUpMap.set(id, { grants: casinoGrants, newXp: casinoNewXp, xpGain });
         stmts.push(...grantStmts);
         stmts.push(
@@ -588,7 +592,10 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
       if (stmts.length > 0) await db.batch(stmts);
 
-      // Send level-up notifications to players who leveled up
+      // Send xp_gained to every player, then level_up if applicable
+      for (const [id, { xpGain, newXp }] of xpGainedMap) {
+        this.sendTo(id, { type: 'xp_gained', amount: xpGain, newXp });
+      }
       for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
         const oldLevel = xpToLevel(newXp - xpGain);
         const newLevel = xpToLevel(newXp);

@@ -2,6 +2,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
+  import { dispatchRelayMessages } from '$lib/levelUpDispatch';
   import { writable } from 'svelte/store';
   import { currentUser } from '$lib/auth';
   import NameFrame from '$lib/components/NameFrame.svelte';
@@ -73,6 +74,7 @@
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => errorMsg.set(null), 4000);
       }
+      dispatchRelayMessages(msg);
     });
 
     socket.connect(code)

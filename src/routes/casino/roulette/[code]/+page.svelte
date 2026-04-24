@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
+  import { dispatchRelayMessages } from '$lib/levelUpDispatch';
   import { writable } from 'svelte/store';
   import { isLoggedIn, userStats } from '$lib/auth';
   import { fireWinConfetti } from '$lib/vfx';
@@ -101,6 +102,7 @@
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => error.set(null), 4000);
       }
+      dispatchRelayMessages(msg);
     });
 
     socket.connect(code, !$isLoggedIn)

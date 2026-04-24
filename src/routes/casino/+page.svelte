@@ -88,17 +88,19 @@
       <h2 class="section-heading geo-title">Games</h2>
       <div class="game-grid">
         {#each casinoGames as game}
-          <div class="game-card card" role="button" tabindex="0" onclick={() => goto(game.route)} onkeydown={(e) => { if (e.key === 'Enter') goto(game.route); }}>
-            <div class="game-card-inner">
-              <h3 class="game-name geo-title">{game.name}</h3>
-              <p class="game-desc">{game.description}</p>
-              <div class="game-meta">
-                <span class="game-players">1-{game.maxPlayers} players</span>
-                <span class="game-type">casino</span>
+          <div class="game-card card">
+            <a href={game.route} class="game-card-link" aria-label={game.name}>
+              <div class="game-card-inner">
+                <h3 class="game-name geo-title">{game.name}</h3>
+                <p class="game-desc">{game.description}</p>
+                <div class="game-meta">
+                  <span class="game-players">1-{game.maxPlayers} players</span>
+                  <span class="game-type">casino</span>
+                </div>
               </div>
-            </div>
+            </a>
             <div class="game-card-footer">
-              <button class="solo-btn" onclick={(e) => { e.stopPropagation(); goto(game.route); }}>
+              <button class="solo-btn" onclick={() => goto(game.route)}>
                 Play
               </button>
             </div>
@@ -110,13 +112,15 @@
     <section class="games-section">
       <h2 class="section-heading geo-title">Shop</h2>
       <div class="game-grid">
-        <div class="game-card card" role="button" tabindex="0" onclick={() => goto('/shop')} onkeydown={(e) => { if (e.key === 'Enter') goto('/shop'); }}>
-          <div class="game-card-inner">
-            <h3 class="game-name geo-title">Chip Shop</h3>
-            <p class="game-desc">Spend chips on cosmetics & items</p>
-          </div>
+        <div class="game-card card">
+          <a href="/shop" class="game-card-link" aria-label="Chip Shop">
+            <div class="game-card-inner">
+              <h3 class="game-name geo-title">Chip Shop</h3>
+              <p class="game-desc">Spend chips on cosmetics & items</p>
+            </div>
+          </a>
           <div class="game-card-footer">
-            <button class="solo-btn" onclick={(e) => { e.stopPropagation(); goto('/shop'); }}>
+            <button class="solo-btn" onclick={() => goto('/shop')}>
               Browse
             </button>
           </div>
@@ -238,10 +242,11 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #f39c12;
+    color: var(--casino);
+    font-variant-numeric: tabular-nums;
   }
 
-  .chips-icon { color: #f39c12; }
+  .chips-icon { color: var(--casino); }
 
   .section-heading {
     font-size: 0.65rem;
@@ -261,21 +266,42 @@
   }
 
   .game-card {
+    position: relative;
     text-align: left;
     background: var(--bg-card);
-    border: 1.5px solid #f39c12;
-    box-shadow: 0 0 12px rgba(243, 156, 18, 0.2), inset 0 0 8px rgba(243, 156, 18, 0.04);
+    border: 1.5px solid var(--casino);
+    box-shadow: 0 0 12px var(--casino-glow), inset 0 0 8px rgba(243, 156, 18, 0.04);
     font-family: inherit;
-    cursor: pointer;
     transition: background 0.15s ease, transform 0.15s ease;
     display: flex;
     flex-direction: column;
   }
 
-  .game-card:hover {
+  .game-card:hover,
+  .game-card:focus-within {
     background: var(--bg-hover);
     transform: translateY(-2px);
-    box-shadow: 0 0 18px rgba(243, 156, 18, 0.3), inset 0 0 10px rgba(243, 156, 18, 0.06);
+    box-shadow: 0 0 18px var(--casino-glow-hover), inset 0 0 10px rgba(243, 156, 18, 0.06);
+  }
+
+  .game-card-link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    position: relative;
+    flex: 1;
+  }
+
+  .game-card-link::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .game-card-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   .game-card-inner {
@@ -286,6 +312,8 @@
   }
 
   .game-card-footer {
+    position: relative;
+    z-index: 1;
     padding-top: 0.75rem;
     border-top: 1px solid var(--border);
   }
@@ -293,14 +321,15 @@
   .solo-btn {
     width: 100%;
     padding: 0.5rem 0.75rem;
+    min-height: 44px;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #f39c12;
-    background: rgba(243, 156, 18, 0.08);
-    border: 1px solid rgba(243, 156, 18, 0.3);
+    color: var(--casino);
+    background: var(--casino-faint);
+    border: 1px solid var(--casino-border-soft);
     border-radius: 2px;
     cursor: pointer;
     transition: background 0.15s ease;
@@ -343,9 +372,9 @@
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #f39c12;
+    color: var(--casino);
     padding: 0.15rem 0.5rem;
-    border: 1px solid rgba(243, 156, 18, 0.3);
+    border: 1px solid var(--casino-border-soft);
     border-radius: 2px;
   }
 
@@ -360,6 +389,7 @@
     align-items: center;
     gap: 1rem;
     padding: 0.75rem 1rem;
+    min-height: 44px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 2px;
@@ -373,7 +403,7 @@
 
   .table-row:hover {
     background: var(--bg-hover);
-    border-color: rgba(243, 156, 18, 0.3);
+    border-color: var(--casino-border-soft);
   }
 
   .table-game {
@@ -391,7 +421,7 @@
     font-size: 0.9rem;
     font-weight: 700;
     letter-spacing: 0.2em;
-    color: #f39c12;
+    color: var(--casino);
   }
 
   .table-seats, .table-bet {
@@ -407,6 +437,7 @@
   .back-btn {
     width: 100%;
     padding: 0.75rem;
+    min-height: 44px;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.7rem;
     font-weight: 600;
@@ -422,6 +453,6 @@
 
   .back-btn:hover { color: var(--accent); border-color: var(--accent-border); }
 
-  button:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
+  button:focus-visible { outline: 2px solid var(--accent, #5a8a5a); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
 </style>

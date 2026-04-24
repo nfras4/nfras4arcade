@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { CardGameSocket } from '$lib/cardSocket';
+  import { dispatchRelayMessages } from '$lib/levelUpDispatch';
   import { writable } from 'svelte/store';
   import Dial from '$lib/components/wavelength/Dial.svelte';
   import { CATEGORY_LABELS, getCategories } from '$lib/wavelength/cards';
@@ -72,6 +73,7 @@
       } else if (msg.type === 'player_chat_message') {
         playerChatMessages = [...playerChatMessages, { name: msg.name, text: msg.text, timestamp: msg.timestamp }];
       }
+      dispatchRelayMessages(msg);
     });
 
     socket.connect(code)

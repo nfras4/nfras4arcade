@@ -82,7 +82,8 @@ type ServerMessage =
   | { type: 'pong' }
   | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number }
   | { type: 'player_chat_message'; playerId: string; name: string; text: string; timestamp: number }
-  | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] };
+  | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] }
+  | { type: 'xp_gained'; amount: number; newXp: number };
 
 // Client -> Server message types
 interface ClientMessage {
@@ -494,7 +495,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.cosmeticsCache.invalidate(playerId);
       existingPlayer.connected = true;
       this.disconnectTimestamps.delete(playerId);
-      this.resolveCosmeticsForPlayer(playerId);
+      await this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
@@ -544,7 +545,7 @@ export class WavelengthRoom extends DurableObject<Env> {
 
     this.scores.set(playerId, 0);
 
-    this.resolveCosmeticsForPlayer(playerId);
+    await this.resolveCosmeticsForPlayer(playerId);
 
     this.sendToWs(ws, {
       type: 'joined',
@@ -555,7 +556,7 @@ export class WavelengthRoom extends DurableObject<Env> {
     await this.saveState();
   }
 
-  private resolveCosmeticsForPlayer(playerId: string): void {
+  private async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
     if (player.isBot) {
@@ -565,15 +566,17 @@ export class WavelengthRoom extends DurableObject<Env> {
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
       return;
     }
-    this.cosmeticsCache.get(playerId, this.env.DB).then((cosmetics) => {
+    try {
+      const cosmetics = await this.cosmeticsCache.get(playerId, this.env.DB);
       const p = this.players.get(playerId);
       if (!p) return;
       p.frameSvg = cosmetics.frameSvg;
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
-      this.broadcastState();
-    }).catch(() => {});
+    } catch (err) {
+      console.error('resolveCosmeticsForPlayer failed', { playerId, err });
+    }
   }
 
   private handleDisconnect(playerId: string): void {
@@ -1127,6 +1130,8 @@ export class WavelengthRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
+      const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
+      const xpGainedMap = new Map<string, { xpGain: number; newXp: number }>();
 
       if (this.gameSessionId) {
         // Find winner (highest score)
@@ -1144,8 +1149,6 @@ export class WavelengthRoom extends DurableObject<Env> {
           db.prepare('UPDATE game_sessions SET ended_at = ?, winner_id = ? WHERE id = ?')
             .bind(now, winnerId, this.gameSessionId)
         );
-
-        const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
         for (const [id, player] of this.players) {
           if (id.startsWith('guest_') || player.isBot) continue;
 
@@ -1165,6 +1168,7 @@ export class WavelengthRoom extends DurableObject<Env> {
           // XP: +50 for participating, +50 bonus for winning
           const xpGain = isWinner ? 100 : 50;
           const { grants: wavelengthGrants, stmts: grantStmts, newXp: wavelengthNewXp } = await checkLevelGrants(db, id, xpGain);
+          xpGainedMap.set(id, { xpGain, newXp: wavelengthNewXp });
           if (wavelengthGrants.length > 0) levelUpMap.set(id, { grants: wavelengthGrants, newXp: wavelengthNewXp, xpGain });
           stmts.push(...grantStmts);
           stmts.push(
@@ -1188,7 +1192,10 @@ export class WavelengthRoom extends DurableObject<Env> {
 
       if (stmts.length > 0) await db.batch(stmts);
 
-      // Send level-up notifications to players who leveled up
+      // Send xp_gained to every player, then level_up if applicable
+      for (const [id, { xpGain, newXp }] of xpGainedMap) {
+        this.sendTo(id, { type: 'xp_gained', amount: xpGain, newXp });
+      }
       for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
         const oldLevel = xpToLevel(newXp - xpGain);
         const newLevel = xpToLevel(newXp);

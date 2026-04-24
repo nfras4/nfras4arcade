@@ -9,6 +9,13 @@
   let joining = $state(false);
   let mode: 'menu' | 'join' = $state('menu');
   let showRules = $state(false);
+  let codeInputEl: HTMLInputElement | null = $state(null);
+
+  $effect(() => {
+    if (mode === 'join' && codeInputEl) {
+      queueMicrotask(() => codeInputEl?.focus());
+    }
+  });
 
   $effect(() => {
     resetStores();
@@ -117,12 +124,16 @@
           </div>
           <label class="field-label" for="room-code-input">Room code</label>
           <input
+            bind:this={codeInputEl}
             id="room-code-input"
-            value={roomCode} oninput={(e) => roomCode = e.currentTarget.value}
+            value={roomCode} oninput={(e) => roomCode = e.currentTarget.value.toUpperCase()}
             placeholder="ABCD"
             maxlength="4"
             class="code-input"
-            autofocus
+            autocapitalize="characters"
+            inputmode="text"
+            autocomplete="off"
+            spellcheck="false"
             onkeydown={(e) => handleKeydown(e, joinRoom)}
           />
           <div class="action-row">
@@ -293,15 +304,15 @@
     line-height: 1.6;
   }
 
-  .code-input {
-    font-family: 'Rajdhani', system-ui, sans-serif !important;
+  .panel-inner input.code-input {
+    font-family: 'Rajdhani', system-ui, sans-serif;
     text-transform: uppercase;
     text-align: center;
-    font-size: 2rem !important;
+    font-size: 2rem;
     letter-spacing: 0.4em;
-    font-weight: 700 !important;
-    padding: 0.875rem !important;
-    color: var(--accent) !important;
+    font-weight: 700;
+    padding: 0.875rem;
+    color: var(--accent);
   }
 
   .rules {
@@ -381,15 +392,15 @@
     line-height: 1;
   }
 
-  .btn-tutorial {
-    background: var(--accent-faint) !important;
-    color: var(--accent) !important;
-    border: 1px solid var(--accent-border) !important;
+  .panel-inner .btn-tutorial {
+    background: var(--accent-faint);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
     font-size: 0.85rem;
   }
 
-  .btn-tutorial:hover {
-    background: var(--accent-border) !important;
+  .panel-inner .btn-tutorial:hover {
+    background: var(--accent-border);
   }
 
   @media (min-width: 480px) {
@@ -398,6 +409,6 @@
     }
   }
 
-  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #5a8a5a); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
 </style>

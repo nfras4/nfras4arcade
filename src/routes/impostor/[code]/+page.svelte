@@ -9,7 +9,7 @@
     initSocketListeners, resetStores
   } from '$lib/stores';
   import { isLoggedIn, currentUser } from '$lib/auth';
-  import type { GameMode, Player } from '$lib/types';
+  import type { GameMode, Player, Difficulty } from '$lib/types';
   import { fireWinConfetti, fireImpostorVfx } from '$lib/vfx';
   import NameFrame from '$lib/components/NameFrame.svelte';
 
@@ -36,7 +36,36 @@
   let unreadChat = $state(0);
 
   // Category list (fetched once)
-  let categories: string[] = $state([]);
+  let categories: { name: string; difficulty: Difficulty }[] = $state([]);
+
+  // Difficulty filter state (default: balanced only)
+  let selectedDifficulties: Difficulty[] = $state(['balanced']);
+
+  // Derived filtered category list; empty selection shows all
+  const filteredCategories = $derived(
+    selectedDifficulties.length === 0
+      ? categories
+      : categories.filter(c => selectedDifficulties.includes(c.difficulty))
+  );
+
+  function toggleDifficulty(d: Difficulty) {
+    if (selectedDifficulties.includes(d)) {
+      selectedDifficulties = selectedDifficulties.filter(x => x !== d);
+    } else {
+      selectedDifficulties = [...selectedDifficulties, d];
+    }
+  }
+
+  // Reset to Random if the selected category is no longer in the filtered list
+  $effect(() => {
+    const current = $gameState?.category;
+    if (!current) return;
+    if (filteredCategories.length === 0) return;
+    const stillVisible = filteredCategories.some(c => c.name === current);
+    if (!stillVisible) {
+      selectCategory('');
+    }
+  });
 
   // Onboarding tips (dismissed tips persist in localStorage)
   let dismissedTips: Set<string> = $state(new Set());
@@ -64,7 +93,7 @@
     const unsub = initSocketListeners();
     fetch('/api/categories')
       .then(r => r.json())
-      .then((data) => { categories = data as string[]; })
+      .then((data) => { categories = data as { name: string; difficulty: Difficulty }[]; })
       .catch(() => {});
 
     // If no game state (page refresh), try to reconnect
@@ -340,12 +369,31 @@
             <div class="lobby-settings card">
               <h3>Game Settings</h3>
 
+              <div class="difficulty-pills" role="group" aria-label="Filter categories by difficulty">
+                {#each (['easy', 'balanced', 'hard'] as const) as diff}
+                  <button
+                    type="button"
+                    class="difficulty-pill"
+                    class:active={selectedDifficulties.includes(diff)}
+                    aria-pressed={selectedDifficulties.includes(diff)}
+                    onclick={() => toggleDifficulty(diff)}
+                  >
+                    {diff.charAt(0).toUpperCase() + diff.slice(1)}
+                  </button>
+                {/each}
+              </div>
+              <small class="filter-count">
+                {filteredCategories.length === categories.length
+                  ? `Showing all ${categories.length} categories`
+                  : `Showing ${filteredCategories.length} of ${categories.length}`}
+              </small>
+
               <label>
                 Category
                 <select aria-label="Category" onchange={(e) => selectCategory(e.currentTarget.value)}>
                   <option value="">Random</option>
-                  {#each categories as cat}
-                    <option value={cat} selected={$gameState.category === cat}>{cat}</option>
+                  {#each filteredCategories as cat}
+                    <option value={cat.name} selected={$gameState.category === cat.name}>{cat.name}</option>
                   {/each}
                 </select>
               </label>
@@ -2049,5 +2097,47 @@
     background: var(--accent-faint, rgba(74, 144, 217, 0.1));
     color: var(--accent, #4a90d9);
     border-bottom: 1px solid var(--border);
+  }
+
+  /* ─── Difficulty filter pills ────────────────────────── */
+
+  .difficulty-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .difficulty-pill {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border, rgba(255,255,255,0.15));
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text, inherit);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .difficulty-pill:hover {
+    border-color: var(--accent, #6aa7ff);
+  }
+
+  .difficulty-pill.active {
+    background: var(--accent, #6aa7ff);
+    color: #000;
+    border-color: var(--accent, #6aa7ff);
+  }
+
+  .filter-count {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--muted, rgba(255,255,255,0.55));
+    margin-bottom: 0.5rem;
+  }
+
+  @media (max-width: 360px) {
+    .difficulty-pills { gap: 0.25rem; }
+    .difficulty-pill { padding: 0.25rem 0.55rem; font-size: 0.75rem; }
   }
 </style>

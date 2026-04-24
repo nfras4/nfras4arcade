@@ -1,5 +1,6 @@
 export type GamePhase = 'lobby' | 'hints' | 'discussion' | 'voting' | 'reveal' | 'game_over';
 export type GameMode = 'text' | 'voice';
+export type Difficulty = 'easy' | 'balanced' | 'hard';
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 

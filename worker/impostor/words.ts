@@ -1,3 +1,5 @@
+import type { Difficulty } from '../../src/lib/types';
+
 export interface WordEntry {
   word: string;
   hints: string[];
@@ -5,12 +7,14 @@ export interface WordEntry {
 
 export interface Category {
   name: string;
+  difficulty: Difficulty;
   words: WordEntry[];
 }
 
 export const categories: Category[] = [
   {
     name: 'Clash Royale Cards',
+    difficulty: 'hard',
     words: [
       { word: 'Knight', hints: ['ladder staple', 'cycling backbone', 'three elixir value'] },
       { word: 'Hog Rider', hints: ['OKAYYYY', 'bridge threat', 'cycle win con'] },
@@ -46,6 +50,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Animals',
+    difficulty: 'balanced',
     words: [
       { word: 'Elephant', hints: ['never forgets', 'mourns its dead', 'mud bath lover'] },
       { word: 'Penguin', hints: ['toboggans on belly', 'formal dresser', 'flightless diver'] },
@@ -66,6 +71,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Food & Drinks',
+    difficulty: 'balanced',
     words: [
       { word: 'Pizza', hints: ['pineapple war', 'margherita origin', 'new haven vs neapolitan'] },
       { word: 'Sushi', hints: ['omakase trust', 'wasabi often fake', 'vinegared rice base'] },
@@ -86,6 +92,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Movies & Shows',
+    difficulty: 'easy',
     words: [
       { word: 'Star Wars', hints: ['parsecs misused', 'uncle burned homestead', 'midi-chlorians controversy'] },
       { word: 'Harry Potter', hints: ['under the stairs', 'house elf rights', 'deluminator gift'] },
@@ -106,6 +113,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Professions',
+    difficulty: 'hard',
     words: [
       { word: 'Firefighter', hints: ['dalmatian companion', 'pole sliding', 'controlled burn'] },
       { word: 'Astronaut', hints: ['freeze-dried meals', 'bone density loss', 'tether walk'] },
@@ -123,6 +131,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Sports',
+    difficulty: 'balanced',
     words: [
       { word: 'Basketball', hints: ['traveling violation', 'shot clock pressure', 'air ball chant'] },
       { word: 'Tennis', hints: ['love means zero', 'deuce repetition', 'Wimbledon white rule'] },
@@ -140,6 +149,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Landmarks',
+    difficulty: 'hard',
     words: [
       { word: 'Eiffel Tower', hints: ['meant to be temporary', 'radio mast saved it', 'repainted every seven years'] },
       { word: 'Great Wall', hints: ['not visible from space', 'multiple dynasties built', 'watchtower gaps'] },
@@ -157,6 +167,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Music Artists',
+    difficulty: 'easy',
     words: [
       { word: 'Taylor Swift', hints: ['easter egg master', 'revenge album writer', 'boyfriend era tracker'] },
       { word: 'Drake', hints: ['wheelchair actor origin', 'champagne papi', 'kendrick response'] },
@@ -177,6 +188,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Countries',
+    difficulty: 'balanced',
     words: [
       { word: 'Japan', hints: ['vending machine density', 'capsule hotel sleep', 'forest bathing practice'] },
       { word: 'Brazil', hints: ['five world cups', 'Amazon lung claim', 'capoeira martial dance'] },
@@ -197,6 +209,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Mythical Creatures',
+    difficulty: 'hard',
     words: [
       { word: 'Dragon', hints: ['hoard guardian', 'eastern vs western differ', 'drake is wingless'] },
       { word: 'Unicorn', hints: ['Scotland national animal', 'only pure can touch', 'alicorn when winged'] },
@@ -217,6 +230,7 @@ export const categories: Category[] = [
   },
   {
     name: 'School Subjects',
+    difficulty: 'hard',
     words: [
       { word: 'Mathematics', hints: ['proof by contradiction', 'Fibonacci everywhere', 'unsolved Riemann hypothesis'] },
       { word: 'Chemistry', hints: ['118 elements found', 'Avogadro enormous number', 'exothermic releases heat'] },
@@ -237,6 +251,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Household Items',
+    difficulty: 'balanced',
     words: [
       { word: 'Toaster', hints: ['crumb tray neglected', 'bagel setting exists', 'pop up startle'] },
       { word: 'Vacuum Cleaner', hints: ['Roomba pet hair fail', 'bag vs bagless war', 'Dyson ball revolution'] },
@@ -257,6 +272,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Emojis',
+    difficulty: 'hard',
     words: [
       { word: 'Skull', hints: ['replaces LOL now', 'crossbones pair', 'dead from cringe'] },
       { word: 'Fire', hints: ['streak maintenance', 'this is fire compliment', 'Beavis approves'] },
@@ -277,6 +293,7 @@ export const categories: Category[] = [
   },
   {
     name: 'Video Games',
+    difficulty: 'easy',
     words: [
       { word: 'Minecraft', hints: ['ssss incoming', 'dirt house shame', 'infinite world seed'] },
       { word: 'Fortnite', hints: ['default dance everywhere', 'building nerf aftermath', 'crossover king'] },
@@ -299,6 +316,10 @@ export const categories: Category[] = [
 
 export function getCategories(): string[] {
   return categories.map(c => c.name);
+}
+
+export function getCategoriesWithDifficulty(): { name: string; difficulty: Difficulty }[] {
+  return categories.map(c => ({ name: c.name, difficulty: c.difficulty }));
 }
 
 export function getRandomWord(categoryName: string): { word: string; hint: string; category: string } | null {

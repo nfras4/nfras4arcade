@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { resolveTint } from '$lib/cosmetics/tintSpec';
+
   interface PlayerProp {
     id: string;
     name: string;
@@ -39,6 +41,7 @@
   const showTitle = $derived(size === 'lg' && !!titleText);
 
   const nameColour = $derived(player.nameColour || '#e5e7eb');
+  const tintSpec = $derived(resolveTint(player.frameSvg));
 
   const ariaLabel = $derived.by(() => {
     const parts = [player.name, `level ${player.level}`, status];
@@ -76,11 +79,13 @@
   role="group"
   aria-label={ariaLabel}
   class="tile size-{size} orient-{orientation} status-{status}"
-  class:has-frame={!!player.frameSvg}
+  class:has-frame={!!tintSpec}
   class:is-bot={player.isBot}
   class:is-host={player.isHost}
+  data-tier={tintSpec?.tier ?? 'none'}
   style:--name-colour={nameColour}
-  style:--frame-url={player.frameSvg ? `url(${player.frameSvg})` : 'none'}
+  style:--tile-tint-rgb={tintSpec?.tintRgb ?? '0 0 0'}
+  style:--tile-tint-opacity={tintSpec?.opacity ?? 0}
 >
   {#if status === 'on-turn'}
     <span class="glow-layer" aria-hidden="true"></span>
@@ -142,15 +147,50 @@
     border: 2px solid var(--border);
   }
 
+  /* Cosmetic tiles match the default 2px border. Tier signal comes from a
+     left-to-right linear tint fade on the background; higher tiers layer
+     additional subtle overlays on top. */
   .tile.has-frame {
-    border-style: solid;
-    border-width: 12px;
-    border-color: transparent;
-    border-image-source: var(--frame-url);
-    border-image-slice: 30 fill;
-    border-image-width: 12px;
-    border-image-repeat: stretch;
-    padding: 0.3rem 0.5rem;
+    border: 2px solid var(--border);
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--tile-tint-rgb) / var(--tile-tint-opacity, 0.15)) 0%,
+      transparent 70%
+    ),
+    linear-gradient(var(--bg-card), var(--bg-card));
+    background-repeat: no-repeat;
+  }
+
+  .tile.has-frame[data-tier='silver'] {
+    background-image:
+      repeating-linear-gradient(
+        45deg,
+        rgb(255 255 255 / 0.08) 0 2px,
+        transparent 2px 8px
+      ),
+      linear-gradient(
+        90deg,
+        rgb(var(--tile-tint-rgb) / var(--tile-tint-opacity, 0.18)) 0%,
+        transparent 70%
+      ),
+      linear-gradient(var(--bg-card), var(--bg-card));
+    background-repeat: no-repeat;
+  }
+
+  .tile.has-frame[data-tier='gold'] {
+    background-image:
+      radial-gradient(
+        ellipse at 30% 40%,
+        rgb(255 255 255 / 0.1) 0%,
+        transparent 60%
+      ),
+      linear-gradient(
+        90deg,
+        rgb(var(--tile-tint-rgb) / var(--tile-tint-opacity, 0.2)) 0%,
+        transparent 70%
+      ),
+      linear-gradient(var(--bg-card), var(--bg-card));
+    background-repeat: no-repeat;
   }
 
   .frame-inner {

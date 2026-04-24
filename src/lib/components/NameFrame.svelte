@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { resolveTint } from '$lib/cosmetics/tintSpec';
+
   interface Props {
     name: string;
     level?: number;
@@ -26,7 +28,8 @@
   }: Props = $props();
 
   const resolvedColour = $derived(nameColour || 'var(--name-frame-default-colour, #e5e7eb)');
-  const hasFrame = $derived(!!frameSvg);
+  const tintSpec = $derived(resolveTint(frameSvg));
+  const hasFrame = $derived(!!tintSpec);
   const showLevel = $derived(size === 'full' && !!level);
   const showTitle = $derived(size === 'full' && !!titleText);
 
@@ -47,8 +50,10 @@
   class="nameframe size-{size}"
   class:compact
   class:has-frame={hasFrame}
+  data-tier={tintSpec?.tier ?? 'none'}
   style:--nf-colour={resolvedColour}
-  style:--nf-frame-url={hasFrame ? `url(${frameSvg})` : 'none'}
+  style:--nf-tint-rgb={tintSpec?.tintRgb ?? '0 0 0'}
+  style:--nf-tint-opacity={tintSpec?.opacity ?? 0}
 >
   <div class="nf-inner">
     {#if emblemSvg}
@@ -84,14 +89,44 @@
     border: 1px solid var(--name-frame-default-border, #334155);
   }
 
+  /* Cosmetic nameplates match the default 1px border. The tier signal is
+     carried entirely by a left-to-right linear tint fade on the background,
+     with higher tiers layering additional subtle overlays on top. */
   .nameframe.has-frame {
-    border-style: solid;
-    border-width: 12px;
-    border-color: transparent;
-    border-image-source: var(--nf-frame-url);
-    border-image-slice: 30 fill;
-    border-image-width: 12px;
-    border-image-repeat: stretch;
+    border: 1px solid var(--name-frame-default-border, #334155);
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.15)) 0%,
+      transparent 70%
+    );
+  }
+
+  .nameframe.has-frame[data-tier='silver'] {
+    background-image:
+      repeating-linear-gradient(
+        45deg,
+        rgb(255 255 255 / 0.08) 0 2px,
+        transparent 2px 8px
+      ),
+      linear-gradient(
+        90deg,
+        rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.18)) 0%,
+        transparent 70%
+      );
+  }
+
+  .nameframe.has-frame[data-tier='gold'] {
+    background-image:
+      radial-gradient(
+        ellipse at 30% 40%,
+        rgb(255 255 255 / 0.1) 0%,
+        transparent 60%
+      ),
+      linear-gradient(
+        90deg,
+        rgb(var(--nf-tint-rgb) / var(--nf-tint-opacity, 0.2)) 0%,
+        transparent 70%
+      );
   }
 
   .nf-inner {

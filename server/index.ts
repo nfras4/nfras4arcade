@@ -316,8 +316,10 @@ const server = Bun.serve({
 
     // API: list categories
     if (url.pathname === '/api/categories') {
-      const { getCategories } = require('./words');
-      return Response.json(getCategories());
+      const { getCategoriesWithDifficulty } = require('../worker/impostor/words');
+      return Response.json(getCategoriesWithDifficulty(), {
+        headers: { 'Cache-Control': 'no-cache, no-store' }
+      });
     }
 
     // API: create room (returns code)

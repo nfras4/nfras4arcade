@@ -1,5 +1,5 @@
 import type { GamePhase, GameMode, Player, HintEntry, VoteResult, RoundResult, GameState, ServerMessage } from '../src/lib/types';
-import { getRandomWord, getRandomCategory, getCategories } from './words';
+import { getRandomWord, getRandomCategory, getCategories } from '../worker/impostor/words';
 
 interface ConnectedPlayer {
   player: Player;

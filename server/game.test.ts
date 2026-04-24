@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
 import { GameRoom, createRoom, getRoom, deleteRoom } from './game';
-import { getCategories, getRandomWord, getRandomCategory, categories } from './words';
+import { getCategories, getRandomWord, getRandomCategory, categories } from '../worker/impostor/words';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1069,8 +1069,8 @@ describe('getCategories', () => {
     expect(Array.isArray(getCategories())).toBe(true);
   });
 
-  test('returns exactly 8 categories', () => {
-    expect(getCategories()).toHaveLength(8);
+  test('returns exactly 14 categories', () => {
+    expect(getCategories()).toHaveLength(14);
   });
 
   test('all entries are non-empty strings', () => {

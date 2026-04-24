@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { goto } from '$app/navigation';
+  import LevelUpToast from '$lib/components/LevelUpToast.svelte';
   import { page } from '$app/stores';
   import { currentUser, userStats, isLoggedIn, logout, fetchUser } from '$lib/auth';
   import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
@@ -205,6 +206,7 @@
   </div>
 </nav>
 
+<LevelUpToast />
 {@render children()}
 
 

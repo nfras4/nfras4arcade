@@ -27,6 +27,19 @@
     purchasedAt: number;
   }
 
+  interface LevelRewardItem {
+    id: string;
+    category: string;
+    subcategory: string | null;
+    name: string;
+    description: string;
+    price: number;
+    icon: string;
+    metadata: string | null;
+    tier: 'hero' | 'minor';
+    level_requirement: number;
+  }
+
   interface EquippedState {
     avatar_id: string | null;
     name_colour_id: string | null;
@@ -55,6 +68,7 @@
   }
 
   let inventory: InventoryItem[] = $state([]);
+  let levelRewards: LevelRewardItem[] = $state([]);
   let equipped: EquippedState = $state({
     avatar_id: null,
     name_colour_id: null,
@@ -133,6 +147,56 @@
     }))
   );
 
+  // Sets of owned item IDs for quick lookup
+  let ownedItemIds = $derived<Set<string>>(
+    new Set(inventory.map((row) => row.item.id))
+  );
+
+  interface LockedCosmetic {
+    id: string;
+    name: string;
+    icon: string;
+    svgPath: string | null;
+    tier: 'hero' | 'minor';
+    level_requirement: number;
+    price: number;
+  }
+
+  let lockedFrames = $derived<LockedCosmetic[]>(
+    levelRewards
+      .filter((item) => item.subcategory === 'frame' && !ownedItemIds.has(item.id))
+      .sort((a, b) => a.level_requirement - b.level_requirement)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        icon: item.icon,
+        svgPath: resolveCosmeticSvg('frame', item.metadata),
+        tier: item.tier,
+        level_requirement: item.level_requirement,
+        price: item.price,
+      }))
+  );
+
+  let lockedEmblems = $derived<LockedCosmetic[]>(
+    levelRewards
+      .filter((item) => item.subcategory === 'emblem' && !ownedItemIds.has(item.id))
+      .sort((a, b) => a.level_requirement - b.level_requirement)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        icon: item.icon,
+        svgPath: resolveCosmeticSvg('emblem', item.metadata),
+        tier: item.tier,
+        level_requirement: item.level_requirement,
+        price: item.price,
+      }))
+  );
+
+  function lockedTooltip(item: LockedCosmetic): string {
+    if (item.tier === 'hero') return `Unlocks at Level ${item.level_requirement}`;
+    return `Unlocks at Level ${item.level_requirement} or buy for ${item.price} chips`;
+  }
+
   let previewLevel = $derived(xpToLevel($userStats?.xp ?? 0));
   let previewName = $derived($currentUser?.displayName || 'You');
   let previewColour = $derived($currentUser?.nameColour || null);
@@ -155,6 +219,15 @@
           emblem_id: invData.equipped.emblem_id ?? null,
           title_badge_id: invData.equipped.title_badge_id ?? null,
         };
+      }
+
+      // Fetch level-reward items (hero + minor tier) for locked-item display
+      const rewardsRes = await fetch('/api/shop/items');
+      if (rewardsRes.ok) {
+        const rewardsData: { items: LevelRewardItem[] } = await rewardsRes.json();
+        levelRewards = (rewardsData.items || []).filter(
+          (item) => item.tier === 'hero' || item.tier === 'minor'
+        );
       }
 
       // Seed preview from resolved /api/auth/me response
@@ -352,7 +425,7 @@
           id="panel-frame"
           aria-labelledby="tab-frame"
         >
-          {#if ownedFrames.length === 0}
+          {#if ownedFrames.length === 0 && lockedFrames.length === 0}
             <div class="empty-state card">
               <p>You don't own any frames yet.</p>
               <a class="btn-primary" href="/shop">Visit the shop</a>
@@ -399,6 +472,30 @@
                   {#if pendingId === frame.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
                 </button>
               {/each}
+              {#each lockedFrames as item}
+                <div
+                  class="picker-card locked-card"
+                  aria-label="{item.name} — {lockedTooltip(item)}"
+                  title={lockedTooltip(item)}
+                  role="img"
+                >
+                  {#if item.tier === 'hero'}
+                    <span class="hero-badge" aria-hidden="true">HERO</span>
+                  {/if}
+                  <div class="frame-swatch">
+                    {#if item.svgPath}
+                      <div
+                        class="frame-swatch-inner"
+                        style:--frame-url="url({item.svgPath})"
+                      ></div>
+                    {:else}
+                      <span class="picker-icon" aria-hidden="true">{iconChar(item.icon)}</span>
+                    {/if}
+                  </div>
+                  <span class="picker-name">{item.name}</span>
+                  <span class="locked-label">{lockedTooltip(item)}</span>
+                </div>
+              {/each}
             </div>
           {/if}
         </div>
@@ -409,7 +506,7 @@
           id="panel-emblem"
           aria-labelledby="tab-emblem"
         >
-          {#if ownedEmblems.length === 0}
+          {#if ownedEmblems.length === 0 && lockedEmblems.length === 0}
             <div class="empty-state card">
               <p>You don't own any emblems yet.</p>
               <a class="btn-primary" href="/shop">Visit the shop</a>
@@ -452,6 +549,27 @@
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
                   {#if pendingId === emblem.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
                 </button>
+              {/each}
+              {#each lockedEmblems as item}
+                <div
+                  class="picker-card locked-card"
+                  aria-label="{item.name} — {lockedTooltip(item)}"
+                  title={lockedTooltip(item)}
+                  role="img"
+                >
+                  {#if item.tier === 'hero'}
+                    <span class="hero-badge" aria-hidden="true">HERO</span>
+                  {/if}
+                  <div class="emblem-swatch">
+                    {#if item.svgPath}
+                      <img src={item.svgPath} alt="{item.name} emblem" />
+                    {:else}
+                      <span class="picker-icon" aria-hidden="true">{iconChar(item.icon)}</span>
+                    {/if}
+                  </div>
+                  <span class="picker-name">{item.name}</span>
+                  <span class="locked-label">{lockedTooltip(item)}</span>
+                </div>
               {/each}
             </div>
           {/if}
@@ -692,6 +810,40 @@
   .picker-card:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  .locked-card {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    position: absolute;
+    top: 0.3rem;
+    left: 0.4rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #c8a84b;
+    background: rgba(200, 168, 75, 0.15);
+    border: 1px solid rgba(200, 168, 75, 0.4);
+    border-radius: 2px;
+    padding: 0.1rem 0.3rem;
+    line-height: 1.4;
+  }
+
+  .locked-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--text-subtle);
+    text-align: center;
+    line-height: 1.3;
+    margin-top: 0.1rem;
   }
 
   .picker-icon {

@@ -8,6 +8,29 @@
   import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
   import { xpProgress, levelXpThreshold } from '$lib/xp';
 
+  interface RewardItem {
+    id: string;
+    name: string;
+    category: string;
+    subcategory: string | null;
+    price: number;
+    tier: 'hero' | 'minor';
+    level_requirement: number;
+  }
+
+  const cosmeticTypeLabel: Record<string, string> = {
+    frame: 'Frame',
+    emblem: 'Emblem',
+    avatar: 'Avatar',
+    name_colour: 'Name Colour',
+    card_back: 'Card Back',
+    table_felt: 'Table Felt',
+  };
+
+  let rewardItems = $state<RewardItem[]>([]);
+  let rewardOwned = $state<Record<string, number>>({});
+  let rewardsLoading = $state(false);
+
   let editingName = $state(false);
   let editName = $state('');
   let editAvatar = $state('');
@@ -205,6 +228,30 @@
     });
   }
 
+  $effect(() => {
+    if ($isLoggedIn) {
+      rewardsLoading = true;
+      fetch('/api/shop/items')
+        .then(r => r.json() as Promise<{ items: Array<{ id: string; name: string; category: string; subcategory: string | null; price: number; tier?: string; level_requirement?: number | null }>; owned: Record<string, number> }>)
+        .then((data) => {
+          rewardItems = (data.items ?? []).filter(
+            (it): it is RewardItem =>
+              it.tier === 'hero' || it.tier === 'minor'
+          ).sort((a, b) => a.level_requirement - b.level_requirement);
+          rewardOwned = data.owned ?? {};
+        })
+        .catch(() => {})
+        .finally(() => { rewardsLoading = false; });
+    }
+  });
+
+  let sortedRewards = $derived(rewardItems);
+
+  function rewardUnlocked(item: RewardItem): boolean {
+    if (rewardOwned[item.id]) return true;
+    return (xp.level >= item.level_requirement);
+  }
+
   async function saveProfile() {
     saving = true;
     saveError = '';
@@ -358,6 +405,43 @@
           <p class="milestone-hint">All milestones reached! You're a legend.</p>
         {/if}
       </div>
+
+      <!-- Rewards ladder -->
+      {#if rewardItems.length > 0 || rewardsLoading}
+        <div class="card rewards-card">
+          <h3 class="card-heading geo-title">Rewards</h3>
+          {#if rewardsLoading && rewardItems.length === 0}
+            <p class="empty-state">Loading rewards...</p>
+          {:else}
+            <div class="reward-list">
+              {#each sortedRewards as item}
+                {@const unlocked = rewardUnlocked(item)}
+                {@const isHero = item.tier === 'hero'}
+                <div class="reward-row" class:reward-locked={!unlocked} class:reward-hero={isHero}>
+                  <div class="reward-tier-badge" class:reward-tier-hero={isHero} class:reward-tier-minor={!isHero}>
+                    {isHero ? '★' : '●'}
+                  </div>
+                  <div class="reward-info">
+                    <span class="reward-name">{item.name}</span>
+                    <span class="reward-type">{cosmeticTypeLabel[item.subcategory ?? ''] ?? cosmeticTypeLabel[item.category] ?? item.subcategory ?? item.category}</span>
+                  </div>
+                  <span class="reward-level">Lv {item.level_requirement}</span>
+                  <div class="reward-state">
+                    {#if unlocked}
+                      <span class="reward-check">{'✓'}</span>
+                    {:else}
+                      <span class="reward-lock">{'🔒'}</span>
+                      {#if !isHero}
+                        <a href="/shop" class="reward-buy-hint">{item.price} chips</a>
+                      {/if}
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
 
       <!-- Per-game stats -->
       {#if $perGameStats.length > 0}
@@ -1066,4 +1150,134 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* Rewards ladder */
+  .rewards-card {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.13s both;
+  }
+
+  .reward-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .reward-row {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+    transition: opacity 0.15s ease;
+  }
+
+  .reward-row:last-child { border-bottom: none; }
+
+  .reward-locked {
+    opacity: 0.4;
+  }
+
+  .reward-hero {
+    border-left: 2px solid rgba(212, 175, 55, 0.5);
+    padding-left: 0.5rem;
+    margin-left: -0.5rem;
+  }
+
+  .reward-hero:not(.reward-locked) {
+    opacity: 1;
+    background: rgba(212, 175, 55, 0.04);
+    border-radius: 2px;
+  }
+
+  .reward-tier-badge {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .reward-tier-hero {
+    color: #d4af37;
+  }
+
+  .reward-tier-minor {
+    color: var(--text-subtle);
+    font-size: 0.5rem;
+  }
+
+  .reward-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+
+  .reward-name {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .reward-type {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .reward-level {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .reward-state {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+  }
+
+  .reward-check {
+    font-size: 0.8rem;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .reward-lock {
+    font-size: 0.7rem;
+    line-height: 1;
+  }
+
+  .reward-buy-hint {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 0.1rem 0.35rem;
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    background: var(--accent-faint);
+    transition: background 0.15s ease;
+  }
+
+  .reward-buy-hint:hover {
+    background: var(--accent-border);
+  }
 </style>

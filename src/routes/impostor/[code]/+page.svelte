@@ -177,6 +177,14 @@
     if ($gameState?.phase !== 'game_over') vfxFired = false;
   });
 
+  // Level-up notifications: the 'level_up' WebSocket message is handled in $lib/stores.ts
+  // inside initSocketListeners(), which dispatches window.dispatchEvent(new CustomEvent('levelup', ...)).
+  // LevelUpToast in +layout.svelte listens for that event.
+  // TODO: the other game routes (snap, wavelength, liars-dice, president, chase-the-queen,
+  // blackjack, roulette, baccarat) need the same one-liner added to their own WS message
+  // handlers when each game's owner touches it next:
+  //   if (msg.levelUp) window.dispatchEvent(new CustomEvent('levelup', { detail: msg.levelUp }));
+
   function sendHint() {
     if (!hintInput.trim()) return;
     socket.send({ type: 'give_hint', text: hintInput.trim() });

@@ -84,6 +84,17 @@ export type ClientMessage =
   | { type: 'leave_game' }
   | { type: 'ping' };
 
+export interface LevelUpReward {
+  name: string;
+  type: string;
+  tier: 'hero' | 'minor';
+}
+
+export interface LevelUpPayload {
+  newLevel: number;
+  rewards: LevelUpReward[];
+}
+
 // Server → Client messages
 export type ServerMessage =
   | { type: 'joined'; playerId: string; state: GameState; isSpectator?: boolean }
@@ -95,4 +106,5 @@ export type ServerMessage =
   | { type: 'round_result'; result: RoundResult }
   | { type: 'error'; message: string }
   | { type: 'lobby_dissolved'; message: string }
-  | { type: 'pong' };
+  | { type: 'pong' }
+  | { type: 'level_up'; newLevel: number; rewards: LevelUpReward[] };

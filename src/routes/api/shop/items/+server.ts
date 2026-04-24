@@ -20,6 +20,8 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 			metadata: string | null;
 			is_active: number;
 			created_at: number;
+			tier: 'shop' | 'hero' | 'minor';
+			level_requirement: number | null;
 		}>();
 
 	const owned: Record<string, number> = {};

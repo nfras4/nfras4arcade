@@ -3,6 +3,8 @@ import type { Env } from '../types';
 import type { Card } from '../cards/types';
 import { createDeck, shuffle } from '../cards/deck';
 import { CosmeticsCache } from '../shared/cosmetics';
+import { checkLevelGrants } from '../shared/levelRewards';
+import { xpToLevel } from '../../src/lib/xp';
 
 // --- Constants ---
 
@@ -60,7 +62,8 @@ type ServerMessage =
   | { type: 'snap_result'; winnerId: string; winnerName: string; pileSize: number; wasValid: boolean }
   | { type: 'player_eliminated'; playerId: string; playerName: string }
   | { type: 'error'; message: string }
-  | { type: 'pong' };
+  | { type: 'pong' }
+  | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] };
 
 // Client -> Server message types
 interface ClientMessage {
@@ -869,6 +872,7 @@ export class SnapRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
+      const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
 
       if (this.gameSessionId) {
         stmts.push(
@@ -894,6 +898,9 @@ export class SnapRoom extends DurableObject<Env> {
 
         // XP: +50 for participating, +50 bonus for winning
         const xpGain = id === winnerId ? 100 : 50;
+        const { grants: snapGrants, stmts: grantStmts, newXp: snapNewXp } = await checkLevelGrants(db, id, xpGain);
+        if (snapGrants.length > 0) levelUpMap.set(id, { grants: snapGrants, newXp: snapNewXp, xpGain });
+        stmts.push(...grantStmts);
         stmts.push(
           db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
             .bind(xpGain, now, id)
@@ -944,6 +951,19 @@ export class SnapRoom extends DurableObject<Env> {
 
       if (stmts.length > 0) {
         await db.batch(stmts);
+      }
+
+      // Send level-up notifications to players who leveled up
+      for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
+        const oldLevel = xpToLevel(newXp - xpGain);
+        const newLevel = xpToLevel(newXp);
+        if (newLevel > oldLevel) {
+          this.sendTo(id, {
+            type: 'level_up',
+            newLevel,
+            rewards: grants.map(g => ({ name: g.name, type: g.type, tier: g.tier })),
+          });
+        }
       }
 
       // Night Owl badge: playing between midnight and 5am AEST (UTC+10)

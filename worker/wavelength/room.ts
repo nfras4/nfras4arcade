@@ -4,6 +4,8 @@ import type { BotPlayer } from '../bots/botPlayer';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { shuffleDeck, type SpectrumCard } from '../../src/lib/wavelength/cards';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
+import { checkLevelGrants } from '../shared/levelRewards';
+import { xpToLevel } from '../../src/lib/xp';
 
 // --- Constants ---
 
@@ -79,7 +81,8 @@ type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'pong' }
   | { type: 'chat_message'; playerId: string; name: string; text: string; timestamp: number }
-  | { type: 'player_chat_message'; playerId: string; name: string; text: string; timestamp: number };
+  | { type: 'player_chat_message'; playerId: string; name: string; text: string; timestamp: number }
+  | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] };
 
 // Client -> Server message types
 interface ClientMessage {
@@ -1142,6 +1145,7 @@ export class WavelengthRoom extends DurableObject<Env> {
             .bind(now, winnerId, this.gameSessionId)
         );
 
+        const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
         for (const [id, player] of this.players) {
           if (id.startsWith('guest_') || player.isBot) continue;
 
@@ -1160,6 +1164,9 @@ export class WavelengthRoom extends DurableObject<Env> {
 
           // XP: +50 for participating, +50 bonus for winning
           const xpGain = isWinner ? 100 : 50;
+          const { grants: wavelengthGrants, stmts: grantStmts, newXp: wavelengthNewXp } = await checkLevelGrants(db, id, xpGain);
+          if (wavelengthGrants.length > 0) levelUpMap.set(id, { grants: wavelengthGrants, newXp: wavelengthNewXp, xpGain });
+          stmts.push(...grantStmts);
           stmts.push(
             db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
               .bind(xpGain, now, id)
@@ -1180,6 +1187,19 @@ export class WavelengthRoom extends DurableObject<Env> {
       }
 
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Send level-up notifications to players who leveled up
+      for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
+        const oldLevel = xpToLevel(newXp - xpGain);
+        const newLevel = xpToLevel(newXp);
+        if (newLevel > oldLevel) {
+          this.sendTo(id, {
+            type: 'level_up',
+            newLevel,
+            rewards: grants.map(g => ({ name: g.name, type: g.type, tier: g.tier })),
+          });
+        }
+      }
 
       // Night Owl badge: playing between midnight and 5am AEST (UTC+10)
       const hour = new Date(now * 1000).getUTCHours();

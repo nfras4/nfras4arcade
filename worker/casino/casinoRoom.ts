@@ -2,6 +2,8 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
 import type { CasinoPlayer, CasinoPhase, CasinoGameState, CasinoAction, CasinoStoredState } from './types';
 import { CosmeticsCache } from '../shared/cosmetics';
+import { checkLevelGrants } from '../shared/levelRewards';
+import { xpToLevel } from '../../src/lib/xp';
 
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000;
@@ -551,6 +553,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
+      const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
 
       for (const [id, player] of this.players) {
         if (player.isGuest || id.startsWith('guest_')) continue;
@@ -569,6 +572,9 @@ export abstract class CasinoRoom extends DurableObject<Env> {
         }
 
         const xpGain = won ? 100 : 50;
+        const { grants: casinoGrants, stmts: grantStmts, newXp: casinoNewXp } = await checkLevelGrants(db, id, xpGain);
+        if (casinoGrants.length > 0) levelUpMap.set(id, { grants: casinoGrants, newXp: casinoNewXp, xpGain });
+        stmts.push(...grantStmts);
         stmts.push(
           db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
             .bind(xpGain, now, id)
@@ -581,6 +587,19 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       }
 
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Send level-up notifications to players who leveled up
+      for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
+        const oldLevel = xpToLevel(newXp - xpGain);
+        const newLevel = xpToLevel(newXp);
+        if (newLevel > oldLevel) {
+          this.sendTo(id, {
+            type: 'level_up',
+            newLevel,
+            rewards: grants.map(g => ({ name: g.name, type: g.type, tier: g.tier })),
+          });
+        }
+      }
 
       // Degenerate Gambler badge: 100+ casino games
       for (const [id, player] of this.players) {

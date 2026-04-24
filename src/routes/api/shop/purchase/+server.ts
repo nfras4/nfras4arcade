@@ -37,10 +37,15 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 			subcategory: string | null;
 			name: string;
 			price: number;
+			tier: 'shop' | 'hero' | 'minor';
 		}>();
 
 	if (!item) {
 		return json({ error: 'Item not found or unavailable' }, { status: 400 });
+	}
+
+	if (item.tier === 'hero') {
+		return json({ error: 'hero-cosmetics-not-purchasable' }, { status: 400 });
 	}
 
 	const profile = await db

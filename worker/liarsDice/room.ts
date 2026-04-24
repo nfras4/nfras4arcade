@@ -4,6 +4,8 @@ import { validateBid, countBidFace, nextInTurnOrder } from './logic';
 import { decideLiarsDiceAction } from '../bots/liarsDiceBot';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
+import { checkLevelGrants } from '../shared/levelRewards';
+import { xpToLevel } from '../../src/lib/xp';
 
 // --- Constants ---
 
@@ -81,7 +83,8 @@ type ServerMessage =
   | { type: 'joined'; playerId: string; state: ClientState; isSpectator?: boolean }
   | { type: 'state_update'; state: ClientState; isSpectator?: boolean }
   | { type: 'error'; message: string }
-  | { type: 'pong' };
+  | { type: 'pong' }
+  | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] };
 
 interface ClientState {
   code: string;
@@ -918,6 +921,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
+      const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
       for (const [id, p] of this.players) {
         if (p.isGuest || p.isBot || id.startsWith('guest_') || id.startsWith('bot_')) continue;
         stmts.push(
@@ -935,6 +939,9 @@ export class LiarsDiceRoom extends DurableObject<Env> {
           );
         }
         const xpGain = id === this.winnerId ? 100 : 50;
+        const { grants: liarsDiceGrants, stmts: grantStmts, newXp: liarsDiceNewXp } = await checkLevelGrants(db, id, xpGain);
+        if (liarsDiceGrants.length > 0) levelUpMap.set(id, { grants: liarsDiceGrants, newXp: liarsDiceNewXp, xpGain });
+        stmts.push(...grantStmts);
         stmts.push(
           db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?').bind(xpGain, now, id),
         );
@@ -951,6 +958,19 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         }
       }
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Send level-up notifications to players who leveled up
+      for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
+        const oldLevel = xpToLevel(newXp - xpGain);
+        const newLevel = xpToLevel(newXp);
+        if (newLevel > oldLevel) {
+          this.sendTo(id, {
+            type: 'level_up',
+            newLevel,
+            rewards: grants.map(g => ({ name: g.name, type: g.type, tier: g.tier })),
+          });
+        }
+      }
     } catch {
       // Don't block on D1 failure
     }

@@ -7,6 +7,8 @@ import type {
 } from '../../src/lib/types';
 import { getRandomWord, getRandomCategory, getCategories } from './words';
 import { CosmeticsCache } from '../shared/cosmetics';
+import { checkLevelGrants } from '../shared/levelRewards';
+import { xpToLevel } from '../../src/lib/xp';
 
 const MAX_MESSAGE_SIZE = 2048;
 const MAX_TEXT_LENGTH = 200;
@@ -987,6 +989,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
+      const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
 
       // End the game session
       if (this.gameSessionId) {
@@ -1018,6 +1021,9 @@ export class ImpostorRoom extends DurableObject<Env> {
 
         // XP: +50 for participating, +50 bonus for winning
         const xpGain = isWinner ? 100 : 50;
+        const { grants: impostorGrants, stmts: grantStmts, newXp: impostorNewXp } = await checkLevelGrants(db, id, xpGain);
+        if (impostorGrants.length > 0) levelUpMap.set(id, { grants: impostorGrants, newXp: impostorNewXp, xpGain });
+        stmts.push(...grantStmts);
         stmts.push(
           db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
             .bind(xpGain, now, id)
@@ -1096,6 +1102,19 @@ export class ImpostorRoom extends DurableObject<Env> {
 
       if (stmts.length > 0) {
         await db.batch(stmts);
+      }
+
+      // Send level-up notifications to players who leveled up
+      for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
+        const oldLevel = xpToLevel(newXp - xpGain);
+        const newLevel = xpToLevel(newXp);
+        if (newLevel > oldLevel) {
+          this.sendTo(id, {
+            type: 'level_up',
+            newLevel,
+            rewards: grants.map(g => ({ name: g.name, type: g.type, tier: g.tier })),
+          });
+        }
       }
     } catch {
       // D1 write failure should not block gameplay

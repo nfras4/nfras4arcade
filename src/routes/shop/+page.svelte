@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { currentUser, isLoggedIn } from '$lib/auth';
+  import { currentUser, isLoggedIn, userStats } from '$lib/auth';
 
   interface ShopItem {
     id: string;
@@ -12,6 +12,8 @@
     icon: string;
     metadata: string | null;
     is_active: number;
+    tier: 'shop' | 'hero' | 'minor';
+    level_requirement: number | null;
   }
 
   interface EquippedState {
@@ -47,6 +49,12 @@
   ];
 
   let visibleItems = $derived(items.filter(item => item.category === activeTab));
+  let shopItems = $derived(visibleItems.filter(item => item.tier === 'shop'));
+  let minorItems = $derived(visibleItems.filter(item => item.tier === 'minor').sort((a, b) => (a.level_requirement ?? 0) - (b.level_requirement ?? 0)));
+  let heroItems = $derived(visibleItems.filter(item => item.tier === 'hero').sort((a, b) => (a.level_requirement ?? 0) - (b.level_requirement ?? 0)));
+  let hasLevelRewards = $derived(minorItems.length > 0 || heroItems.length > 0);
+
+  let heroTooltip: string | null = $state(null);
 
   function itemIcon(item: ShopItem): string {
     try {
@@ -256,61 +264,160 @@
           <p>No items available in this category.</p>
         </div>
       {:else}
-        <div class="item-grid">
-          {#each visibleItems as item}
-            {@const itemOwned = isOwned(item.id)}
-            {@const itemEquipped = isEquipped(item)}
-            {@const buyable = canBuy(item)}
-            <div class="item-card card" class:owned={itemOwned}>
-              <div class="item-header">
-                <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
-                {#if itemOwned}
-                  <span class="owned-badge">Owned</span>
-                {/if}
-              </div>
-
-              <div class="item-body">
-                <h3 class="item-name">{item.name}</h3>
-                <p class="item-desc">{item.description}</p>
-                {#if item.subcategory}
-                  <span class="item-sub">{item.subcategory.replace('_', ' ')}</span>
-                {/if}
-              </div>
-
-              <div class="item-footer">
-                <span class="item-price">
-                  <svg class="price-icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-                    <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
-                    <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
-                  </svg>
-                  {item.price.toLocaleString()}
-                </span>
-
-                <div class="item-actions">
-                  {#if item.category === 'cosmetic' && itemOwned}
-                    <button
-                      class="equip-btn"
-                      class:equipped={itemEquipped}
-                      disabled={equipping === item.id}
-                      onclick={() => toggleEquip(item)}
-                    >
-                      {equipping === item.id ? '...' : itemEquipped ? 'Equipped' : 'Equip'}
-                    </button>
-                  {:else}
-                    <button
-                      class="buy-btn"
-                      disabled={!buyable || purchasing === item.id || !$isLoggedIn}
-                      onclick={() => { confirmItem = item; errorMsg = ''; }}
-                    >
-                      {purchasing === item.id ? 'Buying...' : 'Buy'}
-                    </button>
+        {#if shopItems.length > 0}
+          <div class="item-grid">
+            {#each shopItems as item}
+              {@const itemOwned = isOwned(item.id)}
+              {@const itemEquipped = isEquipped(item)}
+              {@const buyable = canBuy(item)}
+              <div class="item-card card" class:owned={itemOwned}>
+                <div class="item-header">
+                  <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
+                  {#if itemOwned}
+                    <span class="owned-badge">Owned</span>
                   {/if}
                 </div>
+
+                <div class="item-body">
+                  <h3 class="item-name">{item.name}</h3>
+                  <p class="item-desc">{item.description}</p>
+                  {#if item.subcategory}
+                    <span class="item-sub">{item.subcategory.replace('_', ' ')}</span>
+                  {/if}
+                </div>
+
+                <div class="item-footer">
+                  <span class="item-price">
+                    <svg class="price-icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                      <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                      <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+                    </svg>
+                    {item.price.toLocaleString()}
+                  </span>
+
+                  <div class="item-actions">
+                    {#if item.category === 'cosmetic' && itemOwned}
+                      <button
+                        class="equip-btn"
+                        class:equipped={itemEquipped}
+                        disabled={equipping === item.id}
+                        onclick={() => toggleEquip(item)}
+                      >
+                        {equipping === item.id ? '...' : itemEquipped ? 'Equipped' : 'Equip'}
+                      </button>
+                    {:else}
+                      <button
+                        class="buy-btn"
+                        disabled={!buyable || purchasing === item.id || !$isLoggedIn}
+                        onclick={() => { confirmItem = item; errorMsg = ''; }}
+                      >
+                        {purchasing === item.id ? 'Buying...' : 'Buy'}
+                      </button>
+                    {/if}
+                  </div>
+                </div>
               </div>
-            </div>
-          {/each}
-        </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if hasLevelRewards}
+          <div class="section-separator">
+            <span class="section-label">Level Rewards</span>
+          </div>
+
+          <div class="item-grid">
+            {#each [...minorItems, ...heroItems].sort((a, b) => (a.level_requirement ?? 0) - (b.level_requirement ?? 0)) as item}
+              {@const itemOwned = isOwned(item.id)}
+              {@const itemEquipped = isEquipped(item)}
+              {@const buyable = canBuy(item)}
+              {@const isHero = item.tier === 'hero'}
+              {@const isMinor = item.tier === 'minor'}
+              {@const playerLevel = $userStats?.level ?? 0}
+              {@const levelMet = playerLevel >= (item.level_requirement ?? 0)}
+              <div class="item-card card" class:owned={itemOwned} class:hero-card={isHero} class:minor-card={isMinor}>
+                <div class="item-header">
+                  <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
+                  <div class="badge-stack">
+                    {#if isHero}
+                      <span class="hero-badge">HERO</span>
+                    {/if}
+                    {#if itemOwned}
+                      <span class="owned-badge">Owned</span>
+                    {:else if isMinor && !levelMet}
+                      <span class="lock-badge" aria-label="Locked">&#128274;</span>
+                    {/if}
+                  </div>
+                </div>
+
+                <div class="item-body">
+                  <h3 class="item-name">{item.name}</h3>
+                  <p class="item-desc">{item.description}</p>
+                  {#if item.subcategory}
+                    <span class="item-sub">{item.subcategory.replace('_', ' ')}</span>
+                  {/if}
+                  {#if isHero}
+                    <span class="level-label hero-level">Earn at Lv {item.level_requirement}</span>
+                  {:else if isMinor}
+                    <span class="level-label minor-level">Unlocks at Lv {item.level_requirement} or buy for {item.price.toLocaleString()} chips</span>
+                  {/if}
+                </div>
+
+                <div class="item-footer">
+                  {#if isHero}
+                    <span class="item-price earn-only">Earn only</span>
+                  {:else}
+                    <span class="item-price">
+                      <svg class="price-icon" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+                      </svg>
+                      {item.price.toLocaleString()}
+                    </span>
+                  {/if}
+
+                  <div class="item-actions">
+                    {#if isHero}
+                      <div class="hero-btn-wrap">
+                        <button
+                          class="hero-locked-btn"
+                          aria-disabled="true"
+                          onclick={() => { heroTooltip = heroTooltip === item.id ? null : item.id; }}
+                        >
+                          Earn at Lv {item.level_requirement}
+                        </button>
+                        {#if heroTooltip === item.id}
+                          <div class="hero-tooltip" role="tooltip">
+                            Reward unlocked by reaching Level {item.level_requirement} — not for sale
+                          </div>
+                        {/if}
+                      </div>
+                    {:else if item.category === 'cosmetic' && itemOwned}
+                      <button
+                        class="equip-btn"
+                        class:equipped={itemEquipped}
+                        disabled={equipping === item.id}
+                        onclick={() => toggleEquip(item)}
+                      >
+                        {equipping === item.id ? '...' : itemEquipped ? 'Equipped' : 'Equip'}
+                      </button>
+                    {:else}
+                      <button
+                        class="buy-btn"
+                        disabled={!buyable || purchasing === item.id || !$isLoggedIn}
+                        onclick={() => { confirmItem = item; errorMsg = ''; }}
+                      >
+                        {purchasing === item.id ? 'Buying...' : 'Buy'}
+                      </button>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {/if}
     {/if}
 
@@ -790,4 +897,135 @@
 
   button:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* Section separator for Level Rewards */
+  .section-separator {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+  }
+
+  .section-separator::before,
+  .section-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--shop-gold-30);
+  }
+
+  .section-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--shop-gold);
+    white-space: nowrap;
+  }
+
+  /* Hero card */
+  .hero-card {
+    border-color: var(--shop-gold-30);
+    background: var(--shop-gold-03);
+  }
+
+  .hero-card:hover {
+    border-color: var(--shop-gold-40);
+  }
+
+  /* Minor card */
+  .minor-card {
+    border-color: var(--border);
+  }
+
+  /* Badge stack */
+  .badge-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+  }
+
+  /* HERO badge */
+  .hero-badge {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #1a1008;
+    background: var(--shop-gold);
+    padding: 0.15rem 0.4rem;
+    border-radius: 2px;
+  }
+
+  /* Lock badge */
+  .lock-badge {
+    font-size: 0.7rem;
+    opacity: 0.6;
+  }
+
+  /* Level labels */
+  .level-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1.4;
+    margin-top: 0.25rem;
+  }
+
+  .hero-level {
+    color: var(--shop-gold);
+  }
+
+  .minor-level {
+    color: var(--text-muted);
+  }
+
+  /* Earn-only price label */
+  .earn-only {
+    font-style: italic;
+    color: var(--shop-gold);
+    opacity: 0.7;
+  }
+
+  /* Hero locked button */
+  .hero-btn-wrap {
+    position: relative;
+  }
+
+  .hero-locked-btn {
+    padding: 0.35rem 0.65rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    border: 1px solid var(--shop-gold-30);
+    background: var(--shop-gold-06);
+    color: var(--shop-gold);
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Hero tooltip */
+  .hero-tooltip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    right: 0;
+    width: 180px;
+    padding: 0.5rem 0.625rem;
+    background: var(--bg-card, #1a1a1a);
+    border: 1px solid var(--shop-gold-30);
+    border-radius: 2px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.45;
+    z-index: 10;
+    animation: fadeUp 0.15s ease both;
+    pointer-events: none;
+  }
 </style>

@@ -4,6 +4,8 @@ import type { Card, CardPlayer, CardGamePhase, CardGameState, CardAction, CardRo
 import type { BotPlayer } from '../bots/botPlayer';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
+import { checkLevelGrants } from '../shared/levelRewards';
+import { xpToLevel } from '../../src/lib/xp';
 
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
@@ -695,6 +697,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
       const db = this.env.DB;
       const stmts: D1PreparedStatement[] = [];
+      const levelUpMap = new Map<string, { grants: Awaited<ReturnType<typeof checkLevelGrants>>['grants']; newXp: number; xpGain: number }>();
 
       if (this.gameSessionId) {
         stmts.push(
@@ -720,6 +723,9 @@ export abstract class CardRoom extends DurableObject<Env> {
 
         // XP: +50 for participating, +50 bonus for winning
         const xpGain = id === winnerId ? 100 : 50;
+        const { grants: cardsGrants, stmts: grantStmts, newXp: cardsNewXp } = await checkLevelGrants(db, id, xpGain);
+        if (cardsGrants.length > 0) levelUpMap.set(id, { grants: cardsGrants, newXp: cardsNewXp, xpGain });
+        stmts.push(...grantStmts);
         stmts.push(
           db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?')
             .bind(xpGain, now, id)
@@ -763,6 +769,19 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
 
       if (stmts.length > 0) await db.batch(stmts);
+
+      // Send level-up notifications to players who leveled up
+      for (const [id, { grants, newXp, xpGain }] of levelUpMap) {
+        const oldLevel = xpToLevel(newXp - xpGain);
+        const newLevel = xpToLevel(newXp);
+        if (newLevel > oldLevel) {
+          this.sendTo(id, {
+            type: 'level_up',
+            newLevel,
+            rewards: grants.map(g => ({ name: g.name, type: g.type, tier: g.tier })),
+          });
+        }
+      }
 
       // Post-batch badge checks (require queries, so run separately)
       await this.checkPostGameBadges(winnerId, now);

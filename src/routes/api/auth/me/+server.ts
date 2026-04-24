@@ -37,6 +37,41 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
       .bind(locals.user.id)
       .first<{ games_played: number; games_won: number; chips: number; xp: number }>();
 
+    // Retroactive reconciliation: grant any level-reward cosmetics the player
+    // should own but doesn't. Steady-state cost: one SELECT returning 0 rows (~2ms).
+    // First-time cost for a high-level player: one SELECT + one batch insert (~10-20ms).
+    if (profile) {
+      const currentLevel = xpToLevel(profile.xp ?? 0);
+      const playerId = locals.user.id;
+      const missing = await db
+        .prepare(
+          `SELECT id
+           FROM shop_items
+           WHERE tier IN ('hero','minor')
+             AND level_requirement IS NOT NULL
+             AND level_requirement <= ?
+             AND id NOT IN (
+               SELECT item_id FROM player_inventory WHERE player_id = ?
+             )`
+        )
+        .bind(currentLevel, playerId)
+        .all<{ id: string }>();
+
+      if ((missing.results ?? []).length > 0) {
+        const now = Math.floor(Date.now() / 1000);
+        const insertStmts = (missing.results ?? []).map((row: { id: string }) =>
+          db
+            .prepare(
+              `INSERT INTO player_inventory (id, player_id, item_id, quantity, purchased_at)
+               VALUES (?, ?, ?, 1, ?)
+               ON CONFLICT(player_id, item_id) DO NOTHING`
+            )
+            .bind(crypto.randomUUID(), playerId, row.id, now)
+        );
+        await db.batch(insertStmts);
+      }
+    }
+
     // Fetch equipped name colour, card back, and table felt in one query
     const equippedRow = await db
       .prepare(

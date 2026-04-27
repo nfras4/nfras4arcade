@@ -215,6 +215,10 @@
   {@render children()}
 </main>
 
+{#if !roomCode}
+  <a href="/about" class="corner-about" title="About this project">About</a>
+{/if}
+
 
 <style>
   .top-nav {
@@ -571,5 +575,37 @@
   }
   .skip-link:focus {
     top: 0;
+  }
+
+  .corner-about {
+    position: fixed;
+    left: max(1rem, env(safe-area-inset-left));
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    z-index: 40;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+
+  .corner-about:hover {
+    color: var(--accent);
+    border-color: var(--accent-border);
+    background: var(--accent-faint);
+  }
+
+  @media (max-width: 480px) {
+    .corner-about {
+      font-size: 0.6rem;
+      padding: 0.4rem 0.6rem;
+    }
   }
 </style>

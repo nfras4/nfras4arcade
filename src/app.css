@@ -120,25 +120,32 @@ body::before {
   inset: 0;
   background-image: var(--bg-pattern);
   background-size: 400px 400px;
-  opacity: 0.6;
+  opacity: 0.28;
   pointer-events: none;
   z-index: 0;
 }
 
 [data-theme="light"] body::before {
-  opacity: 0.9;
+  opacity: 0.5;
 }
 
-/* Subtle radial gradient overlay */
+/* Readability overlay: tints the pattern toward bg colour so text on
+   transparent containers stays legible without hiding the pattern. */
 body::after {
   content: '';
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 70% 60% at 50% 30%, rgba(0, 0, 0, 0.04) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(0, 0, 0, 0.03) 0%, transparent 60%);
+    linear-gradient(180deg, rgba(12, 14, 16, 0.35) 0%, rgba(12, 14, 16, 0.55) 100%),
+    radial-gradient(ellipse 70% 60% at 50% 30%, rgba(0, 0, 0, 0.04) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
+}
+
+[data-theme="light"] body::after {
+  background:
+    linear-gradient(180deg, rgba(240, 243, 248, 0.35) 0%, rgba(240, 243, 248, 0.55) 100%),
+    radial-gradient(ellipse 70% 60% at 50% 30%, rgba(0, 0, 0, 0.02) 0%, transparent 70%);
 }
 
 /* ─── Buttons ─────────────────────────────────────────── */

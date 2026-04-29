@@ -6,6 +6,20 @@ export interface PlatformerInput {
   seq: number;
 }
 
+export type PowerupKind = 'speed' | 'damage' | 'triple_jump';
+
+export interface Powerup {
+  id: string;
+  kind: PowerupKind;
+  x: number;
+  y: number;
+}
+
+export interface PlayerEffect {
+  kind: PowerupKind;
+  expiresAt: number; // epoch ms
+}
+
 export interface PlatformerPlayer {
   id: string;
   name: string;
@@ -27,6 +41,7 @@ export interface PlatformerPlayer {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  effects?: PlayerEffect[];
 }
 
 export type PlatformerPhase = 'lobby' | 'playing' | 'round_over' | 'game_over';
@@ -41,6 +56,11 @@ export interface PlatformerSnapshot {
   hostId: string;
   code: string;
   scores?: Record<string, number>;
+  mapId?: string;
+  platforms?: MapPlatform[];
+  powerups?: Powerup[];
+  votes?: Record<string, number>;
+  bots?: string[];
 }
 
 export interface MapPlatform {

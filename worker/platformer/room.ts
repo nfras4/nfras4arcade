@@ -8,8 +8,16 @@ import {
   newPlayer, emptyInput, respawnPosition,
   RESPAWN_MS, MAX_JUMPS,
 } from './physics';
+import { MAPS, MAP_IDS, DEFAULT_MAP_ID, getMap } from './maps';
+import {
+  spawnPowerup, playerHits, applyEffect, decayEffects, hasEffect,
+  POWERUP_SPAWN_INTERVAL_MS, MAX_ACTIVE_POWERUPS,
+  SPEED_MULTIPLIER, DAMAGE_MULTIPLIER, TRIPLE_JUMP_COUNT,
+} from './powerups';
+import { decidePlatformerInput } from '../bots/platformerBot';
 import type {
   PlatformerInput, PlatformerPlayer, PlatformerSnapshot, PlatformerPhase, MapDef,
+  Powerup, PowerupKind,
 } from './types';
 
 const MAX_MESSAGE_SIZE = 2048;
@@ -36,6 +44,13 @@ interface PersistedRoom {
   roundWinnerId: string | null;
   matchWinnerId: string | null;
   lastActivity: number;
+  mapId: string;
+  mapVotes: [string, string][];
+  bots: string[];
+  powerups: Powerup[];
+  nextPowerupSpawn: number;
+  powerupSeed: number;
+  disconnectTimestamps: [string, number][];
 }
 
 type ServerMessage =
@@ -75,7 +90,14 @@ export class PlatformerRoom extends DurableObject<Env> {
   private rateLimits = new Map<string, number[]>();
   private disconnectTimestamps = new Map<string, number>();
   private cosmeticsCache = new CosmeticsCache();
-  private map: MapDef = defaultMap();
+  private mapId: string = DEFAULT_MAP_ID;
+  private mapVotes = new Map<string, string>(); // playerId -> mapId
+  private bots = new Set<string>();
+  private powerups: Powerup[] = [];
+  private nextPowerupSpawn = 0;
+  private powerupSeed = 1;
+
+  private get map(): MapDef { return getMap(this.mapId); }
 
   private async loadState(): Promise<void> {
     if (this.initialized) return;
@@ -94,6 +116,13 @@ export class PlatformerRoom extends DurableObject<Env> {
       this.roundWinnerId = stored.roundWinnerId;
       this.matchWinnerId = stored.matchWinnerId;
       this.lastActivity = stored.lastActivity;
+      this.mapId = stored.mapId ?? DEFAULT_MAP_ID;
+      this.mapVotes = new Map(stored.mapVotes ?? []);
+      this.bots = new Set(stored.bots ?? []);
+      this.powerups = stored.powerups ?? [];
+      this.nextPowerupSpawn = stored.nextPowerupSpawn ?? 0;
+      this.powerupSeed = stored.powerupSeed ?? 1;
+      this.disconnectTimestamps = new Map(stored.disconnectTimestamps ?? []);
 
       const live = new Set<string>();
       for (const ws of this.ctx.getWebSockets()) {
@@ -120,6 +149,13 @@ export class PlatformerRoom extends DurableObject<Env> {
       roundWinnerId: this.roundWinnerId,
       matchWinnerId: this.matchWinnerId,
       lastActivity: this.lastActivity,
+      mapId: this.mapId,
+      mapVotes: Array.from(this.mapVotes.entries()),
+      bots: Array.from(this.bots),
+      powerups: this.powerups,
+      nextPowerupSpawn: this.nextPowerupSpawn,
+      powerupSeed: this.powerupSeed,
+      disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
     };
     try {
       await this.ctx.storage.put('room', data);
@@ -258,6 +294,29 @@ export class PlatformerRoom extends DurableObject<Env> {
       const dt = Math.min(150, now - last);
       this.lastTickAt = now;
       this.simulateStep(dt);
+
+      // Spawn powerups
+      if (now >= this.nextPowerupSpawn && this.powerups.length < MAX_ACTIVE_POWERUPS) {
+        const seed = this.powerupSeed++;
+        const newPu = spawnPowerup(this.map, this.powerups, seed);
+        if (newPu) this.powerups.push(newPu);
+        this.nextPowerupSpawn = now + POWERUP_SPAWN_INTERVAL_MS;
+      }
+      // Powerup collision
+      if (this.powerups.length > 0) {
+        for (const [id, p] of this.players) {
+          if (p.lives <= 0 || p.respawnMs > 0) continue;
+          for (let i = this.powerups.length - 1; i >= 0; i--) {
+            const pu = this.powerups[i];
+            if (playerHits(p, pu)) {
+              this.players.set(id, applyEffect(p, pu.kind, now));
+              this.powerups.splice(i, 1);
+              break;
+            }
+          }
+        }
+      }
+
       this.broadcastSnapshot();
       this.checkRoundOver();
     }
@@ -342,6 +401,7 @@ export class PlatformerRoom extends DurableObject<Env> {
   }
 
   private handleDisconnect(playerId: string): void {
+    if (this.bots.has(playerId)) return;
     const p = this.players.get(playerId);
     if (!p) return;
     this.cosmeticsCache.invalidate(playerId);
@@ -389,15 +449,49 @@ export class PlatformerRoom extends DurableObject<Env> {
         this.inputs.set(playerId, next);
         break;
       }
+      case 'vote_map': {
+        if (this.phase !== 'lobby') break;
+        if (this.bots.has(playerId)) break;
+        const mapId = typeof msg.mapId === 'string' ? msg.mapId : null;
+        if (!mapId || !MAP_IDS.includes(mapId)) break;
+        this.mapVotes.set(playerId, mapId);
+        this.broadcastSnapshot();
+        break;
+      }
       case 'start_game': {
         if (playerId !== this.hostId) {
           this.sendTo(playerId, { type: 'error', message: 'Only the host can start the game' });
           break;
         }
+        // Add bots requested by host (max total players = 4)
+        const requestedBots = typeof msg.bots === 'number' ? Math.max(0, Math.min(3, msg.bots)) : 0;
+        if (requestedBots > 0) {
+          const slotsLeft = 4 - this.players.size;
+          const toAdd = Math.min(requestedBots, slotsLeft);
+          for (let i = 0; i < toAdd; i++) {
+            const botId = `bot_${crypto.randomUUID().slice(0, 8)}_${i}`;
+            const idx = this.players.size;
+            const spawn = respawnPosition(this.map, idx);
+            const bp = newPlayer(botId, `Bot ${i + 1}`, spawn, true);
+            bp.invulnMs = 0;
+            this.players.set(botId, bp);
+            this.scores.set(botId, 0);
+            this.inputs.set(botId, emptyInput(0));
+            this.prevInputs.set(botId, emptyInput(0));
+            this.bots.add(botId);
+          }
+        }
         if (this.players.size < 2) {
           this.sendTo(playerId, { type: 'error', message: 'Need at least 2 players' });
           break;
         }
+        // Pick map by votes (tie -> default)
+        const tally = new Map<string, number>();
+        for (const v of this.mapVotes.values()) tally.set(v, (tally.get(v) ?? 0) + 1);
+        let bestId = DEFAULT_MAP_ID;
+        let bestCount = -1;
+        for (const [id, c] of tally) if (c > bestCount) { bestCount = c; bestId = id; }
+        this.mapId = bestId;
         this.startMatch();
         await this.scheduleAlarm();
         this.broadcastSnapshot();
@@ -431,6 +525,15 @@ export class PlatformerRoom extends DurableObject<Env> {
 
   private resetMatch(): void {
     this.phase = 'lobby';
+    // Remove bot players
+    for (const botId of this.bots) {
+      this.players.delete(botId);
+      this.scores.delete(botId);
+      this.inputs.delete(botId);
+      this.prevInputs.delete(botId);
+    }
+    this.bots.clear();
+    this.mapVotes.clear();
     for (const id of this.players.keys()) this.scores.set(id, 0);
     this.roundWinnerId = null;
     this.matchWinnerId = null;
@@ -457,17 +560,47 @@ export class PlatformerRoom extends DurableObject<Env> {
       this.inputs.set(id, emptyInput(0));
       this.prevInputs.set(id, emptyInput(0));
     }
+    // Reset powerups and effects
+    this.powerups = [];
+    this.nextPowerupSpawn = Date.now() + POWERUP_SPAWN_INTERVAL_MS;
+    for (const id of this.players.keys()) {
+      const p = this.players.get(id)!;
+      p.effects = [];
+    }
   }
 
   private simulateStep(dtMs: number): void {
     this.tick += 1;
     const stepDt = Math.min(dtMs, 100);
+    const now = Date.now();
 
     for (const [id, p] of this.players) {
-      if (!p.connected || p.lives <= 0) continue;
+      if (p.lives <= 0) continue;
+      // Bots: generate input before stepping
+      if (this.bots.has(id)) {
+        const opponents = Array.from(this.players.values()).filter(op => op.id !== id);
+        const botInput = decidePlatformerInput(p, opponents, this.map, this.prevInputs.get(id) ?? emptyInput(0));
+        this.inputs.set(id, botInput);
+      } else if (!p.connected) {
+        continue;
+      }
       const input = this.inputs.get(id) ?? emptyInput(0);
       const prev = this.prevInputs.get(id) ?? emptyInput(0);
-      const next = stepPlayer(p, input, prev, stepDt, this.map);
+      let next = stepPlayer(p, input, prev, stepDt, this.map);
+
+      // Speed effect: extra horizontal distance
+      if (hasEffect(next, 'speed') && Math.abs(next.vx) > 0) {
+        next = { ...next, x: next.x + next.vx * (stepDt / 1000) * (SPEED_MULTIPLIER - 1) };
+      }
+
+      // Triple jump: restore jumpsRemaining when landing
+      if (hasEffect(next, 'triple_jump') && next.onGround) {
+        next = { ...next, jumpsRemaining: TRIPLE_JUMP_COUNT };
+      }
+
+      // Decay timed effects
+      next = decayEffects(next, now);
+
       this.players.set(id, next);
       this.prevInputs.set(id, input);
     }
@@ -483,7 +616,9 @@ export class PlatformerRoom extends DurableObject<Env> {
         for (const hit of result.hits) {
           const def = this.players.get(hit.id);
           if (!def) continue;
-          this.players.set(hit.id, applyKnockback(def, hit.knockbackX, hit.knockbackY));
+          const kx = hasEffect(attacker, 'damage') ? hit.knockbackX * DAMAGE_MULTIPLIER : hit.knockbackX;
+          const ky = hit.knockbackY;
+          this.players.set(hit.id, applyKnockback(def, kx, ky));
         }
       }
     }
@@ -562,7 +697,7 @@ export class PlatformerRoom extends DurableObject<Env> {
       const now = Math.floor(Date.now() / 1000);
 
       for (const [id, p] of this.players) {
-        if (p.isGuest || id.startsWith('guest_')) continue;
+        if (p.isGuest || id.startsWith('guest_') || id.startsWith('bot_')) continue;
         const xpGain = id === winnerId ? 100 : 50;
         const { grants, stmts: gstmts, newXp } = await checkLevelGrants(db, id, xpGain);
         xpGainedMap.set(id, { xpGain, newXp });
@@ -602,6 +737,11 @@ export class PlatformerRoom extends DurableObject<Env> {
   private snapshot(): PlatformerSnapshot {
     const scoresObj: Record<string, number> = {};
     for (const [id, s] of this.scores) scoresObj[id] = s;
+    // Tally map votes
+    const votesTally: Record<string, number> = {};
+    for (const v of this.mapVotes.values()) {
+      votesTally[v] = (votesTally[v] ?? 0) + 1;
+    }
     return {
       tick: this.tick,
       phase: this.phase,
@@ -612,6 +752,11 @@ export class PlatformerRoom extends DurableObject<Env> {
       hostId: this.hostId,
       code: this.code,
       scores: scoresObj,
+      mapId: this.mapId,
+      platforms: this.map.platforms,
+      powerups: [...this.powerups],
+      votes: votesTally,
+      bots: [...this.bots],
     };
   }
 

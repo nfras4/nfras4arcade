@@ -83,7 +83,7 @@
       maxPlayers: 4,
       type: 'experimental',
       route: '/platformer',
-      soloAction: 'tutorial' as const,
+      soloAction: 'solo' as const,
     },
   ];
 

@@ -3,6 +3,11 @@
   import { page } from '$app/stores';
   import { isLoggedIn } from '$lib/auth';
   import { getGuestId } from '$lib/guest';
+  import { playJump, playDoubleJump, playHit, playDeath, playVictory, playPowerup, setMuted, isMuted } from '$lib/platformer/audio';
+
+  let muted = $state(true);
+
+  interface Powerup { id: string; kind: 'speed' | 'damage' | 'triple_jump'; x: number; y: number; }
 
   interface PlatformerPlayer {
     id: string;
@@ -20,6 +25,7 @@
     connected: boolean;
     isGuest: boolean;
     nameColour?: string | null;
+    effects?: { kind: 'speed' | 'damage' | 'triple_jump'; expiresAt: number }[];
   }
 
   interface Snapshot {
@@ -32,6 +38,11 @@
     hostId: string;
     code: string;
     scores?: Record<string, number>;
+    mapId?: string;
+    platforms?: { x: number; y: number; w: number; h: number }[];
+    powerups?: Powerup[];
+    votes?: Record<string, number>;
+    bots?: string[];
   }
 
   const code = $derived($page.params.code?.toUpperCase() ?? '');
@@ -41,6 +52,7 @@
   let error: string | null = $state(null);
   let canvas: HTMLCanvasElement | null = $state(null);
   let isCoarsePointer = $state(false);
+  let selectedBots = $state(0);
 
   const MAP_W = 800;
   const MAP_H = 480;
@@ -54,6 +66,7 @@
   const PLAYER_H = 56;
   const ATTACK_RANGE = 56;
   const ATTACK_HEIGHT = 44;
+  const POWERUP_SIZE = 24;
 
   let ws: WebSocket | null = null;
   let inputState = { left: false, right: false, jump: false, attack: false };
@@ -154,12 +167,31 @@
     ctx.fillStyle = '#161c25';
     ctx.fillRect(0, 0, MAP_W, MAP_H);
 
+    const platforms = snapshot.platforms ?? PLATFORMS;
     ctx.fillStyle = '#3a4658';
-    for (const plat of PLATFORMS) {
+    for (const plat of platforms) {
       ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
       ctx.fillStyle = '#566377';
       ctx.fillRect(plat.x, plat.y, plat.w, 3);
       ctx.fillStyle = '#3a4658';
+    }
+
+    if (snapshot.powerups && snapshot.powerups.length > 0) {
+      for (const pu of snapshot.powerups) {
+        let color = '#6fdcff';
+        if (pu.kind === 'damage') color = '#ff7070';
+        else if (pu.kind === 'triple_jump') color = '#a8e36e';
+        ctx.fillStyle = color;
+        ctx.fillRect(pu.x, pu.y, POWERUP_SIZE, POWERUP_SIZE);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(pu.x, pu.y, POWERUP_SIZE, POWERUP_SIZE);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Rajdhani, sans-serif';
+        ctx.textAlign = 'center';
+        const label = pu.kind === 'speed' ? 'S' : pu.kind === 'damage' ? 'D' : 'J';
+        ctx.fillText(label, pu.x + POWERUP_SIZE / 2, pu.y + POWERUP_SIZE / 2 + 4);
+      }
     }
 
     for (const p of snapshot.players) {
@@ -197,6 +229,20 @@
       ctx.fillText(p.name, p.x + PLAYER_W / 2, p.y - 18);
       ctx.fillStyle = '#ff5050';
       ctx.fillText('♥'.repeat(Math.max(0, p.lives)), p.x + PLAYER_W / 2, p.y - 4);
+
+      if (p.effects && p.effects.length > 0) {
+        let ex = p.x + PLAYER_W / 2 - (p.effects.length * 6);
+        for (const eff of p.effects) {
+          let ec = '#6fdcff';
+          if (eff.kind === 'damage') ec = '#ff7070';
+          else if (eff.kind === 'triple_jump') ec = '#a8e36e';
+          ctx.fillStyle = ec;
+          ctx.beginPath();
+          ctx.arc(ex + 4, p.y - 28, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ex += 12;
+        }
+      }
     }
 
     ctx.restore();
@@ -227,7 +273,25 @@
         myId = msg.playerId as string;
         snapshot = msg.snapshot as Snapshot;
       } else if (msg.type === 'snapshot') {
-        snapshot = msg.snapshot as Snapshot;
+        const next = msg.snapshot as Snapshot;
+        if (snapshot && next.phase === 'playing') {
+          for (const np of next.players) {
+            const op = snapshot.players.find(x => x.id === np.id);
+            if (!op) continue;
+            if (op.jumpsRemaining > np.jumpsRemaining) {
+              if (np.jumpsRemaining === 0 || (op.jumpsRemaining === 2 && np.jumpsRemaining === 1)) {
+                if (np.jumpsRemaining === 0) playDoubleJump(); else playJump();
+              }
+            }
+            if (op.invulnMs === 0 && np.invulnMs > 0 && np.respawnMs === 0) playHit();
+            if (op.lives > np.lives) playDeath();
+          }
+          const wasCount = snapshot.powerups?.length ?? 0;
+          const nowCount = next.powerups?.length ?? 0;
+          if (wasCount > nowCount) playPowerup();
+        }
+        if (snapshot && !snapshot.matchWinnerId && next.matchWinnerId) playVictory();
+        snapshot = next;
       } else if (msg.type === 'error') {
         error = msg.message as string;
       } else if (msg.type === 'xp_gained') {
@@ -243,6 +307,7 @@
   }
 
   $effect(() => {
+    setMuted(true);
     isCoarsePointer = matchMedia('(pointer: coarse)').matches || window.innerWidth < 700;
     window.addEventListener('keydown', handleKeydown);
     window.addEventListener('keyup', handleKeyup);
@@ -297,9 +362,33 @@
               <li>{p.name}{p.id === snapshot.hostId ? ' (host)' : ''}</li>
             {/each}
           </ul>
+          <div class="map-vote">
+            <p class="overlay-text">Vote map (winner takes it):</p>
+            <div class="map-grid">
+              {#each ['default','towers','pillars','floating'] as mapId}
+                <button
+                  class="map-btn"
+                  class:selected={snapshot.votes?.[mapId] !== undefined && snapshot.votes[mapId] > 0}
+                  onclick={() => send({ type: 'vote_map', mapId })}
+                >
+                  <span class="map-name">{mapId}</span>
+                  <span class="map-votes">{snapshot.votes?.[mapId] ?? 0}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
           {#if isHost}
-            <button class="btn-primary" onclick={() => send({ type: 'start_game' })} disabled={snapshot.players.length < 2}>
-              {snapshot.players.length < 2 ? 'Need 2+ players' : 'Start Game'}
+            <div class="bot-row">
+              <label class="bot-label">Bots:</label>
+              <select bind:value={selectedBots} class="bot-select">
+                <option value={0}>0</option>
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+            </div>
+            <button class="btn-primary" onclick={() => send({ type: 'start_game', bots: selectedBots })} disabled={snapshot.players.length + selectedBots < 2}>
+              {snapshot.players.length + selectedBots < 2 ? 'Need 2+ players' : 'Start Game'}
             </button>
           {:else}
             <p class="overlay-text">Waiting for host to start...</p>
@@ -342,6 +431,9 @@
         {#if me}
           <span class="hud-lives">Your lives: {me.lives}</span>
         {/if}
+        <button class="sound-btn" onclick={() => { muted = !muted; setMuted(muted); }} aria-label="Toggle sound">
+          {muted ? '🔇' : '🔊'}
+        </button>
       </div>
     {/if}
   </div>
@@ -482,6 +574,7 @@
     transform: translateX(-50%);
     display: flex;
     gap: 1.5rem;
+    align-items: center;
     background: rgba(0, 0, 0, 0.6);
     padding: 0.4rem 1rem;
     border: 1px solid var(--border);
@@ -491,6 +584,14 @@
     letter-spacing: 0.12em;
   }
   .hud-time { color: #f0c030; font-weight: 700; }
+  .sound-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0 0.25rem;
+    line-height: 1;
+  }
   .error-toast {
     position: absolute;
     top: 3rem;
@@ -502,6 +603,64 @@
     padding: 0.5rem 1rem;
     z-index: 20;
     font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .map-vote { display: flex; flex-direction: column; gap: 0.5rem; }
+  .map-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+  }
+  .map-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.4rem 0.6rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    min-width: 64px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .map-btn:hover { border-color: var(--accent); color: var(--text); }
+  .map-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(76, 200, 255, 0.08); }
+  .map-name { font-weight: 700; }
+  .map-votes {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    background: var(--border);
+    border-radius: 8px;
+    padding: 0 0.3rem;
+    min-width: 1rem;
+    text-align: center;
+  }
+  .bot-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .bot-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .bot-select {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    padding: 0.2rem 0.4rem;
     cursor: pointer;
   }
   .touch-controls {

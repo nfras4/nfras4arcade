@@ -12,7 +12,9 @@
   import PlayerSeat from '$lib/components/cards/PlayerSeat.svelte';
   import CommunityCards from '$lib/components/cards/CommunityCards.svelte';
   import BetControls from '$lib/components/poker/BetControls.svelte';
+  import HoleCards from '$lib/components/poker/HoleCards.svelte';
   import BetPanel from '$lib/components/BetPanel.svelte';
+  import { detectInputMode } from '$lib/utils/inputMode';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/poker');
@@ -27,6 +29,15 @@
   let gameMode: 'casual' | 'competitive' = $state('casual');
   let casualChipCount = $state(1000);
   let errorTimeout: ReturnType<typeof setTimeout>;
+
+  // HoleCards integration: muck-target ref, armed-state mirror, input mode.
+  let muckTargetRef = $state<HTMLElement | undefined>(undefined);
+  let isArmed = $state(false);
+  let inputMode = $state<'touch' | 'pointer'>('touch');
+
+  $effect(() => {
+    inputMode = detectInputMode();
+  });
 
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
@@ -366,26 +377,28 @@
           {/if}
         </div>
 
-        <!-- Community Cards -->
-        <CommunityCards cards={communityCards} {bettingRound} />
+        <!-- Community Cards (wrapped: serves as muck target for HoleCards throw arc) -->
+        <div bind:this={muckTargetRef}>
+          <CommunityCards cards={communityCards} {bettingRound} />
 
-        <!-- Pot display -->
-        {#if totalPot > 0}
-          <div class="pot-display">
-            {#if pots.length <= 1}
-              <span class="pot-total geo-title">Pot: {totalPot}</span>
-            {:else}
-              {#each pots as pot, i}
-                <span class="pot-item geo-title">
-                  {i === 0 ? 'Main Pot' : `Side Pot ${i}`}: {pot.amount}
-                </span>
-              {/each}
-              {#if Object.values(playerBets).some((b) => b > 0)}
-                <span class="pot-item geo-title pot-bets">Current bets: {Object.values(playerBets).reduce((s, b) => s + b, 0)}</span>
+          <!-- Pot display -->
+          {#if totalPot > 0}
+            <div class="pot-display">
+              {#if pots.length <= 1}
+                <span class="pot-total geo-title">Pot: {totalPot}</span>
+              {:else}
+                {#each pots as pot, i}
+                  <span class="pot-item geo-title">
+                    {i === 0 ? 'Main Pot' : `Side Pot ${i}`}: {pot.amount}
+                  </span>
+                {/each}
+                {#if Object.values(playerBets).some((b) => b > 0)}
+                  <span class="pot-item geo-title pot-bets">Current bets: {Object.values(playerBets).reduce((s, b) => s + b, 0)}</span>
+                {/if}
               {/if}
-            {/if}
-          </div>
-        {/if}
+            </div>
+          {/if}
+        </div>
 
         <!-- Player ring -->
         <div class="player-bar">
@@ -421,21 +434,24 @@
           </div>
         {/if}
 
-        <!-- My hand -->
+        <!-- My hand: hand-name label only; hole cards rendered by HoleCards (fixed-position) -->
         <div class="hand-area">
-          <div class="hand-label geo-title">Your Hand</div>
-          <div class="hole-cards" class:dimmed={amIFolded}>
-            {#each myHand as card, i}
-              <Card {card} faceUp={true} dealDelay={i * 150} />
-            {/each}
-            {#if myHand.length === 0}
-              <span class="no-cards">No cards dealt</span>
-            {/if}
-          </div>
           {#if myHandName}
             <div class="hand-name">{myHandName}</div>
           {/if}
         </div>
+
+        <HoleCards
+          cards={myHand}
+          isPlayerTurn={isMyTurn}
+          gameState={amIFolded ? 'folded' : (bettingRound === 'showdown' ? 'showdown' : (myHand.length === 0 ? 'pre-deal' : 'in-hand'))}
+          {inputMode}
+          muckTarget={muckTargetRef ? { kind: 'element', ref: muckTargetRef } : { kind: 'offscreen-top' }}
+          onaction={sendAction}
+          onpeek={() => { /* optional telemetry */ }}
+          onflip={() => { /* optional telemetry */ }}
+          onarmedchange={(armed) => isArmed = armed}
+        />
 
         <!-- Showdown: reveal opponent hands -->
         {#if bettingRound === 'showdown' && playerHands}
@@ -480,15 +496,17 @@
 
         <!-- Bet controls -->
         {#if isMyTurn && !amIFolded && bettingRound !== 'showdown'}
-          <BetControls
-            {canCheck}
-            {callAmount}
-            {minRaise}
-            {maxRaise}
-            playerChips={myChips}
-            disabled={false}
-            onaction={sendAction}
-          />
+          <div class:armed-dimmed={isArmed}>
+            <BetControls
+              {canCheck}
+              {callAmount}
+              {minRaise}
+              {maxRaise}
+              playerChips={myChips}
+              disabled={false}
+              onaction={sendAction}
+            />
+          </div>
         {/if}
       </div>
 
@@ -519,6 +537,13 @@
     align-items: center;
     padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
     background-color: var(--table-felt-bg, transparent);
+    overscroll-behavior: contain;
+  }
+
+  .armed-dimmed {
+    opacity: 0.3;
+    pointer-events: none;
+    transition: opacity 120ms ease-out;
   }
 
   .loading {
@@ -731,24 +756,6 @@
     gap: 0.5rem;
   }
 
-  .hand-label {
-    font-size: 0.85rem;
-    letter-spacing: 0.14em;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
-  .hole-cards {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    transition: opacity 0.2s;
-  }
-
-  .hole-cards.dimmed {
-    opacity: 0.3;
-  }
-
   .hand-name {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.85rem;
@@ -757,13 +764,6 @@
     color: var(--accent);
     text-align: center;
     margin-top: 0.25rem;
-  }
-
-  .no-cards {
-    font-size: 0.875rem;
-    color: var(--text-subtle);
-    font-style: italic;
-    padding: 1rem 0;
   }
 
   /* Showdown hands */
@@ -945,10 +945,6 @@
     .result-row {
       gap: 0.5rem;
       padding: 0.6rem 0.75rem;
-    }
-
-    .hole-cards {
-      gap: 0.375rem;
     }
   }
 

@@ -143,9 +143,13 @@
   let innerRefs = $state<(HTMLElement | undefined)[]>([undefined, undefined]);
 
   // ─── Visibility ──────────────────────────────────────────────────────
+  // HOTFIX2 FIX 6: exclude 'showdown' from showCards. Otherwise the fixed
+  // hole cards continue to render at the bottom during showdown and overlap
+  // the .showdown-hands opponent reveal block.
   let showCards = $derived(
     gameState !== 'pre-deal' &&
     gameState !== 'folded' &&
+    gameState !== 'showdown' &&
     !committed &&
     cards.length === 2,
   );
@@ -513,12 +517,25 @@
   // the same element/properties. Calling commitStyles() writes the computed
   // values into inline style, then cancel() releases the animation's hold so
   // CSS transitions can apply normally on the next frame.
+  // HOTFIX2 FIX 3: commitStyles() leaks computed transform/opacity (e.g.
+  // `transform: translate(...) rotate(...); opacity: 0`) into inline style.
+  // If the {#each} block reuses the same DOM nodes across rounds, the next
+  // round's cards are invisible. After cancel(), explicitly clear the
+  // properties the keyframes wrote.
   function finalizeAnim(a: Animation) {
     liveAnimations.delete(a);
     try { a.commitStyles(); } catch { /* node may be detached */ }
     if (a.playState !== 'idle') {
       try { a.cancel(); } catch { /* noop */ }
     }
+    try {
+      const target = a.effect && 'target' in a.effect ? (a.effect as KeyframeEffect).target : null;
+      const el = target as HTMLElement | null;
+      if (el && el.style) {
+        el.style.removeProperty('transform');
+        el.style.removeProperty('opacity');
+      }
+    } catch { /* effect.target access may differ across browsers; element may be detached */ }
   }
 
   // ─── Per-card transform style (rest / lift / hover) ──────────────────
@@ -529,11 +546,42 @@
     const rot = base * unfan;
     return `translateY(${-lift}px) rotate(${rot}deg)`;
   }
+
+  // ─── HOTFIX2 FIX 4: dynamic aria-label so screen readers can distinguish
+  //     each hole card. Card.svelte uses full-name suits ('hearts', 'diamonds',
+  //     'clubs', 'spades'); ranks are face-letter / number strings ('A', 'K',
+  //     'Q', 'J', '10', '9'...). Expand face letters to spoken English.
+  const RANK_NAMES: Record<string, string> = {
+    A: 'Ace',
+    K: 'King',
+    Q: 'Queen',
+    J: 'Jack',
+  };
+  function cardAriaLabel(index: number): string {
+    const card = cards[index];
+    if (!card) return 'Hole card';
+    if (!faceUp[index]) return 'Hole card, face down, tap to flip';
+    const rankName = RANK_NAMES[card.rank] ?? card.rank;
+    return `${rankName} of ${card.suit}, hole card, tap to flip face down`;
+  }
+
+  // ─── HOTFIX2 FIX 5: keyboard activation. role="button" with tabindex=0
+  //     promised keyboard interactivity but neither Enter nor Space did
+  //     anything. Mirror the tap-to-flip behaviour of pointer release.
+  function onCardKeyDown(e: KeyboardEvent, index: number) {
+    if (!allowGesture) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      // Space scrolls the page by default; suppress that.
+      if (e.key === ' ') e.preventDefault();
+      faceUp[index] = !faceUp[index];
+      onflip?.(index, faceUp[index]);
+    }
+  }
 </script>
 
 {#if showCards}
   <div class="hole-cards-root" class:armed={gesture.kind === 'tracking' && gesture.zone === 'armed'}>
-    {#each cards as card, i (i)}
+    {#each cards as card, i (card.suit + card.rank + i)}
       <div
         class="card-outer"
         class:idle-drift={idleEnabled}
@@ -547,11 +595,12 @@
             class="card-hit"
             role="button"
             tabindex={allowGesture ? 0 : -1}
-            aria-label="Hole card"
+            aria-label={cardAriaLabel(i)}
             bind:this={cardHitRefs[i]}
             onpointermove={onPointerMove}
             onpointerup={onPointerUpOrCancel}
             onpointercancel={onPointerUpOrCancel}
+            onkeydown={(e) => onCardKeyDown(e, i)}
           >
             <Card card={card} faceUp={faceUp[i]} />
           </div>

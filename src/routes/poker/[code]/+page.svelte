@@ -931,7 +931,16 @@
     .game-page {
       padding-left: 0.5rem;
       padding-right: 0.5rem;
-      padding-bottom: max(7rem, env(safe-area-inset-bottom, 7rem));
+      padding-bottom: max(18rem, calc(env(safe-area-inset-bottom, 0px) + 18rem));
+    }
+
+    /* HOTFIX2 FIX 1: at <=420px BetControls becomes position:fixed bottom:0 z-index:40
+       and visually collides with the fixed HoleCards (bottom:0 z-index:50). Push the
+       fixed bet controls upward by ~card area height so action buttons sit above
+       the cards. 140px = ~115px card height (22vw * 1.4 ratio on 375px viewport)
+       + 12px BOTTOM_INSET_PX + small gap. */
+    :global(.bet-controls) {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 140px) !important;
     }
 
     .player-bar {

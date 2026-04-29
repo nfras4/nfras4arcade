@@ -34,8 +34,7 @@
       { "name": "BLACKJACK_ROOM", "class_name": "BlackjackRoom" },
       { "name": "ROULETTE_ROOM", "class_name": "RouletteRoom" },
       { "name": "BACCARAT_ROOM", "class_name": "BaccaratRoom" },
-      { "name": "LIARS_DICE_ROOM", "class_name": "LiarsDiceRoom" },
-      { "name": "PLATFORMER_ROOM", "class_name": "PlatformerRoom" }
+      { "name": "LIARS_DICE_ROOM", "class_name": "LiarsDiceRoom" }
     ]
   },
 
@@ -53,7 +52,8 @@
     { "tag": "v9", "new_sqlite_classes": ["RouletteRoom"] },
     { "tag": "v10", "new_sqlite_classes": ["BaccaratRoom"] },
     { "tag": "v11", "new_sqlite_classes": ["LiarsDiceRoom"] },
-    { "tag": "v12", "new_sqlite_classes": ["PlatformerRoom"] }
+    { "tag": "v12", "new_sqlite_classes": ["PlatformerRoom"] },
+    { "tag": "v13", "deleted_classes": ["PlatformerRoom"] }
   ],
 
   // D1 is Cloudflare's serverless SQL database (SQLite at the edge)

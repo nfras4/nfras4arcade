@@ -75,16 +75,6 @@
       route: '/liars-dice',
       soloAction: 'tutorial' as const,
     },
-    {
-      id: 'platformer',
-      name: 'Platformer',
-      description: 'Knock rivals off the stage',
-      minPlayers: 2,
-      maxPlayers: 4,
-      type: 'experimental',
-      route: '/platformer',
-      soloAction: 'solo' as const,
-    },
   ];
 
   let creatingSolo: string | null = $state(null);

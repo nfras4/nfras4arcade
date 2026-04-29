@@ -9,7 +9,6 @@ import { BlackjackRoom } from './casino/blackjack';
 import { RouletteRoom } from './casino/roulette';
 import { BaccaratRoom } from './casino/baccarat';
 import { LiarsDiceRoom } from './liarsDice/room';
-import { PlatformerRoom } from './platformer/room';
 // src/worker.js
 import { Server } from "./../.svelte-kit/output/server/index.js";
 import { manifest, prerendered, base_path } from "./../.svelte-kit/cloudflare-tmp/manifest.js";
@@ -144,7 +143,7 @@ worker_default.fetch = async function(req, env, ctx) {
   }
 
   // WebSocket upgrade -> authenticate then forward to Durable Object
-  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM', '/ws/poker': 'POKER_ROOM', '/ws/snap': 'SNAP_ROOM', '/ws/blackjack': 'BLACKJACK_ROOM', '/ws/roulette': 'ROULETTE_ROOM', '/ws/baccarat': 'BACCARAT_ROOM', '/ws/liars-dice': 'LIARS_DICE_ROOM', '/ws/platformer': 'PLATFORMER_ROOM' };
+  const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM', '/ws/poker': 'POKER_ROOM', '/ws/snap': 'SNAP_ROOM', '/ws/blackjack': 'BLACKJACK_ROOM', '/ws/roulette': 'ROULETTE_ROOM', '/ws/baccarat': 'BACCARAT_ROOM', '/ws/liars-dice': 'LIARS_DICE_ROOM' };
   const doBinding = wsRoutes[url.pathname];
   if (doBinding && req.headers.get('Upgrade') === 'websocket') {
     const room = url.searchParams.get('room');
@@ -216,6 +215,5 @@ export {
   BlackjackRoom,
   RouletteRoom,
   BaccaratRoom,
-  LiarsDiceRoom,
-  PlatformerRoom
+  LiarsDiceRoom
 };

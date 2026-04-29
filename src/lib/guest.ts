@@ -1,7 +1,8 @@
 /**
  * Guest identity management.
- * Generates a persistent guest ID per browser session (stored in sessionStorage)
- * so guests can reconnect if their connection drops.
+ * Persists in localStorage so guests keep the same ID across in-app
+ * WebView refreshes (Instagram, Messenger, iMessage) and tab restarts.
+ * Falls back to sessionStorage if localStorage is blocked.
  */
 
 const GUEST_ID_KEY = 'arcade-guest-id';
@@ -14,12 +15,22 @@ function generateGuestId(): string {
 export function getGuestId(): string {
   if (typeof window === 'undefined') return generateGuestId();
 
-  let id = sessionStorage.getItem(GUEST_ID_KEY);
-  if (!id) {
-    id = generateGuestId();
-    sessionStorage.setItem(GUEST_ID_KEY, id);
+  try {
+    let id = localStorage.getItem(GUEST_ID_KEY);
+    if (!id) {
+      // Migrate from older sessionStorage value if present
+      id = sessionStorage.getItem(GUEST_ID_KEY) || generateGuestId();
+      localStorage.setItem(GUEST_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    let id = sessionStorage.getItem(GUEST_ID_KEY);
+    if (!id) {
+      id = generateGuestId();
+      sessionStorage.setItem(GUEST_ID_KEY, id);
+    }
+    return id;
   }
-  return id;
 }
 
 export function getGuestDisplayName(): string {

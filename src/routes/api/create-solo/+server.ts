@@ -9,7 +9,6 @@ const GAME_CONFIG: Record<string, { binding: string; minPlayers: number }> = {
   wavelength: { binding: 'WAVELENGTH_ROOM', minPlayers: 2 },
   blackjack: { binding: 'BLACKJACK_ROOM', minPlayers: 1 },
   roulette: { binding: 'ROULETTE_ROOM', minPlayers: 1 },
-  platformer: { binding: 'PLATFORMER_ROOM', minPlayers: 1 },
 };
 
 function generateCode(): string {
@@ -26,12 +25,6 @@ export const POST: RequestHandler = async ({ url, locals, platform }) => {
   const game = url.searchParams.get('game');
   if (!game || !GAME_CONFIG[game]) {
     return json({ error: 'Invalid game type' }, { status: 400 });
-  }
-
-  // Platformer doesn't need pre-seeded bots - they spawn via host actions
-  if (game === 'platformer') {
-    const code = generateCode();
-    return json({ code, game });
   }
 
   const config = GAME_CONFIG[game];

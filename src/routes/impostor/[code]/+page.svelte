@@ -341,7 +341,10 @@
   </header>
 
   {#if $isSpectator && $gameState && $gameState.phase !== 'lobby'}
-    <div class="spectator-banner">Spectating</div>
+    <div class="spectator-banner">
+      <span class="spectator-title">Watching this round</span>
+      <span class="spectator-sub">You joined after the game started. You'll play next round.</span>
+    </div>
   {/if}
 
   <div class="game-body">
@@ -435,6 +438,9 @@
                   ? `Need ${3 - $gameState.players.length} more player(s)`
                   : 'Start Game'}
               </button>
+              {#if $gameState.players.length >= 3}
+                <p class="lobby-hint">Once started, late arrivals join as spectators until the next round.</p>
+              {/if}
             </div>
           {:else}
             <p class="waiting-text">Waiting for the host to start<span class="loading-dots"></span></p>
@@ -2095,16 +2101,40 @@
   /* ─── Spectator banner ───────────────────────────────── */
 
   .spectator-banner {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
     text-align: center;
-    padding: 0.35rem;
+    padding: 0.55rem 1rem;
     background: var(--accent-faint, rgba(74, 144, 217, 0.1));
     color: var(--accent, #4a90d9);
     border-bottom: 1px solid var(--border);
+  }
+
+  .spectator-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .spectator-sub {
+    font-size: 0.7rem;
+    font-weight: 400;
+    opacity: 0.85;
+    line-height: 1.3;
+  }
+
+  .lobby-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.4;
   }
 
   /* ─── Difficulty filter pills ────────────────────────── */

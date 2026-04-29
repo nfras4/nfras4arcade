@@ -100,6 +100,9 @@
         zone: GestureZone;
         peekFired: boolean;
         armedFired: boolean;
+        // Snapshotted at pointerdown to avoid stale getBoundingClientRect
+        // during iOS Safari momentum-scroll. Null when muckTarget is non-element.
+        muckRectSnapshot: DOMRect | null;
       }
     | { kind: 'committing' }
     | { kind: 'returning' };
@@ -113,8 +116,15 @@
   const liveAnimations = new Set<Animation>();
   $effect(() => {
     return () => {
+      // FIX 5: commitStyles() before cancel() so any transform/opacity values
+      // we'd been holding via fill:'forwards' are baked into inline style and
+      // do not cause a visual snap on teardown. Best-effort: nodes may already
+      // be detached, in which case commitStyles throws and we just cancel.
       for (const a of liveAnimations) {
-        try { a.cancel(); } catch { /* noop */ }
+        if (a.playState !== 'idle') {
+          try { a.commitStyles(); } catch { /* node detached */ }
+          try { a.cancel(); } catch { /* noop */ }
+        }
       }
       liveAnimations.clear();
     };
@@ -166,18 +176,46 @@
 
   // ─── PointerEvent handlers ───────────────────────────────────────────
   function onPointerDown(e: PointerEvent, cardIndex: number) {
-    // Reentrancy guard: ignore while committing.
-    // NOT FIXING "cancel in-flight throw on reset": re-arming during 'committing'
-    // is structurally impossible because committed===true persists until the parent
-    // re-renders with new round data (new cards/gameState), at which point the
-    // component remounts state and the $effect cleanup cancels all live animations.
-    // Single-pointer gesture; ignore additional pointers while tracking.
-    if (gesture.kind === 'tracking') return;
+    // Reentrancy guard: ignore while any gesture (tracking, committing, or
+    // returning) is in flight. Between gesture-commit (pointerup) and
+    // arc.onfinish (~450ms), `committed` is still false but a new pointerdown
+    // would otherwise race with the in-flight throw animation. AC21 requires
+    // this be blocked. The $effect cleanup on unmount still cancels all live
+    // animations during normal re-deal teardown.
+    if (
+      gesture.kind === 'tracking' ||
+      gesture.kind === 'committing' ||
+      gesture.kind === 'returning'
+    ) {
+      return;
+    }
     if (!showCards) return;
+
+    // FIX 3 (iOS Safari): preventDefault inside pointerdown with passive:false
+    // is required to stop vertical drift on a touch-action:none child from
+    // being hijacked into page scroll before setPointerCapture locks the
+    // gesture. The listener is attached imperatively in the $effect below
+    // with { passive: false }; we only call preventDefault here when starting
+    // a real gesture (after the reentrancy and visibility guards), so other
+    // legitimate gestures on neighbouring elements are not blocked.
+    if (typeof e.preventDefault === 'function') {
+      try { e.preventDefault(); } catch { /* noop */ }
+    }
 
     try {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     } catch { /* noop */ }
+
+    // FIX 4 (iOS Safari): snapshot the muck-target rect at pointerdown.
+    // Fixed-position rects can become stale during active iOS scrolling, and
+    // calling getBoundingClientRect at gesture-commit time may return a
+    // misaligned rect. The runThrowAnimation reader uses this snapshot.
+    let muckRectSnapshot: DOMRect | null = null;
+    if (muckTarget.kind === 'element') {
+      try {
+        muckRectSnapshot = muckTarget.ref.getBoundingClientRect();
+      } catch { /* noop */ }
+    }
 
     const now = performance.now();
     gesture = {
@@ -192,8 +230,35 @@
       zone: 'rest',
       peekFired: false,
       armedFired: false,
+      muckRectSnapshot,
     };
   }
+
+  // FIX 3 (iOS Safari): attach pointerdown imperatively with { passive: false }.
+  // Svelte 5 inline `onpointerdown=` attaches as passive by default for touch
+  // events, which means preventDefault inside the handler is a no-op on iOS
+  // Safari. We move the pointerdown wiring into an effect that adds the
+  // listener with passive:false on each card's hit element, and tears down on
+  // cleanup. Move/up/cancel remain on Svelte's prop attachment because they do
+  // not need preventDefault for the iOS hijack mitigation.
+  let cardHitRefs = $state<(HTMLElement | undefined)[]>([undefined, undefined]);
+  $effect(() => {
+    const handlers: Array<() => void> = [];
+    for (let i = 0; i < cardHitRefs.length; i++) {
+      const el = cardHitRefs[i];
+      if (!el) continue;
+      const idx = i;
+      const handler = (ev: PointerEvent) => {
+        if (!allowGesture) return;
+        onPointerDown(ev, idx);
+      };
+      el.addEventListener('pointerdown', handler, { passive: false });
+      handlers.push(() => el.removeEventListener('pointerdown', handler));
+    }
+    return () => {
+      for (const off of handlers) off();
+    };
+  });
 
   function onPointerMove(e: PointerEvent) {
     if (gesture.kind !== 'tracking') return;
@@ -257,7 +322,7 @@
       isPlayerTurn,
       inputMode,
       velocityBuffer: g.velocityBuffer,
-      releaseEvent: { overMuck: isReleaseOverMuck(e) },
+      releaseEvent: { overMuck: isReleaseOverMuck(e, g.muckRectSnapshot) },
     });
 
     // Tap-to-flip wins first.
@@ -271,11 +336,19 @@
     }
 
     if (result.shouldCommit) {
-      // Fire commit immediately, before animation.
-      onaction({ type: 'fold' });
+      // FIX 1: fire commit, but never let a synchronous throw from onaction
+      // strand the gesture in 'tracking'. If the parent throws (e.g. transient
+      // network error), we still transition to 'committing' and play the throw
+      // animation so the user gets visual feedback. The parent will reconcile
+      // the canonical state on the next server update.
+      try {
+        onaction({ type: 'fold' });
+      } catch (err) {
+        console.error('[HoleCards] onaction threw during fold commit', err);
+      }
       if (g.armedFired) onarmedchange?.(false);
       gesture = { kind: 'committing' };
-      runThrowAnimation(g.cardIndex, computeVelocity(g.velocityBuffer, now));
+      runThrowAnimation(g.cardIndex, computeVelocity(g.velocityBuffer, now), g.muckRectSnapshot);
       return;
     }
 
@@ -290,9 +363,11 @@
     }, 220);
   }
 
-  function isReleaseOverMuck(e: PointerEvent): boolean {
+  function isReleaseOverMuck(e: PointerEvent, snapshot: DOMRect | null): boolean {
     if (muckTarget.kind !== 'element') return false;
-    const rect = muckTarget.ref.getBoundingClientRect();
+    // Prefer the pointerdown-time snapshot (FIX 4); fall back to live rect
+    // if the snapshot was unavailable for some reason.
+    const rect = snapshot ?? muckTarget.ref.getBoundingClientRect();
     return (
       e.clientX >= rect.left &&
       e.clientX <= rect.right &&
@@ -302,7 +377,11 @@
   }
 
   // ─── Web Animations API throw arc ────────────────────────────────────
-  function runThrowAnimation(cardIndex: number, upwardVelocity: number) {
+  function runThrowAnimation(
+    cardIndex: number,
+    upwardVelocity: number,
+    muckRectSnapshot: DOMRect | null,
+  ) {
     const outer = outerRefs[cardIndex];
     const inner = innerRefs[cardIndex];
     if (!outer) {
@@ -324,7 +403,11 @@
     let endCenter = { x: vw / 2, y: vh / 2 };
 
     if (muckTarget.kind === 'element') {
-      const rect = muckTarget.ref.getBoundingClientRect();
+      // FIX 4: prefer the pointerdown-time rect snapshot. Live
+      // getBoundingClientRect on a fixed-position muck target can be stale
+      // during iOS Safari momentum-scroll. Fall back to a fresh read only if
+      // the snapshot is unavailable.
+      const rect = muckRectSnapshot ?? muckTarget.ref.getBoundingClientRect();
       const center = {
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
@@ -361,7 +444,13 @@
         fill: 'forwards',
       });
       registerAnim(anim);
-      anim.onfinish = () => finalizeCommit(anim);
+      anim.onfinish = () => {
+        // Commit the round before clearing the animation.
+        committed = true;
+        gesture = { kind: 'idle' };
+        liftPx = 0;
+        finalizeAnim(anim);
+      };
       anim.oncancel = () => liveAnimations.delete(anim);
       return;
     }
@@ -401,9 +490,17 @@
         { duration: 225, delay: 112, fill: 'forwards' },
       );
       registerAnim(flip);
+      flip.onfinish = () => finalizeAnim(flip);
+      flip.oncancel = () => liveAnimations.delete(flip);
     }
 
-    arc.onfinish = () => finalizeCommit(arc);
+    arc.onfinish = () => {
+      // Commit the round before clearing the animation.
+      committed = true;
+      gesture = { kind: 'idle' };
+      liftPx = 0;
+      finalizeAnim(arc);
+    };
     arc.oncancel = () => liveAnimations.delete(arc);
   }
 
@@ -411,11 +508,17 @@
     liveAnimations.add(a);
   }
 
-  function finalizeCommit(a: Animation) {
+  // FIX 5: WAAPI animations with fill:'forwards' hold the highest cascade
+  // priority once finished, silently overriding subsequent CSS transitions on
+  // the same element/properties. Calling commitStyles() writes the computed
+  // values into inline style, then cancel() releases the animation's hold so
+  // CSS transitions can apply normally on the next frame.
+  function finalizeAnim(a: Animation) {
     liveAnimations.delete(a);
-    committed = true;
-    gesture = { kind: 'idle' };
-    liftPx = 0;
+    try { a.commitStyles(); } catch { /* node may be detached */ }
+    if (a.playState !== 'idle') {
+      try { a.cancel(); } catch { /* noop */ }
+    }
   }
 
   // ─── Per-card transform style (rest / lift / hover) ──────────────────
@@ -445,7 +548,7 @@
             role="button"
             tabindex={allowGesture ? 0 : -1}
             aria-label="Hole card"
-            onpointerdown={(e) => allowGesture && onPointerDown(e, i)}
+            bind:this={cardHitRefs[i]}
             onpointermove={onPointerMove}
             onpointerup={onPointerUpOrCancel}
             onpointercancel={onPointerUpOrCancel}

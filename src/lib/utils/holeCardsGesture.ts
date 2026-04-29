@@ -54,7 +54,7 @@ export const VELOCITY_BUFFER_MS = 50;
 
 // Deadband below which the zone is treated as 'idle' (prevents jitter at rest).
 // Three-zone model: idle -> lift -> armed, matching the plan spec exactly.
-const ZONE_IDLE_DEADBAND = 0.02;
+export const ZONE_IDLE_DEADBAND = 0.02;
 
 export function computeVelocity(buffer: VelocitySample[], now: number): number {
   // Prune stale samples inside the function so callers need not pre-prune.

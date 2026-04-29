@@ -17,7 +17,3 @@ export function detectInputMode(): InputMode {
   }
 }
 
-// SSR-safe wrapper. Identical behaviour, named for clarity at call sites.
-export function detectInputModeSafe(): InputMode {
-  return detectInputMode();
-}

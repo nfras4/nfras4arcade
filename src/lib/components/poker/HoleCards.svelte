@@ -26,13 +26,11 @@
   // ─── Visual-only constants (gesture thresholds imported from holeCardsGesture) ──
   // LIFT_MAX, ARM_THRESHOLD, FLICK_VELOCITY_*, TAP_MOVEMENT_PX, TAP_DURATION_MS,
   // and VELOCITY_BUFFER_MS are imported above to avoid drift from the pure evaluator.
-  const IDLE_DRIFT_PERIOD_MS = 4000;
-  const IDLE_DRIFT_TRANSLATE_PX = 2;
-  const IDLE_DRIFT_ROTATE_DEG = 0.5;
-  const HOVER_LIFT_PX = 6;
-  const CARD_WIDTH_VW = 22;
+  // F8: idle-drift period/translate/rotate, hover lift, card width, and bottom
+  // inset are CSS-only literals (see <style> below). They were duplicated as
+  // TS constants but only ever consumed in cardTransform via SPLAY_DEG, so the
+  // others are removed to prevent silent drift between TS and CSS.
   const SPLAY_DEG = 6;
-  const BOTTOM_INSET_PX = 12;
 
   let {
     cards,
@@ -44,7 +42,7 @@
     onpeek,
     onflip,
     onarmedchange,
-    // Reserved for paired-phone surface and tests; unused in single-screen mode.
+    // F9: Reserved for paired-phone surface and tests; unused in single-screen mode.
     viewportContext,
   }: {
     cards: CardData[];
@@ -56,6 +54,7 @@
     onpeek?: (index: number, peeking: boolean) => void;
     onflip?: (index: number, faceUp: boolean) => void;
     onarmedchange?: (armed: boolean) => void;
+    /** Reserved for paired-phone surface; intentionally unused in single-screen mode. */
     viewportContext?: { height: number; safeAreaBottom: number };
   } = $props();
 
@@ -141,9 +140,13 @@
   });
 
   // Reset committed flag when parent re-deals (cards content changes meaningfully).
+  // F1: also reset at showdown so a folded player's cards re-render face-up
+  // alongside the .showdown-hands opponent reveal block. Without this,
+  // committed stays true from the fold's arc.onfinish and showCards is gated
+  // off, hiding the player's own cards at showdown.
   $effect(() => {
-    if (gameState === 'in-hand' && committed) {
-      // New round; allow rendering again.
+    if ((gameState === 'in-hand' || gameState === 'showdown') && committed) {
+      // New round or showdown reveal; allow rendering again.
       committed = false;
     }
   });

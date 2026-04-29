@@ -75,6 +75,16 @@
       route: '/liars-dice',
       soloAction: 'tutorial' as const,
     },
+    {
+      id: 'platformer',
+      name: 'Platformer',
+      description: 'Knock rivals off the stage',
+      minPlayers: 2,
+      maxPlayers: 4,
+      type: 'experimental',
+      route: '/platformer',
+      soloAction: 'tutorial' as const,
+    },
   ];
 
   let creatingSolo: string | null = $state(null);
@@ -84,6 +94,7 @@
     'card game': 'var(--yellow)',
     'strategy': 'var(--blue)',
     'party': 'var(--green)',
+    'experimental': '#f0c030',
   };
 
   function getTypeColor(type: string): string {

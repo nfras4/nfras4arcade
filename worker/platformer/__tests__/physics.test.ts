@@ -3,7 +3,7 @@ import {
   defaultMap, stepPlayer, resolveAttack, applyKnockback, isOutOfBounds,
   newPlayer, emptyInput,
   TICK_MS, GRAVITY, JUMP_VEL, MAX_JUMPS,
-  ATTACK_COOLDOWN_MS, INVULN_MS, PLAYER_W, PLAYER_H, OOB_MARGIN,
+  ATTACK_COOLDOWN_MS, INVULN_MS, PLAYER_W, PLAYER_H, OOB_MARGIN, HITSTUN_MS, MOVE_SPEED,
 } from '../physics';
 
 const map = defaultMap();
@@ -58,6 +58,17 @@ describe('stepPlayer', () => {
     p = stepPlayer(p, input, emptyInput(1), TICK_MS, map);
     expect(p.jumpsRemaining).toBe(0);
     expect(p.vy).toBeLessThan(0);
+  });
+
+  test('stepPlayer ignores left/right input during hitstun', () => {
+    let p = freshPlayer('p1', 300, 200);
+    p.hitstunMs = 200;
+    p.vx = 400; // simulate knockback velocity
+    const input = { left: true, right: false, jump: false, attack: false, seq: 1 };
+    const next = stepPlayer(p, input, emptyInput(0), TICK_MS, map);
+    // vx should NOT be -MOVE_SPEED; should keep knockback value
+    expect(next.vx).toBe(400);
+    expect(next.hitstunMs).toBeLessThan(200);
   });
 
   test('attack press starts cooldown + active window; second press blocked', () => {
@@ -126,6 +137,7 @@ describe('applyKnockback', () => {
     expect(k.vx).toBe(-300);
     expect(k.vy).toBe(-400);
     expect(k.invulnMs).toBe(INVULN_MS);
+    expect(k.hitstunMs).toBe(HITSTUN_MS);
     expect(k.onGround).toBe(false);
   });
 });

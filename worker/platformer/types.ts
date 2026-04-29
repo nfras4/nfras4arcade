@@ -33,6 +33,8 @@ export interface PlatformerPlayer {
   attackCooldownMs: number;
   attackActiveMs: number;
   invulnMs: number;
+  hitstunMs: number;
+  hitsTaken: number;
   lives: number;
   respawnMs: number;
   connected: boolean;

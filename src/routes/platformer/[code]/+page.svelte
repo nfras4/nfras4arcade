@@ -20,6 +20,8 @@
     attackCooldownMs: number;
     attackActiveMs: number;
     invulnMs: number;
+    hitstunMs: number;
+    hitsTaken: number;
     lives: number;
     respawnMs: number;
     connected: boolean;
@@ -229,6 +231,12 @@
       ctx.fillText(p.name, p.x + PLAYER_W / 2, p.y - 18);
       ctx.fillStyle = '#ff5050';
       ctx.fillText('♥'.repeat(Math.max(0, p.lives)), p.x + PLAYER_W / 2, p.y - 4);
+
+      ctx.fillStyle = '#ff8c30';
+      ctx.font = 'bold 11px Rajdhani, sans-serif';
+      ctx.textAlign = 'center';
+      const pct = (p.hitsTaken ?? 0) * 12;
+      ctx.fillText(`${pct}%`, p.x + PLAYER_W / 2, p.y - 36);
 
       if (p.effects && p.effects.length > 0) {
         let ex = p.x + PLAYER_W / 2 - (p.effects.length * 6);

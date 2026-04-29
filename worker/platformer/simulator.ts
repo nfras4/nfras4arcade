@@ -2,7 +2,7 @@ import type { PlatformerInput, PlatformerPlayer, MapDef, Powerup, PlatformerSnap
 import {
   stepPlayer, resolveAttack, applyKnockback, isOutOfBounds,
   newPlayer, emptyInput, respawnPosition,
-  RESPAWN_MS, MAX_JUMPS,
+  RESPAWN_MS, MAX_JUMPS, KNOCKBACK_PER_HIT,
 } from './physics';
 import { getMap } from './maps';
 import {
@@ -103,11 +103,13 @@ export function simulateMatch(opts: SimMatchOptions): SimMatchResult {
     const attackers = Array.from(players.values()).filter(p => p.attackActiveMs > 0 && p.lives > 0);
     for (const att of attackers) {
       const r = resolveAttack(att, Array.from(players.values()));
-      const dmgMult = hasEffect(att, 'damage') ? DAMAGE_MULTIPLIER : 1;
       for (const hit of r.hits) {
         const def = players.get(hit.id);
         if (!def) continue;
-        players.set(hit.id, applyKnockback(def, hit.knockbackX * dmgMult, hit.knockbackY));
+        const dmgMult = (hasEffect(att, 'damage') ? DAMAGE_MULTIPLIER : 1) * (1 + def.hitsTaken * KNOCKBACK_PER_HIT);
+        players.set(hit.id, applyKnockback(def, hit.knockbackX * dmgMult, hit.knockbackY * dmgMult));
+        const updated = players.get(hit.id)!;
+        players.set(hit.id, { ...updated, hitsTaken: updated.hitsTaken + 1 });
       }
     }
 
@@ -127,6 +129,7 @@ export function simulateMatch(opts: SimMatchOptions): SimMatchResult {
             attackActiveMs: 0, attackCooldownMs: 0,
             respawnMs: RESPAWN_MS, invulnMs: RESPAWN_MS + 800,
             onGround: false, jumpsRemaining: MAX_JUMPS,
+            hitsTaken: 0,
           });
         }
       }

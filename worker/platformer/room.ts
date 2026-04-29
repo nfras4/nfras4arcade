@@ -6,7 +6,7 @@ import { xpToLevel } from '../../src/lib/xp';
 import {
   defaultMap, stepPlayer, resolveAttack, applyKnockback, isOutOfBounds,
   newPlayer, emptyInput, respawnPosition,
-  RESPAWN_MS, MAX_JUMPS,
+  RESPAWN_MS, MAX_JUMPS, KNOCKBACK_PER_HIT,
 } from './physics';
 import { MAPS, MAP_IDS, DEFAULT_MAP_ID, getMap } from './maps';
 import {
@@ -616,9 +616,10 @@ export class PlatformerRoom extends DurableObject<Env> {
         for (const hit of result.hits) {
           const def = this.players.get(hit.id);
           if (!def) continue;
-          const kx = hasEffect(attacker, 'damage') ? hit.knockbackX * DAMAGE_MULTIPLIER : hit.knockbackX;
-          const ky = hit.knockbackY;
-          this.players.set(hit.id, applyKnockback(def, kx, ky));
+          const dmgMult = (hasEffect(attacker, 'damage') ? DAMAGE_MULTIPLIER : 1) * (1 + def.hitsTaken * KNOCKBACK_PER_HIT);
+          this.players.set(hit.id, applyKnockback(def, hit.knockbackX * dmgMult, hit.knockbackY * dmgMult));
+          const updated = this.players.get(hit.id)!;
+          this.players.set(hit.id, { ...updated, hitsTaken: updated.hitsTaken + 1 });
         }
       }
     }
@@ -641,6 +642,7 @@ export class PlatformerRoom extends DurableObject<Env> {
             invulnMs: RESPAWN_MS + 800,
             onGround: false,
             jumpsRemaining: MAX_JUMPS,
+            hitsTaken: 0,
           });
         }
       }

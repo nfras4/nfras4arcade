@@ -12,12 +12,14 @@ export const MOVE_SPEED = 260;
 export const JUMP_VEL = -620;
 export const DOUBLE_JUMP_VEL = -540;
 export const MAX_JUMPS = 2;
-export const ATTACK_RANGE = 56;
+export const ATTACK_RANGE = 72;
 export const ATTACK_HEIGHT = 44;
-export const ATTACK_COOLDOWN_MS = 600;
+export const ATTACK_COOLDOWN_MS = 450;
 export const ATTACK_ACTIVE_MS = 120;
-export const KNOCKBACK_X = 380;
-export const KNOCKBACK_Y = -360;
+export const KNOCKBACK_X = 620;
+export const KNOCKBACK_Y = -520;
+export const HITSTUN_MS = 320;
+export const KNOCKBACK_PER_HIT = 0.12;
 export const INVULN_MS = 600;
 export const RESPAWN_MS = 1500;
 export const RESPAWN_INVULN_MS = 1200;
@@ -73,37 +75,41 @@ export function stepPlayer(
   const dt = clampDt(dtMs) / 1000;
   let { x, y, vx, vy, facing, onGround, jumpsRemaining,
         attackCooldownMs, attackActiveMs, invulnMs, lives, respawnMs } = player;
+  let hitstunMs = player.hitstunMs;
 
   attackCooldownMs = Math.max(0, attackCooldownMs - dtMs);
   attackActiveMs = Math.max(0, attackActiveMs - dtMs);
   invulnMs = Math.max(0, invulnMs - dtMs);
   respawnMs = Math.max(0, respawnMs - dtMs);
+  hitstunMs = Math.max(0, hitstunMs - dtMs);
 
   if (player.respawnMs > 0) {
     return {
       ...player,
-      attackCooldownMs, attackActiveMs, invulnMs, respawnMs,
+      attackCooldownMs, attackActiveMs, invulnMs, respawnMs, hitstunMs,
       vx: 0, vy: 0,
     };
   }
 
-  const wantLeft = input.left && !input.right;
-  const wantRight = input.right && !input.left;
-  if (wantLeft) { vx = -MOVE_SPEED; facing = -1; }
-  else if (wantRight) { vx = MOVE_SPEED; facing = 1; }
-  else { vx = 0; }
+  if (hitstunMs <= 0) {
+    const wantLeft = input.left && !input.right;
+    const wantRight = input.right && !input.left;
+    if (wantLeft) { vx = -MOVE_SPEED; facing = -1; }
+    else if (wantRight) { vx = MOVE_SPEED; facing = 1; }
+    else { vx = 0; }
 
-  const jumpEdge = input.jump && !prevInput.jump;
-  if (jumpEdge && jumpsRemaining > 0) {
-    vy = onGround ? JUMP_VEL : DOUBLE_JUMP_VEL;
-    jumpsRemaining -= 1;
-    onGround = false;
-  }
+    const jumpEdge = input.jump && !prevInput.jump;
+    if (jumpEdge && jumpsRemaining > 0) {
+      vy = onGround ? JUMP_VEL : DOUBLE_JUMP_VEL;
+      jumpsRemaining -= 1;
+      onGround = false;
+    }
 
-  const attackEdge = input.attack && !prevInput.attack;
-  if (attackEdge && attackCooldownMs <= 0) {
-    attackCooldownMs = ATTACK_COOLDOWN_MS;
-    attackActiveMs = ATTACK_ACTIVE_MS;
+    const attackEdge = input.attack && !prevInput.attack;
+    if (attackEdge && attackCooldownMs <= 0) {
+      attackCooldownMs = ATTACK_COOLDOWN_MS;
+      attackActiveMs = ATTACK_ACTIVE_MS;
+    }
   }
 
   vy += GRAVITY * dt;
@@ -135,7 +141,7 @@ export function stepPlayer(
   return {
     ...player,
     x, y, vx, vy, facing, onGround, jumpsRemaining,
-    attackCooldownMs, attackActiveMs, invulnMs, respawnMs,
+    attackCooldownMs, attackActiveMs, invulnMs, respawnMs, hitstunMs,
   };
 }
 
@@ -185,6 +191,7 @@ export function applyKnockback(
     vx: kx,
     vy: ky,
     invulnMs,
+    hitstunMs: HITSTUN_MS,
     onGround: false,
   };
 }
@@ -213,6 +220,8 @@ export function newPlayer(
     attackCooldownMs: 0,
     attackActiveMs: 0,
     invulnMs: RESPAWN_INVULN_MS,
+    hitstunMs: 0,
+    hitsTaken: 0,
     lives: 3,
     respawnMs: 0,
     connected: true,

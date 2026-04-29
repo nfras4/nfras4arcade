@@ -117,8 +117,12 @@ export class PokerRoom extends CardRoom {
           }
         } else {
           ts.isGuestPlayer[userId] = false;
-          // For casual mode reconnects, DO state is authoritative
-          if (!(ts.gameMode === 'casual' && ts.playerChips[userId] !== undefined)) {
+          // F2: once a player has joined, DO state is authoritative for both
+          // casual and competitive modes. Only seed from chipsHeader if we
+          // have no in-DO entry yet (first-time join). Previously a competitive
+          // reconnect would overwrite in-DO chips with the stale D1 value,
+          // wiping winnings if the WS dropped before persistChips flushed.
+          if (ts.playerChips[userId] === undefined) {
             if (chipsHeader !== null) {
               const chips = parseInt(chipsHeader, 10);
               if (!isNaN(chips) && chips > 0) {
@@ -127,7 +131,7 @@ export class PokerRoom extends CardRoom {
                 // Registered player with 0 chips: auto-grant rebuy based on mode
                 ts.playerChips[userId] = ts.gameMode === 'competitive' ? 0 : DEFAULT_REBUY;
               }
-            } else if (ts.playerChips[userId] === undefined) {
+            } else {
               ts.playerChips[userId] = DEFAULT_BUY_IN;
             }
           }
@@ -250,8 +254,13 @@ export class PokerRoom extends CardRoom {
     this.currentTurn = ts.actionOnPlayerId;
     this.setTable(ts);
 
-    // If all players are all-in from blinds, skip to showdown
-    this.checkAllInShowdown();
+    // If all players are all-in from blinds, skip to showdown.
+    // F6: fire-and-forget retained at this single sync caller (initRound is
+    // sync per the abstract contract). Errors are surfaced rather than
+    // silently swallowed.
+    this.checkAllInShowdown().catch(err =>
+      console.error('[PokerRoom] checkAllInShowdown failed', err),
+    );
   }
 
   // ─── Action handling ────────────────────────────────────────────
@@ -291,7 +300,9 @@ export class PokerRoom extends CardRoom {
         this.phase = 'game_over';
         // The remaining player with chips is the overall winner
         const winner = this.turnOrder.find(id => (ts.playerChips[id] ?? 0) > 0) ?? null;
-        this.recordGameEnd(winner).catch(() => {});
+        this.recordGameEnd(winner).catch(err =>
+          console.error('[PokerRoom] recordGameEnd failed', err),
+        );
         this.broadcastState();
         return;
       }
@@ -606,18 +617,20 @@ export class PokerRoom extends CardRoom {
   }
 
   /** Check if all remaining players are all-in right after blinds. */
-  private checkAllInShowdown(): void {
+  // F6: was sync but internally chained allInRunout via .then() without
+  // awaiting. State could fail to persist before DO hibernation. Now async
+  // and awaits both the runout and saveState so callers can await it.
+  private async checkAllInShowdown(): Promise<void> {
     const ts = this.getTable();
     const active = this.getActivePlayers(ts);
     const acting = this.getActingPlayers(ts);
 
     if (active.length >= 2 && acting.length === 0) {
       // Everyone is all-in from blinds, run it out
-      this.allInRunout(ts).then(() => {
-        this.setTable(ts);
-        this.broadcastState();
-        this.saveState();
-      });
+      await this.allInRunout(ts);
+      this.setTable(ts);
+      this.broadcastState();
+      await this.saveState();
     }
   }
 
@@ -745,7 +758,9 @@ export class PokerRoom extends CardRoom {
         }
       }
       if (stmts.length > 0) await this.env.DB.batch(stmts);
-    } catch {}
+    } catch (err) {
+      console.error('[PokerRoom] persistChips failed', err);
+    }
   }
 
   private async recordBiggestWin(ts: PokerTableState, playerId: string, winAmount: number): Promise<void> {
@@ -756,7 +771,9 @@ export class PokerRoom extends CardRoom {
       await this.env.DB.prepare(
         'UPDATE player_profiles SET biggest_win = ?, biggest_win_game = ? WHERE id = ? AND biggest_win < ?'
       ).bind(winAmount, 'poker', playerId, winAmount).run();
-    } catch {}
+    } catch (err) {
+      console.error('[PokerRoom] recordBiggestWin failed', err);
+    }
   }
 
   // ─── Bot turn ──────────────────────────────────────────────────
@@ -808,6 +825,58 @@ export class PokerRoom extends CardRoom {
 
   async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     await super.webSocketError(ws, error);
+  }
+
+  // F3: Override base handlePlayerTimeout. Base advances `this.currentTurn`
+  // but poker's true action pointer is `ts.actionOnPlayerId`, so the base
+  // implementation is a no-op for poker and the hand stalls. On timeout,
+  // auto-fold the disconnected player and advance the action pointer.
+  // Mirrors the 'fold' branch of handleAction.
+  protected async handlePlayerTimeout(playerId: string): Promise<void> {
+    const ts = this.getTable();
+
+    if (this.phase !== 'playing') {
+      this.broadcastState();
+      return;
+    }
+
+    if (ts.actionOnPlayerId !== playerId) {
+      // Not their turn; nothing to do for poker.
+      this.broadcastState();
+      return;
+    }
+
+    // Auto-fold the timed-out player.
+    ts.playerFolded[playerId] = true;
+    ts.lastAction = { playerId, action: 'fold' };
+    ts.actedThisRound[playerId] = true;
+
+    // If only one non-folded player remains, award the pot.
+    const remaining = this.getActivePlayers(ts);
+    if (remaining.length === 1) {
+      await this.awardPotToLastPlayer(ts, remaining[0]);
+      this.setTable(ts);
+      await this.saveState();
+      this.broadcastState();
+      return;
+    }
+
+    // Advance the action pointer past the folded player.
+    this.advanceAction(ts);
+
+    // If the betting round is now complete, transition to the next phase.
+    if (this.isBettingRoundComplete(ts)) {
+      await this.endBettingRound(ts);
+    }
+
+    this.setTable(ts);
+    await this.saveState();
+    this.broadcastState();
+
+    // If the new actor is a bot, schedule the bot turn.
+    if (this.isBotTurn() && this.phase === 'playing') {
+      await this.scheduleBotTurn();
+    }
   }
 
   protected getGameStateForPlayer(playerId: string): CardGameState {

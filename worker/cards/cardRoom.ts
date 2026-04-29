@@ -186,6 +186,23 @@ export abstract class CardRoom extends DurableObject<Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
+
+    // F4: single-session policy. Two tabs / phone+pc for the same authed user
+    // would otherwise coexist as parallel WebSockets with last-write-wins races
+    // on chip persistence. Evict any prior sockets for this userId before
+    // accepting the new one so the new socket is the sole authority.
+    try {
+      for (const existingWs of this.ctx.getWebSockets(userId)) {
+        try {
+          existingWs.close(4001, 'replaced');
+        } catch {
+          /* already closing */
+        }
+      }
+    } catch (err) {
+      console.error('[CardRoom] failed to evict prior sockets', err);
+    }
+
     this.ctx.acceptWebSocket(server, [userId]);
 
     this.touch();
@@ -582,7 +599,11 @@ export abstract class CardRoom extends DurableObject<Env> {
       await this.env.DB.prepare(
         'INSERT INTO game_sessions (id, game_type, room_code, player_count, started_at) VALUES (?, ?, ?, ?, ?)'
       ).bind(this.gameSessionId, this.gameType, this.code, this.players.size, now).run();
-    } catch {}
+    } catch (err) {
+      console.error('[CardRoom] gameSession insert failed', err);
+      // Clear the id so the downstream UPDATE in recordGameEnd skips cleanly
+      this.gameSessionId = '';
+    }
 
     this.broadcastState();
 
@@ -832,7 +853,9 @@ export abstract class CardRoom extends DurableObject<Env> {
 
       // Post-batch badge checks (require queries, so run separately)
       await this.checkPostGameBadges(winnerId, now);
-    } catch {}
+    } catch (err) {
+      console.error('[CardRoom] recordGameEnd failed', err);
+    }
 
     // Resolve any spectator bets on this game. Wrapped separately so a bet
     // failure can never break the game-end pipeline.

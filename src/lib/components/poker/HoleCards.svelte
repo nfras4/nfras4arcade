@@ -86,6 +86,11 @@
   let faceUp = $state<[boolean, boolean]>([true, true]);
 
   // ─── Gesture state machine ───────────────────────────────────────────
+  // HOTFIX3 FIX C (perf): only fields READ by the template or by reactive
+  // $derived stay in $state. `currentY` and `velocityBuffer` mutate at
+  // pointermove rate (60-240Hz) and triggered full reactive invalidation on
+  // every sample. They are now plain non-reactive locals (declared below)
+  // and are passed explicitly into evaluateGesture / computeVelocity.
   type Gesture =
     | { kind: 'idle' }
     | {
@@ -95,8 +100,6 @@
         startX: number;
         startY: number;
         startTime: number;
-        currentY: number;
-        velocityBuffer: VelocitySample[];
         zone: GestureZone;
         peekFired: boolean;
         armedFired: boolean;
@@ -111,6 +114,13 @@
   let isPointerDown = $derived(gesture.kind === 'tracking');
   let liftPx = $state(0);
   let committed = $state(false);
+
+  // HOTFIX3 FIX C: hot-path mutable locals, explicitly NON-reactive.
+  // currentY drives lift via setLiftFromTracking, which writes to liftPx
+  // ($state) once per pointermove. velocityBuffer is a sample ring read by
+  // evaluateGesture / computeVelocity at pointermove and pointerup.
+  let currentY = 0;
+  let velocityBuffer: VelocitySample[] = [];
 
   // ─── Live animations registry (for unmount cleanup) ──────────────────
   const liveAnimations = new Set<Animation>();
@@ -138,24 +148,66 @@
     }
   });
 
+  // HOTFIX3 FIX B: reset faceUp between hands. Previously a card flipped
+  // face-down before a fold would persist its face-down state into the next
+  // hand's first paint, since faceUp is component-level $state and the {#each}
+  // block keys by suit+rank+i (which can collide across hands when the deck
+  // hands the same card index out twice). Reset on pre-deal and whenever the
+  // cards array identity changes meaningfully (new dealt hand). Mirrors the
+  // existing committed-reset pattern just above.
+  let lastCardsKey = $state('');
+  $effect(() => {
+    const key = cards.length === 2 ? `${cards[0].suit}${cards[0].rank}|${cards[1].suit}${cards[1].rank}` : '';
+    if (gameState === 'pre-deal' || key !== lastCardsKey) {
+      faceUp = [true, true];
+      lastCardsKey = key;
+    }
+  });
+
+  // HOTFIX3 FIX A: at showdown, force both cards face-up so the bottom-fixed
+  // hole-cards block matches the .showdown-hands opponent reveal block.
+  // Gestures are already disabled (interactive === false at showdown), and
+  // BetControls is gated by bettingRound !== 'showdown' in the parent route,
+  // so there is no functional collision; we just need the visual to match.
+  $effect(() => {
+    if (gameState === 'showdown') {
+      faceUp = [true, true];
+    }
+  });
+
   // Element refs for arc (outer wrapper) and flip (inner faces).
   let outerRefs = $state<(HTMLElement | undefined)[]>([undefined, undefined]);
   let innerRefs = $state<(HTMLElement | undefined)[]>([undefined, undefined]);
 
   // ─── Visibility ──────────────────────────────────────────────────────
-  // HOTFIX2 FIX 6: exclude 'showdown' from showCards. Otherwise the fixed
-  // hole cards continue to render at the bottom during showdown and overlap
-  // the .showdown-hands opponent reveal block.
+  // HOTFIX3 FIX A: revert hotfix #2's exclusion of 'showdown'. Spec §Step 9
+  // requires hole cards stay rendered face-up at showdown with no gestures
+  // and no idle drift. The original overlap concern was moot: BetControls is
+  // already gated by `bettingRound !== 'showdown'` in +page.svelte (line ~498),
+  // so there is no actual layout collision with the .showdown-hands block.
+  // `interactive` below is gated on 'in-hand', so gestures and idle drift
+  // are correctly disabled at showdown without an extra showCards condition.
   let showCards = $derived(
     gameState !== 'pre-deal' &&
     gameState !== 'folded' &&
-    gameState !== 'showdown' &&
     !committed &&
     cards.length === 2,
   );
 
   let interactive = $derived(gameState === 'in-hand' && !committed);
   let allowGesture = $derived(interactive);
+
+  // HOTFIX3 FIX D (perf): the imperative pointerdown $effect below would
+  // close over `allowGesture` directly, making `gesture`/`committed` (the
+  // upstream $state of the `interactive` $derived) deps of the listener-
+  // attaching effect. The effect would then teardown + re-attach
+  // addEventListener on every gesture state change, including every
+  // pointermove-driven mutation. We thread allowGesture through a non-reactive
+  // ref so the listener-attaching effect depends ONLY on cardHitRefs[i].
+  const allowGestureRef = { current: false };
+  $effect(() => {
+    allowGestureRef.current = allowGesture;
+  });
 
   // ─── Idle drift gating ───────────────────────────────────────────────
   let idleEnabled = $derived(
@@ -174,7 +226,9 @@
   }
 
   function setLiftFromTracking(g: Extract<Gesture, { kind: 'tracking' }>) {
-    const delta = Math.max(0, g.startY - g.currentY);
+    // HOTFIX3 FIX C: read currentY from the non-reactive module local, not
+    // gesture state. Single $state write (liftPx) per pointermove.
+    const delta = Math.max(0, g.startY - currentY);
     liftPx = delta;
   }
 
@@ -222,6 +276,9 @@
     }
 
     const now = performance.now();
+    // HOTFIX3 FIX C: hot-path locals are non-reactive; reset them imperatively.
+    currentY = e.clientY;
+    velocityBuffer = [{ t: now, y: e.clientY }];
     gesture = {
       kind: 'tracking',
       pointerId: e.pointerId,
@@ -229,8 +286,6 @@
       startX: e.clientX,
       startY: e.clientY,
       startTime: now,
-      currentY: e.clientY,
-      velocityBuffer: [{ t: now, y: e.clientY }],
       zone: 'rest',
       peekFired: false,
       armedFired: false,
@@ -247,13 +302,17 @@
   // not need preventDefault for the iOS hijack mitigation.
   let cardHitRefs = $state<(HTMLElement | undefined)[]>([undefined, undefined]);
   $effect(() => {
+    // HOTFIX3 FIX D: depend ONLY on cardHitRefs (the bound element refs).
+    // The handler reads allowGestureRef.current, which is updated by the
+    // separate $effect above. This breaks the dep chain that previously
+    // re-attached listeners on every gesture/committed mutation (60-240Hz).
     const handlers: Array<() => void> = [];
     for (let i = 0; i < cardHitRefs.length; i++) {
       const el = cardHitRefs[i];
       if (!el) continue;
       const idx = i;
       const handler = (ev: PointerEvent) => {
-        if (!allowGesture) return;
+        if (!allowGestureRef.current) return;
         onPointerDown(ev, idx);
       };
       el.addEventListener('pointerdown', handler, { passive: false });
@@ -269,24 +328,28 @@
     if (e.pointerId !== gesture.pointerId) return;
 
     const now = performance.now();
-    gesture.currentY = e.clientY;
-    gesture.velocityBuffer.push({ t: now, y: e.clientY });
-    pruneVelocityBuffer(gesture.velocityBuffer, now);
+    // HOTFIX3 FIX C: write to non-reactive locals on the hot path.
+    currentY = e.clientY;
+    velocityBuffer.push({ t: now, y: e.clientY });
+    pruneVelocityBuffer(velocityBuffer, now);
     setLiftFromTracking(gesture);
 
     const result = evaluateGesture({
       startY: gesture.startY,
-      currentY: gesture.currentY,
+      currentY,
       startTime: gesture.startTime,
       now,
       viewportHeight: getViewportHeight(),
       isPlayerTurn,
       inputMode,
-      velocityBuffer: gesture.velocityBuffer,
+      velocityBuffer,
     });
 
     const prevZone = gesture.zone;
-    gesture.zone = result.zone;
+    // gesture.zone is template-read (armed class, release-cue), so this
+    // single $state write per pointermove is intentional. Skip the assignment
+    // when the zone hasn't changed to avoid a no-op invalidation.
+    if (prevZone !== result.zone) gesture.zone = result.zone;
 
     // peek transitions
     const wasInLiftOrAbove = prevZone === 'lift' || prevZone === 'armed';
@@ -317,15 +380,19 @@
 
     const now = performance.now();
     const g = gesture;
+    // HOTFIX3 FIX C: read from the non-reactive locals (snapshot a stable
+    // ref into bufferAtRelease so the subsequent runThrowAnimation sees the
+    // exact buffer evaluated here even if a stray late event mutates it).
+    const bufferAtRelease = velocityBuffer;
     const result = evaluateGesture({
       startY: g.startY,
-      currentY: g.currentY,
+      currentY,
       startTime: g.startTime,
       now,
       viewportHeight: getViewportHeight(),
       isPlayerTurn,
       inputMode,
-      velocityBuffer: g.velocityBuffer,
+      velocityBuffer: bufferAtRelease,
       releaseEvent: { overMuck: isReleaseOverMuck(e, g.muckRectSnapshot) },
     });
 
@@ -352,7 +419,7 @@
       }
       if (g.armedFired) onarmedchange?.(false);
       gesture = { kind: 'committing' };
-      runThrowAnimation(g.cardIndex, computeVelocity(g.velocityBuffer, now), g.muckRectSnapshot);
+      runThrowAnimation(g.cardIndex, computeVelocity(bufferAtRelease, now), g.muckRectSnapshot);
       return;
     }
 
@@ -407,25 +474,36 @@
     let endCenter = { x: vw / 2, y: vh / 2 };
 
     if (muckTarget.kind === 'element') {
-      // FIX 4: prefer the pointerdown-time rect snapshot. Live
-      // getBoundingClientRect on a fixed-position muck target can be stale
-      // during iOS Safari momentum-scroll. Fall back to a fresh read only if
-      // the snapshot is unavailable.
-      const rect = muckRectSnapshot ?? muckTarget.ref.getBoundingClientRect();
-      const center = {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
+      // HOTFIX3 FIX F: avoid synchronous layout reads on the commit frame.
+      // Use the pointerdown-time rect snapshot whenever it is usable (non-null
+      // AND non-zero-area AND on-screen). Only fall back to a fresh
+      // getBoundingClientRect when the snapshot is unusable. This eliminates
+      // the previously-unconditional re-validation read on the commit frame,
+      // where every saved millisecond reduces visible jank.
+      const isUsable = (r: DOMRect): boolean => {
+        if (r.width <= 0 || r.height <= 0) return false;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        if (cx < 0 || cx > vw || cy < 0 || cy > vh) return false;
+        return true;
       };
-      const zeroArea = rect.width <= 0 || rect.height <= 0;
-      const offscreen = center.x < 0 || center.x > vw || center.y < 0 || center.y > vh;
-      if (zeroArea || offscreen) {
+      let rect: DOMRect | null = muckRectSnapshot;
+      if (!rect || !isUsable(rect)) {
+        try { rect = muckTarget.ref.getBoundingClientRect(); } catch { rect = null; }
+      }
+      if (rect && isUsable(rect)) {
+        endCenter = {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        };
+      } else if (rect) {
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
         console.warn('[HoleCards] muckTarget rect off-screen or zero-area; clamping arc to viewport');
         endCenter = {
-          x: Math.min(Math.max(center.x, 16), vw - 16),
-          y: Math.min(Math.max(center.y, 16), vh - 16),
+          x: Math.min(Math.max(cx, 16), vw - 16),
+          y: Math.min(Math.max(cy, 16), vh - 16),
         };
-      } else {
-        endCenter = center;
       }
     } else if (muckTarget.kind === 'offscreen-top') {
       // TODO: paired-phone surface, handle muckTarget.kind === 'offscreen-top'
@@ -569,6 +647,11 @@
   //     promised keyboard interactivity but neither Enter nor Space did
   //     anything. Mirror the tap-to-flip behaviour of pointer release.
   function onCardKeyDown(e: KeyboardEvent, index: number) {
+    // HOTFIX3 FIX H (a11y): IME composition guard. Some CJK / IME flows fire
+    // synthetic Enter / Space during composition; treating those as flips
+    // would consume the IME's commit keystroke. Bail before any gesture
+    // gating so the IME path is fully transparent.
+    if (e.isComposing) return;
     if (!allowGesture) return;
     if (e.key === 'Enter' || e.key === ' ') {
       // Space scrolls the page by default; suppress that.
@@ -577,6 +660,15 @@
       onflip?.(index, faceUp[index]);
     }
   }
+
+  // HOTFIX3 FIX E: only retain a GPU layer when the card is animating or
+  // about to. Otherwise we keep a permanent compositor layer per card for
+  // the entire round, forcing the browser to dedicate texture memory to two
+  // mostly-static elements. Switching to conditional `will-change` lets the
+  // compositor reclaim the layer between gestures.
+  let willChangeActive = $derived(
+    idleEnabled || gesture.kind === 'tracking' || gesture.kind === 'committing',
+  );
 </script>
 
 {#if showCards}
@@ -587,6 +679,7 @@
         class:idle-drift={idleEnabled}
         class:idle-drift-b={idleEnabled && i === 1}
         class:hover-enabled={inputMode === 'pointer' && interactive}
+        class:will-change-transform={willChangeActive}
         bind:this={outerRefs[i]}
         style:transform={cardTransform(i)}
       >
@@ -627,6 +720,9 @@
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
     pointer-events: none;
     z-index: 50;
+    /* HOTFIX3 FIX G: isolate gesture transforms from the rest of the page
+       on Android Chrome <=110. No behavioural change. */
+    contain: layout paint;
   }
 
   .card-outer {
@@ -634,11 +730,24 @@
     max-width: 96px;
     pointer-events: auto;
     transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    /* HOTFIX3 FIX G: scope each card's paint/layout/style. */
+    contain: layout style paint;
+  }
+
+  /* HOTFIX3 FIX E: apply will-change only when the card is animating
+     (idle drift active, gesture in flight, or commit-arc playing). When the
+     class is not present, the browser is free to reclaim the GPU layer. */
+  .card-outer.will-change-transform {
     will-change: transform, opacity;
   }
 
   .card-inner {
     transform-style: preserve-3d;
+  }
+
+  /* Mirror the conditional layer hint on the inner flip wrapper so the
+     mid-arc rotateY animation gets a layer only when needed. */
+  .card-outer.will-change-transform .card-inner {
     will-change: transform;
   }
 

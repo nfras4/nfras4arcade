@@ -7,6 +7,7 @@ const DO_BINDINGS: Record<string, string> = {
   'connect-four': 'CONNECT_FOUR_ROOM',
   wavelength: 'WAVELENGTH_ROOM',
   poker: 'POKER_ROOM',
+  coup: 'COUP_ROOM',
 };
 
 export const POST: RequestHandler = async ({ url, locals, platform }) => {

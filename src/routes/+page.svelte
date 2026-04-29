@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import { fetchLiveRooms, gameLabel, playersSummary, phaseLabel, elapsedLabel, type LiveRoom } from '$lib/liveRooms'
 
   type Props = { data: {
     leaderboard: null | {
@@ -17,6 +18,22 @@
 
   let lbData = $state(data.leaderboard)
   let chipLb = $state(data.chipLeaderboard)
+
+  // Live rooms feed
+  let liveRooms = $state<LiveRoom[] | null>(null)
+  let liveTick = $state(0) // ticks each second so elapsed labels recompute
+
+  $effect(() => {
+    let cancelled = false
+    async function refresh() {
+      const rooms = await fetchLiveRooms()
+      if (!cancelled) liveRooms = rooms
+    }
+    refresh()
+    const fetchId = setInterval(refresh, 5000)
+    const tickId = setInterval(() => { liveTick++ }, 1000)
+    return () => { cancelled = true; clearInterval(fetchId); clearInterval(tickId) }
+  })
 
   // Refresh leaderboards every 2 minutes
   $effect(() => {
@@ -144,6 +161,43 @@
       </button>
 
     </nav>
+
+    <!-- Live Now: cross-game active rooms feed -->
+    {#if liveRooms !== null && liveRooms.length > 0}
+      {void liveTick}
+      <section class="live-widget" aria-label="Live game rooms">
+        <div class="lb-widget-hdr">
+          <span class="lb-widget-title">LIVE NOW</span>
+          <span class="live-pulse" aria-hidden="true"></span>
+        </div>
+        <ul class="live-rooms-list">
+          {#each liveRooms as room (`${room.game}-${room.code}`)}
+            <li class="live-room">
+              <a href={room.spectateUrl} class="live-room-link">
+                <div class="live-room-main">
+                  <div class="live-room-row">
+                    <span class="live-game-name geo-title">{gameLabel(room.game)}</span>
+                    <span class="live-phase live-phase-{room.phase}">{phaseLabel(room.phase)}</span>
+                  </div>
+                  <div class="live-players">{playersSummary(room.players)}</div>
+                  {#if room.phase === 'playing' && room.startedAt}
+                    <div class="live-elapsed">{elapsedLabel(room.startedAt)}</div>
+                  {/if}
+                </div>
+                <span class="live-spectate" aria-hidden="true">Spectate ▶</span>
+              </a>
+            </li>
+          {/each}
+        </ul>
+      </section>
+    {:else if liveRooms === null}
+      <section class="live-widget" aria-label="Live rooms loading">
+        <div class="lb-widget-hdr">
+          <span class="lb-widget-title">LIVE NOW</span>
+        </div>
+        <div class="live-empty">Checking rooms...</div>
+      </section>
+    {/if}
 
     <!-- Dungeon Leaderboard Widget -->
     {#if lbData}
@@ -605,4 +659,97 @@
   .lb-empty { font-size: 0.75rem; color: var(--text-subtle); font-family: 'Rajdhani', system-ui, sans-serif; }
   .lb-skeleton { display: flex; flex-direction: column; gap: 0.3rem; }
   .lb-skeleton-row { height: 14px; background: linear-gradient(90deg, var(--bg-hover) 0%, var(--bg-input) 50%, var(--bg-hover) 100%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; border-radius: 2px; }
+
+  /* Live Now widget */
+  .live-widget {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    padding: 1.25rem 1.5rem;
+  }
+  .live-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 8px #4ade80;
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.85); }
+  }
+  .live-rooms-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .live-room { background: var(--bg-input); border: 1px solid var(--border); transition: border-color 0.15s ease, background 0.15s ease; }
+  .live-room:hover { border-color: var(--accent-border); background: var(--bg-hover); }
+  .live-room-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    text-decoration: none;
+    color: inherit;
+  }
+  .live-room-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+  .live-room-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .live-game-name { font-size: 0.95rem; letter-spacing: 0.08em; color: var(--accent); }
+  .live-phase {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+  .live-phase-playing { color: #4ade80; border-color: #4ade8050; background: #4ade8015; }
+  .live-phase-lobby { color: var(--text-subtle); border-color: var(--border-bright); }
+  .live-phase-round_over { color: #f0c030; border-color: #f0c03050; background: #f0c03015; }
+  .live-phase-game_over { color: var(--text-subtle); border-color: var(--border); }
+  .live-players {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .live-elapsed {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--text-subtle);
+    text-transform: uppercase;
+  }
+  .live-spectate {
+    flex-shrink: 0;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 0.4rem 0.7rem;
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+  }
+  .live-room:hover .live-spectate { background: var(--accent-border); }
+  .live-empty {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    color: var(--text-subtle);
+    padding: 0.5rem 0;
+  }
+
+  .live-widget .lb-widget-hdr { justify-content: flex-start; gap: 0.5rem; }
 </style>

@@ -12,6 +12,7 @@
   import PlayerSeat from '$lib/components/cards/PlayerSeat.svelte';
   import CommunityCards from '$lib/components/cards/CommunityCards.svelte';
   import BetControls from '$lib/components/poker/BetControls.svelte';
+  import BetPanel from '$lib/components/BetPanel.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/poker');
@@ -93,6 +94,20 @@
   let callAmount = $derived(Math.min(toCall, myChips));
   let minRaise = $derived(currentBet + bigBlindAmount);
   let maxRaise = $derived(myChips + myBet);
+
+  // ─── Spectator bet panel data ─────────────────────────────────
+  // A poker player is bet-eligible if they still have chips and are not folded for this hand.
+  // For v1 we treat folded (current hand) as still eligible since they remain in the tournament.
+  // Eliminated = no chips remaining.
+  let myUserId = $derived($currentUser?.id ?? null);
+  let betPlayers = $derived(
+    (state?.players ?? []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      isBot: p.isBot,
+      eliminated: (playerChips[p.id] ?? 0) <= 0,
+    }))
+  );
 
   // Cosmetics: card back and table felt from auth store
   // TODO: wire feature flag — COSMETIC_TILES_ENABLED hardcoded true until accessible client-side
@@ -325,6 +340,17 @@
 
       <div class="phase-panel">
         {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
+
+        {#if isSpectator}
+          <BetPanel
+            roomCode={code}
+            game="poker"
+            players={betPlayers}
+            isSpectator={isSpectator}
+            isGameEnded={bettingRound === 'showdown'}
+            myUserId={myUserId}
+          />
+        {/if}
         <!-- Turn indicator -->
         <div class="turn-indicator">
           {#if bettingRound === 'showdown'}

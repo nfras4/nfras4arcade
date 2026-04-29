@@ -9,6 +9,7 @@ const GAME_CONFIG: Record<string, { binding: string; minPlayers: number }> = {
   wavelength: { binding: 'WAVELENGTH_ROOM', minPlayers: 2 },
   blackjack: { binding: 'BLACKJACK_ROOM', minPlayers: 1 },
   roulette: { binding: 'ROULETTE_ROOM', minPlayers: 1 },
+  coup: { binding: 'COUP_ROOM', minPlayers: 2 },
 };
 
 function generateCode(): string {

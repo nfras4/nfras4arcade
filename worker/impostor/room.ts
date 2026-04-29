@@ -8,6 +8,7 @@ import type {
 import { getRandomWord, getRandomCategory, getCategories } from './words';
 import { CosmeticsCache } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { xpToLevel } from '../../src/lib/xp';
 
 const MAX_MESSAGE_SIZE = 2048;
@@ -292,6 +293,7 @@ export class ImpostorRoom extends DurableObject<Env> {
           ws.close(1000, 'Room expired');
         } catch {}
       }
+      await this.clearActiveRoom();
       await this.ctx.storage.deleteAll();
       this.initialized = false;
     } else {
@@ -323,6 +325,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.sendToWs(ws, joinMsg);
       this.broadcastState();
       await this.saveState();
+      await this.writeActiveRoom();
       return;
     }
 
@@ -377,6 +380,34 @@ export class ImpostorRoom extends DurableObject<Env> {
     this.sendToWs(ws, joinMsg);
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
+  }
+
+  /**
+   * Update the active_rooms feed entry for this Impostor room. Impostor's
+   * fine-grained phases (hints/discussion/voting/reveal) all map to the
+   * generic 'playing' state for the cross-game feed.
+   */
+  private async writeActiveRoom(): Promise<void> {
+    const feedPhase: 'lobby' | 'playing' | 'game_over' =
+      this.phase === 'lobby' ? 'lobby' :
+      this.phase === 'game_over' ? 'game_over' :
+      'playing';
+    const players: ActiveRoomPlayer[] = Array.from(this.players.values()).map(cp => ({
+      id: cp.player.id,
+      name: cp.player.name,
+      isBot: false,
+    }));
+    await upsertActiveRoom(this.env.DB, {
+      code: this.code,
+      game: 'impostor',
+      phase: feedPhase,
+      players,
+    });
+  }
+
+  private async clearActiveRoom(): Promise<void> {
+    await deleteActiveRoom(this.env.DB, this.code, 'impostor');
   }
 
   private async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
@@ -429,10 +460,17 @@ export class ImpostorRoom extends DurableObject<Env> {
     }
 
     if (this.players.size === 0) {
+      // Empty lobby — drop from feed.
+      if (this.phase === 'lobby') {
+        this.clearActiveRoom().catch(() => {});
+      }
       return;
     }
 
     this.broadcastState();
+    if (this.phase === 'lobby') {
+      this.writeActiveRoom().catch(() => {});
+    }
   }
 
   private async scheduleReconnectCheck(): Promise<void> {
@@ -527,6 +565,7 @@ export class ImpostorRoom extends DurableObject<Env> {
           break;
         }
         this.broadcastState();
+        await this.writeActiveRoom();
         break;
       }
 
@@ -615,6 +654,7 @@ export class ImpostorRoom extends DurableObject<Env> {
         if (playerId !== this.hostId) break;
         this.resetToLobby();
         this.broadcastState();
+        await this.writeActiveRoom();
         break;
       }
 
@@ -622,6 +662,7 @@ export class ImpostorRoom extends DurableObject<Env> {
         if (playerId !== this.hostId) break;
         this.phase = 'game_over';
         this.broadcastState();
+        await this.clearActiveRoom();
         break;
       }
 
@@ -681,6 +722,7 @@ export class ImpostorRoom extends DurableObject<Env> {
         for (const ws of this.ctx.getWebSockets()) {
           try { ws.close(1000, 'Lobby dissolved'); } catch {}
         }
+        await this.clearActiveRoom();
         return;
       }
     }
@@ -753,6 +795,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     }
 
     this.broadcastState();
+    await this.writeActiveRoom();
   }
 
   // --- Game methods (faithfully ported from GameRoom) ---

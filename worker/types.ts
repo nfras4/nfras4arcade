@@ -11,6 +11,7 @@ export interface Env {
   ROULETTE_ROOM: DurableObjectNamespace;
   BACCARAT_ROOM: DurableObjectNamespace;
   LIARS_DICE_ROOM: DurableObjectNamespace;
+  COUP_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
 }

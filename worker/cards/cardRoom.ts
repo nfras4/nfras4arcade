@@ -5,6 +5,8 @@ import type { BotPlayer } from '../bots/botPlayer';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
+import { resolveBets } from '../shared/bets';
 import { xpToLevel } from '../../src/lib/xp';
 
 const MAX_MESSAGE_SIZE = 2048;
@@ -271,9 +273,12 @@ export abstract class CardRoom extends DurableObject<Env> {
       }
       this.spectators.clear();
       this.broadcastState();
+      // Back to lobby — keep the entry alive so spectators can still see it.
+      await this.writeActiveRoom();
     } else if (msg.type === 'end_game' && playerId === this.hostId) {
       this.phase = 'game_over';
       this.broadcastState();
+      await this.clearActiveRoom();
     } else {
       // Delegate to game-specific handler
       await this.handleAction(playerId, msg as CardAction);
@@ -379,6 +384,7 @@ export abstract class CardRoom extends DurableObject<Env> {
           ws.close(1000, 'Room expired');
         } catch {}
       }
+      await this.clearActiveRoom();
       await this.ctx.storage.deleteAll();
       this.initialized = false;
     }
@@ -402,6 +408,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       });
       this.broadcastState();
       await this.saveState();
+      await this.writeActiveRoom();
       return;
     }
 
@@ -450,6 +457,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     });
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
   }
 
   /**
@@ -457,6 +465,28 @@ export abstract class CardRoom extends DurableObject<Env> {
    * caller broadcasts state. Guests short-circuit inside the cache/resolver
    * without a D1 hit.
    */
+  /**
+   * Update the active_rooms D1 entry for this room. Best-effort — failures
+   * are swallowed inside upsertActiveRoom so they cannot block game logic.
+   */
+  protected async writeActiveRoom(): Promise<void> {
+    const players: ActiveRoomPlayer[] = Array.from(this.players.values()).map(p => ({
+      id: p.id,
+      name: p.name,
+      isBot: !!p.isBot,
+    }));
+    await upsertActiveRoom(this.env.DB, {
+      code: this.code,
+      game: this.gameType,
+      phase: this.phase,
+      players,
+    });
+  }
+
+  protected async clearActiveRoom(): Promise<void> {
+    await deleteActiveRoom(this.env.DB, this.code, this.gameType);
+  }
+
   protected async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
     const player = this.players.get(playerId);
     if (!player) return;
@@ -512,6 +542,11 @@ export abstract class CardRoom extends DurableObject<Env> {
 
     if (this.players.size > 0) {
       this.broadcastState();
+      // Reflect the updated player list (or the empty lobby) in the live feed.
+      if (this.phase === 'lobby') await this.writeActiveRoom();
+    } else if (this.phase === 'lobby') {
+      // Lobby went empty — drop the row so it doesn't linger.
+      await this.clearActiveRoom();
     }
   }
 
@@ -550,6 +585,9 @@ export abstract class CardRoom extends DurableObject<Env> {
     } catch {}
 
     this.broadcastState();
+
+    // Mark this room as live in the active-rooms feed.
+    await this.writeActiveRoom();
 
     // If first turn is a bot, schedule it
     if (this.isBotTurn()) {
@@ -668,6 +706,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
     return Response.json({ name: bot.name, id: bot.id });
   }
 
@@ -676,6 +715,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     this.removeAllBots();
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
     return Response.json({ ok: true });
   }
 
@@ -793,6 +833,17 @@ export abstract class CardRoom extends DurableObject<Env> {
       // Post-batch badge checks (require queries, so run separately)
       await this.checkPostGameBadges(winnerId, now);
     } catch {}
+
+    // Resolve any spectator bets on this game. Wrapped separately so a bet
+    // failure can never break the game-end pipeline.
+    try {
+      await resolveBets(this.env.DB, this.code, this.gameType, winnerId);
+    } catch (err) {
+      console.error('resolveBets failed', err);
+    }
+
+    // Drop from active-rooms feed once the game ends.
+    await this.clearActiveRoom();
   }
 
   /** Check and award badges that require DB queries (veteran, night owl, speed demon, social butterfly, card shark). */

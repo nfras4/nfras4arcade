@@ -5,6 +5,7 @@ import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer
 import { shuffleDeck, type SpectrumCard } from '../../src/lib/wavelength/cards';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { xpToLevel } from '../../src/lib/xp';
 
 // --- Constants ---
@@ -478,6 +479,7 @@ export class WavelengthRoom extends DurableObject<Env> {
           ws.close(1000, 'Room expired');
         } catch {}
       }
+      await this.clearActiveRoom();
       await this.ctx.storage.deleteAll();
       this.initialized = false;
     } else {
@@ -503,6 +505,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       });
       this.broadcastState();
       await this.saveState();
+      await this.writeActiveRoom();
       return;
     }
 
@@ -554,6 +557,34 @@ export class WavelengthRoom extends DurableObject<Env> {
     });
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
+  }
+
+  /**
+   * Update the active_rooms feed entry for this Wavelength room. Wavelength's
+   * fine-grained phases (clue_giving/guessing/reveal) all map to 'playing'
+   * for the cross-game feed.
+   */
+  private async writeActiveRoom(): Promise<void> {
+    const feedPhase: 'lobby' | 'playing' | 'game_over' =
+      this.phase === 'lobby' ? 'lobby' :
+      this.phase === 'game_over' ? 'game_over' :
+      'playing';
+    const players: ActiveRoomPlayer[] = Array.from(this.players.values()).map(p => ({
+      id: p.id,
+      name: p.name,
+      isBot: !!p.isBot,
+    }));
+    await upsertActiveRoom(this.env.DB, {
+      code: this.code,
+      game: 'wavelength',
+      phase: feedPhase,
+      players,
+    });
+  }
+
+  private async clearActiveRoom(): Promise<void> {
+    await deleteActiveRoom(this.env.DB, this.code, 'wavelength');
   }
 
   private async resolveCosmeticsForPlayer(playerId: string): Promise<void> {
@@ -606,8 +637,16 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.scheduleReconnectCheck();
     }
 
-    if (this.players.size === 0) return;
+    if (this.players.size === 0) {
+      if (this.phase === 'lobby') {
+        this.clearActiveRoom().catch(() => {});
+      }
+      return;
+    }
     this.broadcastState();
+    if (this.phase === 'lobby') {
+      this.writeActiveRoom().catch(() => {});
+    }
   }
 
   private promoteNewHost(oldHostId: string): void {
@@ -639,6 +678,7 @@ export class WavelengthRoom extends DurableObject<Env> {
     this.addBot();
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
     return Response.json({ ok: true });
   }
 
@@ -649,6 +689,7 @@ export class WavelengthRoom extends DurableObject<Env> {
     this.removeAllBots();
     this.broadcastState();
     await this.saveState();
+    await this.writeActiveRoom();
     return Response.json({ ok: true });
   }
 
@@ -669,6 +710,7 @@ export class WavelengthRoom extends DurableObject<Env> {
           break;
         }
         this.broadcastState();
+        await this.writeActiveRoom();
         await this.scheduleBotTurnIfNeeded();
         break;
       }
@@ -776,6 +818,7 @@ export class WavelengthRoom extends DurableObject<Env> {
         }
         this.addBot();
         this.broadcastState();
+        await this.writeActiveRoom();
         break;
       }
 
@@ -790,6 +833,7 @@ export class WavelengthRoom extends DurableObject<Env> {
         }
         this.removeAllBots();
         this.broadcastState();
+        await this.writeActiveRoom();
         break;
       }
 
@@ -798,6 +842,7 @@ export class WavelengthRoom extends DurableObject<Env> {
         if (this.phase !== 'game_over') break;
         this.resetToLobby();
         this.broadcastState();
+        await this.writeActiveRoom();
         break;
       }
 
@@ -807,6 +852,7 @@ export class WavelengthRoom extends DurableObject<Env> {
         this.calculateAwards();
         this.recordGameEnd().catch(() => {});
         this.broadcastState();
+        await this.clearActiveRoom();
         break;
       }
 
@@ -1003,6 +1049,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.phase = 'game_over';
       this.calculateAwards();
       this.recordGameEnd().catch(() => {});
+      this.clearActiveRoom().catch(() => {});
       return;
     }
     this.startRound();

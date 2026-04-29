@@ -75,6 +75,16 @@
       route: '/liars-dice',
       soloAction: 'tutorial' as const,
     },
+    {
+      id: 'coup',
+      name: 'Coup',
+      description: 'Bluff or call. Last one with influence wins.',
+      minPlayers: 2,
+      maxPlayers: 6,
+      type: 'social deduction',
+      route: '/coup',
+      soloAction: 'solo' as const,
+    },
   ];
 
   let creatingSolo: string | null = $state(null);

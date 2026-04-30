@@ -14,6 +14,7 @@ export interface CasinoPlayer {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  titleText?: string | null;
 }
 
 export interface CasinoGameState {
@@ -29,6 +30,7 @@ export interface CasinoGameState {
     emblemSvg?: string | null;
     nameColour?: string | null;
     titleBadgeId?: string | null;
+    titleText?: string | null;
   }[];
   roundNumber: number;
   minBet: number;

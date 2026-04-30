@@ -1038,6 +1038,7 @@ export class SnapRoom extends DurableObject<Env> {
       emblemSvg: p.emblemSvg ?? null,
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
+      titleText: p.titleText ?? null,
     }));
 
     const topCard = this.pile.length > 0 ? this.pile[this.pile.length - 1] : null;

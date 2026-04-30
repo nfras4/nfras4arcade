@@ -62,6 +62,8 @@
     socket,
     roleParam,
     isLoggedIn,
+    foldAnimation,
+    onfoldAnimationDone,
   }: {
     state: any;
     pid: string | null;
@@ -115,12 +117,54 @@
     socket: any;
     roleParam: string | null;
     isLoggedIn: boolean;
+    foldAnimation?: { playerId: string; fromSeat: number } | null;
+    onfoldAnimationDone?: () => void;
   } = $props();
 
   let opponents = $derived((state?.players ?? []).filter((p: any) => p.id !== pid));
   let muckEl: HTMLElement | undefined = $state(undefined);
   $effect(() => {
     if (muckEl) setMuckRef(muckEl);
+  });
+
+  // --- P6-2: Chip slide-in animation (mobile) ---
+  type ChipSlideM = { id: number; fromX: number };
+  let chipSlidesM = $state<ChipSlideM[]>([]);
+  let slideCounterM = $state(0);
+  let prevBetsM = $state<Record<string, number>>({});
+
+  $effect(() => {
+    const current = playerBets ?? {};
+    const opp = (state?.players ?? []).filter((p: any) => p.id !== pid);
+    const total = opp.length;
+
+    for (const [playerId, bet] of Object.entries(current)) {
+      const prev = prevBetsM[playerId] ?? 0;
+      if (bet > prev && bet > 0) {
+        const oppIdx = opp.findIndex((p: any) => p.id === playerId);
+        if (oppIdx !== -1) {
+          // Horizontal offset: seats are evenly spaced; center seat index is (total-1)/2
+          const centerIdx = (total - 1) / 2;
+          const fromX = (oppIdx - centerIdx) * 80;
+          const id = ++slideCounterM;
+          chipSlidesM = [...chipSlidesM, { id, fromX }];
+          setTimeout(() => {
+            chipSlidesM = chipSlidesM.filter(s => s.id !== id);
+          }, 320);
+        }
+      }
+    }
+    prevBetsM = { ...current };
+  });
+
+  // --- P6-1: Fold-arc animation (Wave C, mobile) ---
+  let foldArcShouldShow = $derived(!!foldAnimation && opponents.some((p: any) => p.id === foldAnimation!.playerId));
+
+  $effect(() => {
+    if (foldAnimation && onfoldAnimationDone) {
+      const t = setTimeout(onfoldAnimationDone, 500);
+      return () => clearTimeout(t);
+    }
   });
 </script>
 
@@ -242,6 +286,18 @@
               {/each}
             {/if}
           </div>
+        {/if}
+        <!-- P6-2: chip slide tokens animating toward pot -->
+        {#each chipSlidesM as slide (slide.id)}
+          <div class="phase6-chip-slide" style="--from-x: {slide.fromX}px;"></div>
+        {/each}
+
+        <!-- P6-1: paired fold-arc card-back slide-up (Wave C, mobile) -->
+        {#if foldArcShouldShow}
+          <div
+            class="phase6-fold-arc"
+            onanimationend={() => onfoldAnimationDone?.()}
+          ></div>
         {/if}
         <CommunityCards cards={communityCards} {bettingRound} />
       </div>
@@ -657,4 +713,62 @@
   }
 
   .waiting-text { font-size: 0.85rem; color: var(--text-muted); text-align: center; }
+
+  /* --- P6-2: Chip slide-in animation, mobile (Wave A2) --- */
+  @keyframes phase6-slide-to-pot-m {
+    from {
+      transform: translateX(var(--from-x)) translateY(-40px) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(0) translateY(0) scale(0.5);
+      opacity: 0;
+    }
+  }
+
+  .phase6-chip-slide {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--yellow, #eab308);
+    border: 2px solid #0c0e10;
+    pointer-events: none;
+    animation: phase6-slide-to-pot-m 300ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase6-chip-slide {
+      animation: none;
+      opacity: 0;
+    }
+  }
+
+  /* --- P6-1: Paired fold-arc animation (Wave C, mobile) --- */
+  @keyframes phase6-fold-arc-slide-m {
+    from {
+      transform: translateY(0) rotate(0deg) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: translateY(-60px) rotate(-180deg) scale(0.5);
+      opacity: 0;
+    }
+  }
+
+  .phase6-fold-arc {
+    width: 32px;
+    height: 44px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #2a3a4a 0%, #1a2530 100%);
+    border: 1px solid rgba(108, 180, 130, 0.4);
+    pointer-events: none;
+    animation: phase6-fold-arc-slide-m 500ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase6-fold-arc {
+      animation: none;
+      opacity: 0;
+    }
+  }
 </style>

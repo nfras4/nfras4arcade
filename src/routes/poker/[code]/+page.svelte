@@ -1,5 +1,6 @@
 <script lang="ts">
   // @ts-nocheck
+  import { tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { CardGameSocket } from '$lib/cardSocket';
@@ -48,6 +49,12 @@
   let dropoutGraceMs = $state(60_000);
   let dropoutHideTimer: ReturnType<typeof setTimeout> | undefined;
 
+  let foldAnimation = $state<{ playerId: string; fromSeat: number } | null>(null);
+
+  $effect(() => () => {
+    if (dropoutHideTimer) clearTimeout(dropoutHideTimer);
+  });
+
   function detectMobile(): boolean {
     if (typeof window === 'undefined') return false;
     try {
@@ -76,7 +83,12 @@
   });
 
   $effect(() => {
-    const unsub = socket.onMessage((msg: any) => {
+    const unsub = socket.onMessage(async (msg: any) => {
+      if (msg.type === 'paired_fold_animation') {
+        foldAnimation = { playerId: msg.playerId, fromSeat: msg.fromSeat };
+        await tick();
+        return;
+      }
       if (msg.type === 'joined') {
         myPlayerId.set(msg.playerId);
         // WHY: Phase 4 spectator bug - if state arrives null/undefined, do not
@@ -402,6 +414,8 @@
       setMuckRef={(el) => muckTargetRef = el}
       {blindSetting} {gameMode} {casualChipCount} {addingBot}
       {betPlayers} {myUserId} {code} {socket} {roleParam} isLoggedIn={$isLoggedIn}
+      foldAnimation={foldAnimation}
+      onfoldAnimationDone={() => { foldAnimation = null; }}
       onaction={sendAction}
       onarmedchange={(armed) => isArmed = armed}
       onstartGame={startGame}
@@ -429,6 +443,8 @@
       onnextHand={nextHand}
       onleaveGame={leaveGame}
       {betPlayers} {myUserId} {code}
+      foldAnimation={foldAnimation}
+      onfoldAnimationDone={() => { foldAnimation = null; }}
       onaction={sendAction}
       onarmedchange={(armed) => isArmed = armed}
     />

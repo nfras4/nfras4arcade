@@ -471,6 +471,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
+      p.titleText = cosmetics.titleText;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }

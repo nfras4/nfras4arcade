@@ -2,7 +2,6 @@
   import type { CardGamePhase } from '../../../../worker/cards/types';
   import type { CardGameSocket } from '$lib/cardSocket';
   import QRDisplay from './QRDisplay.svelte';
-  import { getDeviceFingerprint } from './deviceFingerprint';
 
   let {
     roomCode,
@@ -24,31 +23,6 @@
   let countdown: number = $state(60);
   let qrUrl: string | null = $state(null);
   let error: string | null = $state(null);
-  let remembered: boolean = $state(false);
-
-  $effect(() => {
-    if (typeof window === 'undefined') return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const fp = await getDeviceFingerprint();
-        if (!fp || cancelled) return;
-        const res = await fetch('/api/pair/check_remembered', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ fingerprint: fp }),
-        });
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { remembered?: boolean };
-        if (!cancelled && data.remembered) remembered = true;
-      } catch {}
-    })();
-    return () => {
-      cancelled = true;
-    };
-  });
-
   $effect(() => {
     if (status !== 'qr' || expiresAt === null) return;
     const tick = () => {
@@ -136,9 +110,6 @@
   <div class="pair-button-wrap">
     {#if status === 'idle'}
       <button class="btn-primary pair-btn" onclick={startPair}>Pair my phone</button>
-      {#if remembered}
-        <p class="pair-hint">Phone remembered. Auto-pair when it joins?</p>
-      {/if}
     {:else if status === 'loading'}
       <button class="btn-primary pair-btn" disabled>Loading...</button>
     {:else if status === 'qr' && qrUrl && token}
@@ -174,12 +145,6 @@
   }
   .pair-btn {
     min-width: 12rem;
-  }
-  .pair-hint {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin: 0.25rem 0 0;
-    text-align: center;
   }
   .pair-qr-card {
     display: flex;

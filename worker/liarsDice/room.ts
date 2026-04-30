@@ -44,6 +44,7 @@ interface Player {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  titleText?: string | null;
 }
 
 interface Bid {
@@ -108,6 +109,7 @@ interface ClientState {
     emblemSvg?: string | null;
     nameColour?: string | null;
     titleBadgeId?: string | null;
+    titleText?: string | null;
   }[];
   hostId: string;
   turnOrder: string[];
@@ -522,6 +524,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       player.emblemSvg = DEFAULT_COSMETICS.emblemSvg;
       player.nameColour = DEFAULT_COSMETICS.nameColour;
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
+      player.titleText = DEFAULT_COSMETICS.titleText;
       return;
     }
     try {
@@ -532,6 +535,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
+      p.titleText = cosmetics.titleText;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
@@ -1057,6 +1061,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         emblemSvg: p.emblemSvg ?? null,
         nameColour: p.nameColour ?? null,
         titleBadgeId: p.titleBadgeId ?? null,
+        titleText: p.titleText ?? null,
       })),
       hostId: this.hostId,
       turnOrder: [...this.turnOrder],

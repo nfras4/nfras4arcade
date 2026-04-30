@@ -273,6 +273,7 @@ export class ConnectFourRoom extends CardRoom {
       emblemSvg: p.emblemSvg ?? null,
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
+      titleText: p.titleText ?? null,
     }));
 
     return {

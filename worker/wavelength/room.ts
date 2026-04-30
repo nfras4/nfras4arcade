@@ -35,6 +35,7 @@ interface WavelengthPlayer {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  titleText?: string | null;
 }
 
 interface RoundResultEntry {
@@ -639,6 +640,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       player.emblemSvg = DEFAULT_COSMETICS.emblemSvg;
       player.nameColour = DEFAULT_COSMETICS.nameColour;
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
+      player.titleText = DEFAULT_COSMETICS.titleText;
       return;
     }
     try {
@@ -649,6 +651,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
+      p.titleText = cosmetics.titleText;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
@@ -1478,6 +1481,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       emblemSvg: p.emblemSvg ?? null,
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
+      titleText: p.titleText ?? null,
     }));
 
     return {

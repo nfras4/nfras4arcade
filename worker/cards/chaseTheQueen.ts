@@ -411,6 +411,7 @@ export class ChaseTheQueenRoom extends CardRoom {
       emblemSvg: p.emblemSvg ?? null,
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
+      titleText: p.titleText ?? null,
     }));
 
     // Check if Queen of Spades is in the current trick

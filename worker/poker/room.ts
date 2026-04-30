@@ -346,6 +346,9 @@ export class PokerRoom extends CardRoom {
         ts.playerFolded[playerId] = true;
         ts.lastAction = { playerId, action: 'fold' };
 
+        const foldSeat = this.turnOrder.indexOf(playerId);
+        this.broadcast({ type: 'paired_fold_animation', playerId, fromSeat: foldSeat });
+
         // Check if only 1 non-folded player remains
         const remaining = this.getActivePlayers(ts);
         if (remaining.length === 1) {
@@ -870,6 +873,9 @@ export class PokerRoom extends CardRoom {
     ts.playerFolded[playerId] = true;
     ts.lastAction = { playerId, action: 'fold' };
     ts.actedThisRound[playerId] = true;
+
+    const timeoutFoldSeat = this.turnOrder.indexOf(playerId);
+    this.broadcast({ type: 'paired_fold_animation', playerId, fromSeat: timeoutFoldSeat });
 
     // If only one non-folded player remains, award the pot.
     const remaining = this.getActivePlayers(ts);

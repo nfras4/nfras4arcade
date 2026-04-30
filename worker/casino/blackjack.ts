@@ -613,6 +613,7 @@ export class BlackjackRoom extends CasinoRoom {
       emblemSvg: p.emblemSvg ?? null,
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
+      titleText: p.titleText ?? null,
     }));
 
     // Hide dealer's hole card unless revealed

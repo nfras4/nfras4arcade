@@ -49,6 +49,8 @@
     myUserId,
     code,
     myBet,
+    foldAnimation,
+    onfoldAnimationDone,
   }: {
     state: any;
     pid: string | null;
@@ -90,6 +92,8 @@
     myUserId: string | null;
     code: string;
     myBet: number;
+    foldAnimation?: { playerId: string; fromSeat: number } | null;
+    onfoldAnimationDone?: () => void;
   } = $props();
 
   let opponents = $derived((state?.players ?? []).filter((p: any) => p.id !== pid));
@@ -105,9 +109,74 @@
     return `left: ${x}%; top: ${y}%; transform: translate(-50%, -50%);`;
   }
 
+  function seatXY(opponentIndex: number, totalOpponents: number): { x: number; y: number } {
+    const step = 360 / (totalOpponents + 1);
+    const angleDeg = 90 + step * (opponentIndex + 1);
+    const angleRad = (angleDeg * Math.PI) / 180;
+    return { x: 50 + 42 * Math.cos(angleRad), y: 50 + 36 * Math.sin(angleRad) };
+  }
+
   let muckEl: HTMLElement | undefined = $state(undefined);
   $effect(() => {
     if (muckEl) setMuckRef(muckEl);
+  });
+
+  // --- P6-2: Chip slide-in animation ---
+  type ChipSlide = { id: number; fromX: number; fromY: number };
+  let chipSlides = $state<ChipSlide[]>([]);
+  let slideCounter = $state(0);
+  let prevBets = $state<Record<string, number>>({});
+
+  $effect(() => {
+    const current = playerBets ?? {};
+    const opp = (state?.players ?? []).filter((p: any) => p.id !== pid);
+    const total = opp.length;
+    for (const [playerId, bet] of Object.entries(current)) {
+      const prev = prevBets[playerId] ?? 0;
+      if (bet > prev && bet > 0) {
+        const oppIdx = opp.findIndex((p: any) => p.id === playerId);
+        if (oppIdx !== -1) {
+          const { x, y } = seatXY(oppIdx, total);
+          const fromX = (x - 50) * 6;
+          const fromY = (y - 50) * 6;
+          const id = ++slideCounter;
+          chipSlides = [...chipSlides, { id, fromX, fromY }];
+          setTimeout(() => {
+            chipSlides = chipSlides.filter(s => s.id !== id);
+          }, 320);
+        }
+      }
+    }
+    prevBets = { ...current };
+  });
+
+  // --- P6-1: Fold-arc animation (Wave C) ---
+  let foldArcStyle = $derived.by(() => {
+    if (!foldAnimation) return null;
+    const opp = (state?.players ?? []).filter((p: any) => p.id !== pid);
+    const idx = opp.findIndex((p: any) => p.id === foldAnimation!.playerId);
+    if (idx === -1) return null;
+    const { x, y } = seatXY(idx, opp.length);
+    const dx = (50 - x) * 6;
+    const dy = (50 - y) * 6;
+    return `left: ${x}%; top: ${y}%; --to-x: ${dx}px; --to-y: ${dy}px;`;
+  });
+
+  $effect(() => {
+    if (foldAnimation && onfoldAnimationDone) {
+      const t = setTimeout(onfoldAnimationDone, 500);
+      return () => clearTimeout(t);
+    }
+  });
+
+  // --- P6-3: Dealer button position ---
+  let dealerSeatStyle = $derived.by(() => {
+    if (!dealerId) return null;
+    const opp = (state?.players ?? []).filter((p: any) => p.id !== pid);
+    const idx = opp.findIndex((p: any) => p.id === dealerId);
+    if (idx === -1) return null;
+    const { x, y } = seatXY(idx, opp.length);
+    return `left: ${x}%; top: ${y}%;`;
   });
 </script>
 
@@ -175,6 +244,29 @@
         </div>
       {/each}
     </div>
+
+    <!-- P6-3: floating dealer button that transitions between seat positions -->
+    {#if dealerSeatStyle}
+      <div class="phase6-dealer-transition" style={dealerSeatStyle}></div>
+    {/if}
+
+    <!-- P6-2: chip slide tokens animating from seat to pot center -->
+    {#each chipSlides as slide (slide.id)}
+      <div
+        class="phase6-chip-slide"
+        style="--from-x: {slide.fromX}px; --from-y: {slide.fromY}px;"
+      ></div>
+    {/each}
+
+    <!-- P6-1: paired fold-arc card-back animating from folder's seat to muck pile -->
+    {#if foldAnimation && foldArcStyle}
+      <div
+        class="phase6-fold-arc"
+        style={foldArcStyle}
+        onanimationend={() => onfoldAnimationDone?.()}
+      ></div>
+    {/if}
+
     <div class="felt-center" bind:this={muckEl}>
       {#if totalPot > 0}
         <div class="pot-display">
@@ -215,7 +307,13 @@
             <span class="opponent-name">{player.name}</span>
             <div class="opponent-cards">
               {#each playerHands[player.id] ?? [] as card, i}
-                <Card {card} faceUp={true} dealDelay={i * 100} />
+                <!-- P6-4: 3D flip reveal, staggered by card index -->
+                <div class="phase6-card-reveal" style="animation-delay: {i * 100}ms;">
+                  <div class="phase6-card-reveal-inner">
+                    <div class="phase6-card-reveal-back"><Card faceUp={false} /></div>
+                    <div class="phase6-card-reveal-front"><Card {card} faceUp={true} /></div>
+                  </div>
+                </div>
               {/each}
             </div>
           </div>
@@ -492,5 +590,155 @@
     border-radius: 2px;
     padding: 0.3rem 0.75rem;
     text-align: center;
+  }
+
+  /* --- P6-2: Chip slide-in animation (Wave A2) --- */
+  @keyframes phase6-slide-to-pot {
+    from {
+      transform: translate(var(--from-x), var(--from-y)) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: translate(0, 0) scale(0.5);
+      opacity: 0;
+    }
+  }
+
+  .phase6-chip-slide {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-top: -10px;
+    border-radius: 50%;
+    background: var(--yellow, #eab308);
+    border: 2px solid var(--seat-badge-on-accent, #0c0e10);
+    pointer-events: none;
+    z-index: 10;
+    animation: phase6-slide-to-pot 300ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase6-chip-slide {
+      animation: none;
+      opacity: 0;
+    }
+  }
+
+  /* --- P6-3: Dealer button slide on rotation (Wave A2) --- */
+  .phase6-dealer-transition {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    margin-left: -12px;
+    margin-top: -12px;
+    background: var(--yellow, #eab308);
+    color: #0c0e10;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 5;
+    transition: left 600ms ease-in-out, top 600ms ease-in-out;
+    transform: translate(-50%, -50%);
+  }
+
+  .phase6-dealer-transition::after {
+    content: 'D';
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase6-dealer-transition {
+      transition: none;
+    }
+  }
+
+  /* --- P6-4: Showdown card reveal flip animation (Wave A2) --- */
+  .phase6-card-reveal {
+    perspective: 600px;
+    display: inline-block;
+  }
+
+  .phase6-card-reveal-inner {
+    position: relative;
+    width: 68px;
+    height: 94px;
+    transform-style: preserve-3d;
+    animation: phase6-flip-reveal 200ms ease-in forwards;
+    animation-play-state: paused;
+    animation-delay: inherit;
+  }
+
+  .phase6-card-reveal:not(:has(.phase6-card-reveal-inner)) {
+    animation-play-state: running;
+  }
+
+  .phase6-card-reveal-inner {
+    animation-play-state: running;
+  }
+
+  .phase6-card-reveal-back,
+  .phase6-card-reveal-front {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  .phase6-card-reveal-front {
+    transform: rotateY(180deg);
+  }
+
+  @keyframes phase6-flip-reveal {
+    from { transform: rotateY(0deg); }
+    to   { transform: rotateY(180deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase6-card-reveal-inner {
+      animation: none;
+      transform: rotateY(180deg);
+    }
+  }
+
+  /* --- P6-1: Paired fold-arc animation (Wave C) --- */
+  @keyframes phase6-fold-arc-keyframes {
+    from {
+      transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: translate(-50%, -50%) translate(var(--to-x), var(--to-y)) rotate(180deg) scale(0.6);
+      opacity: 0;
+    }
+  }
+
+  .phase6-fold-arc {
+    position: absolute;
+    width: 40px;
+    height: 56px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #2a3a4a 0%, #1a2530 100%);
+    border: 1px solid rgba(108, 180, 130, 0.4);
+    pointer-events: none;
+    z-index: 12;
+    transform: translate(-50%, -50%);
+    animation: phase6-fold-arc-keyframes 500ms cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .phase6-fold-arc {
+      animation: none;
+      opacity: 0;
+    }
   }
 </style>

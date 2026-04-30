@@ -1,14 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { getDeviceFingerprint } from '$lib/components/pairing/deviceFingerprint';
-
   type Mode = 'auto-pairing' | 'auto-error' | 'manual' | 'submitting' | 'paired';
 
   let mode: Mode = $state('manual');
   let codeInput = $state('');
   let errorMsg: string | null = $state(null);
-  let remembered = $state(false);
   let submitting = $state(false);
 
   let urlToken = $derived($page.url.searchParams.get('token'));
@@ -18,30 +15,6 @@
     if (!t) return;
     mode = 'auto-pairing';
     submitToken(t, 'auto');
-  });
-
-  $effect(() => {
-    if (urlToken) return;
-    if (typeof window === 'undefined') return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const fp = await getDeviceFingerprint();
-        if (!fp || cancelled) return;
-        const res = await fetch('/api/pair/check_remembered', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ fingerprint: fp }),
-        });
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { remembered?: boolean };
-        if (!cancelled && data.remembered) remembered = true;
-      } catch {}
-    })();
-    return () => {
-      cancelled = true;
-    };
   });
 
   function describeError(status: number, body: { error?: string } | null, retryAfter: string | null): string {
@@ -125,13 +98,6 @@
       <p class="pair-error-msg">{errorMsg}</p>
       <button class="btn-primary" onclick={retryFromError}>Enter code manually</button>
     {:else}
-      {#if remembered && !urlToken}
-        <div class="pair-remembered">
-          <p>We remember a previous pair on this phone.</p>
-          <p class="pair-hint">Scan the QR code on your PC again to rejoin. We can not push session state to your phone without an active pairing.</p>
-        </div>
-      {/if}
-
       <form onsubmit={handleManualSubmit} class="pair-form">
         <label>
           <span>Enter the 6-character code from your PC</span>
@@ -225,18 +191,5 @@
     margin: 0;
     text-align: center;
   }
-  .pair-remembered {
-    padding: 0.75rem;
-    background: var(--accent-faint);
-    border: 1px solid var(--accent-border);
-    border-radius: 4px;
-  }
-  .pair-remembered p {
-    margin: 0 0 0.25rem;
-    font-size: 0.9rem;
-  }
-  .pair-hint {
-    font-size: 0.8rem !important;
-    color: var(--text-muted);
-  }
+
 </style>

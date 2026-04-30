@@ -97,6 +97,11 @@
         status = 'error';
         return;
       }
+      if (res.status === 401) {
+        error = 'Sign in to use paired mode';
+        status = 'error';
+        return;
+      }
       if (!res.ok) {
         error = 'Pair request failed';
         status = 'error';

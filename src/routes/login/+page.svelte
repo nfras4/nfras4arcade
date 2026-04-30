@@ -13,7 +13,12 @@
     e.preventDefault();
     error = '';
     loading = true;
-    const result = await login(email, password);
+    // WHY: iOS / mobile autofill may not trigger Svelte's bind:value sync; read from FormData as a fallback.
+    const form = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(form);
+    const emailVal = ((fd.get('email') as string | null) ?? email).trim();
+    const passwordVal = (fd.get('password') as string | null) ?? password;
+    const result = await login(emailVal, passwordVal);
     loading = false;
     if (result.ok) {
       goto('/');
@@ -35,6 +40,7 @@
         <span>Email</span>
         <input
           type="email"
+          name="email"
           bind:value={email}
           placeholder="you@example.com"
           required
@@ -44,6 +50,7 @@
         <span>Password</span>
         <input
           type="password"
+          name="password"
           bind:value={password}
           placeholder="Your password"
           minlength="8"

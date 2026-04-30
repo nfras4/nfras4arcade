@@ -61,6 +61,7 @@
     code,
     socket,
     roleParam,
+    isLoggedIn,
   }: {
     state: any;
     pid: string | null;
@@ -113,6 +114,7 @@
     code: string;
     socket: any;
     roleParam: string | null;
+    isLoggedIn: boolean;
   } = $props();
 
   let opponents = $derived((state?.players ?? []).filter((p: any) => p.id !== pid));
@@ -188,7 +190,7 @@
       {:else}
         <p class="waiting-text">Waiting for host to start...</p>
       {/if}
-      {#if pid && roleParam !== 'controller' && roleParam !== 'table'}
+      {#if pid && roleParam !== 'controller' && roleParam !== 'table' && isLoggedIn}
         <PairButton roomCode={code} playerId={pid} phase={state.phase} {socket} />
       {/if}
       <button class="btn-secondary" onclick={onleaveGame}>Leave</button>

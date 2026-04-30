@@ -51,6 +51,9 @@
         ? `Too many attempts, try again in ${retryAfter}s.`
         : 'Too many attempts, try again later.';
     }
+    if (status === 401) {
+      return 'Sign in to pair this device.';
+    }
     if (status === 403 || body?.error === 'auth-mismatch') {
       return 'Sign in with the same account on both devices.';
     }

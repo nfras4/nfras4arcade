@@ -71,11 +71,22 @@
     const unsub = socket.onMessage((msg: any) => {
       if (msg.type === 'joined') {
         myPlayerId.set(msg.playerId);
-        gameState.set(msg.state);
-        isSpectator = msg.isSpectator ?? false;
-        reconnecting = false;
+        // WHY: Phase 4 spectator bug - if state arrives null/undefined, do not
+        // clobber existing gameState; re-issue join to request a fresh broadcast.
+        if (msg.state) {
+          gameState.set(msg.state);
+          isSpectator = msg.isSpectator ?? false;
+          reconnecting = false;
+        } else {
+          console.warn('[poker] joined arrived with no state, re-requesting');
+          setTimeout(() => socket.joinRoom(code), 500);
+        }
       } else if (msg.type === 'state_update') {
-        gameState.set(msg.state);
+        if (msg.state) {
+          gameState.set(msg.state);
+          // First state_update for a spectator unblocks the loading gate too.
+          reconnecting = false;
+        }
         if (msg.isSpectator !== undefined) isSpectator = msg.isSpectator;
       } else if (msg.type === 'error') {
         error.set(msg.message);
@@ -318,7 +329,7 @@
       {:else}
         <p class="waiting-text">Waiting for host to start...</p>
       {/if}
-      {#if pid && roleParam !== 'controller' && roleParam !== 'table'}
+      {#if pid && roleParam !== 'controller' && roleParam !== 'table' && $isLoggedIn}
         <PairButton roomCode={code} playerId={pid} phase={state.phase} {socket} />
       {/if}
       <button class="btn-secondary" onclick={leaveGame}>Leave</button>
@@ -349,7 +360,7 @@
       {inputMode} {isArmed}
       setMuckRef={(el) => muckTargetRef = el}
       {blindSetting} {gameMode} {casualChipCount} {addingBot}
-      {betPlayers} {myUserId} {code} {socket} {roleParam}
+      {betPlayers} {myUserId} {code} {socket} {roleParam} isLoggedIn={$isLoggedIn}
       onaction={sendAction}
       onarmedchange={(armed) => isArmed = armed}
       onstartGame={startGame}

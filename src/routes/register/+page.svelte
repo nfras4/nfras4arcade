@@ -15,13 +15,21 @@
     e.preventDefault();
     error = '';
 
-    if (password !== confirmPassword) {
+    // WHY: iOS / mobile autofill may not trigger Svelte's bind:value sync; read from FormData as a fallback.
+    const form = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(form);
+    const displayNameVal = ((fd.get('displayName') as string | null) ?? displayName).trim();
+    const emailVal = ((fd.get('email') as string | null) ?? email).trim();
+    const passwordVal = (fd.get('password') as string | null) ?? password;
+    const confirmPasswordVal = (fd.get('confirmPassword') as string | null) ?? confirmPassword;
+
+    if (passwordVal !== confirmPasswordVal) {
       error = 'Passwords do not match';
       return;
     }
 
     loading = true;
-    const result = await register(email, password, displayName);
+    const result = await register(emailVal, passwordVal, displayNameVal);
     loading = false;
     if (result.ok) {
       goto('/');
@@ -39,6 +47,7 @@
         <span>Display Name</span>
         <input
           type="text"
+          name="displayName"
           bind:value={displayName}
           placeholder="Your name (shown in games)"
           maxlength="20"
@@ -49,6 +58,7 @@
         <span>Email</span>
         <input
           type="email"
+          name="email"
           bind:value={email}
           placeholder="you@example.com"
           required
@@ -58,6 +68,7 @@
         <span>Password</span>
         <input
           type="password"
+          name="password"
           bind:value={password}
           placeholder="At least 8 characters"
           minlength="8"
@@ -68,6 +79,7 @@
         <span>Confirm Password</span>
         <input
           type="password"
+          name="confirmPassword"
           bind:value={confirmPassword}
           placeholder="Type it again"
           minlength="8"

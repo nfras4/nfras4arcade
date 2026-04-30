@@ -22,6 +22,9 @@ export const POST: RequestHandler = async ({ url, locals, platform }) => {
   if (!binding) {
     return json({ error: 'Invalid game type' }, { status: 400 });
   }
+  if (game === 'poker') {
+    return json({ error: 'Poker is temporarily disabled' }, { status: 503 });
+  }
 
   const env = platform!.env;
   const ns = env[binding as keyof typeof env] as DurableObjectNamespace;

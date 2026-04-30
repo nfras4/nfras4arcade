@@ -27,6 +27,7 @@
       description: 'Bet, bluff, and go all-in',
       maxPlayers: 8,
       route: '/poker',
+      disabled: true,
     },
     {
       id: 'blackjack',
@@ -88,22 +89,40 @@
       <h2 class="section-heading geo-title">Games</h2>
       <div class="game-grid">
         {#each casinoGames as game}
-          <div class="game-card card">
-            <a href={game.route} class="game-card-link" aria-label={game.name}>
-              <div class="game-card-inner">
-                <h3 class="game-name geo-title">{game.name}</h3>
-                <p class="game-desc">{game.description}</p>
-                <div class="game-meta">
-                  <span class="game-players">1-{game.maxPlayers} players</span>
-                  <span class="game-type">casino</span>
+          <div class="game-card card" class:disabled={game.disabled}>
+            {#if game.disabled}
+              <div class="game-card-link" aria-label="{game.name} (unavailable)" aria-disabled="true">
+                <div class="game-card-inner">
+                  <h3 class="game-name geo-title">{game.name}</h3>
+                  <p class="game-desc">{game.description}</p>
+                  <div class="game-meta">
+                    <span class="game-players">1-{game.maxPlayers} players</span>
+                    <span class="game-type">unavailable</span>
+                  </div>
                 </div>
               </div>
-            </a>
-            <div class="game-card-footer">
-              <button class="solo-btn" onclick={() => goto(game.route)}>
-                Play
-              </button>
-            </div>
+              <div class="game-card-footer">
+                <button class="solo-btn" disabled aria-disabled="true">
+                  Unavailable
+                </button>
+              </div>
+            {:else}
+              <a href={game.route} class="game-card-link" aria-label={game.name}>
+                <div class="game-card-inner">
+                  <h3 class="game-name geo-title">{game.name}</h3>
+                  <p class="game-desc">{game.description}</p>
+                  <div class="game-meta">
+                    <span class="game-players">1-{game.maxPlayers} players</span>
+                    <span class="game-type">casino</span>
+                  </div>
+                </div>
+              </a>
+              <div class="game-card-footer">
+                <button class="solo-btn" onclick={() => goto(game.route)}>
+                  Play
+                </button>
+              </div>
+            {/if}
           </div>
         {/each}
       </div>
@@ -129,11 +148,11 @@
     </section>
 
     {#if tables.length > 0}
-      <section class="games-section">
-        <h2 class="section-heading geo-title">Open Tables</h2>
+      <section class="games-section disabled-section">
+        <h2 class="section-heading geo-title">Open Tables (unavailable)</h2>
         <div class="table-list">
           {#each tables as table}
-            <button class="table-row" onclick={() => goto(`/casino/${table.game_type}/${table.code}`)}>
+            <button class="table-row" disabled aria-disabled="true">
               <span class="table-game">{table.game_type === 'blackjack' ? 'Blackjack' : table.game_type === 'baccarat' ? 'Baccarat' : table.game_type === 'poker' ? 'Poker' : 'Roulette'}</span>
               <span class="table-code">{table.code}</span>
               <span class="table-seats">{table.player_count}/{table.max_seats}</span>
@@ -338,6 +357,25 @@
 
   .solo-btn:hover { background: rgba(243, 156, 18, 0.15); }
 
+  .solo-btn:disabled {
+    cursor: not-allowed;
+    color: var(--text-subtle);
+    background: transparent;
+    border-color: var(--border);
+  }
+  .solo-btn:disabled:hover { background: transparent; }
+
+  .game-card.disabled {
+    opacity: 0.45;
+    filter: grayscale(0.8);
+    border-color: var(--border);
+    box-shadow: none;
+    pointer-events: none;
+  }
+  .game-card.disabled .game-card-footer .solo-btn {
+    pointer-events: auto;
+  }
+
   .game-name {
     font-size: 1.125rem;
     letter-spacing: 0.08em;
@@ -404,6 +442,20 @@
   .table-row:hover {
     background: var(--bg-hover);
     border-color: var(--casino-border-soft);
+  }
+
+  .table-row:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    filter: grayscale(0.8);
+  }
+  .table-row:disabled:hover {
+    background: var(--bg-card);
+    border-color: var(--border);
+  }
+
+  .disabled-section .section-heading {
+    color: var(--text-subtle);
   }
 
   .table-game {

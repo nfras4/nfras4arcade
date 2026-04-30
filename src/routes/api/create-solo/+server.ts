@@ -27,6 +27,9 @@ export const POST: RequestHandler = async ({ url, locals, platform }) => {
   if (!game || !GAME_CONFIG[game]) {
     return json({ error: 'Invalid game type' }, { status: 400 });
   }
+  if (game === 'poker') {
+    return json({ error: 'Poker is temporarily disabled' }, { status: 503 });
+  }
 
   const config = GAME_CONFIG[game];
   const code = generateCode();

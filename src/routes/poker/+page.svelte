@@ -7,6 +7,10 @@
   import { CardGameSocket } from '$lib/cardSocket';
   import { writable } from 'svelte/store';
 
+  // KILL SWITCH: poker disabled (DO usage runaway). Skip socket to avoid
+  // hammering the disabled /ws/poker endpoint.
+  const POKER_DISABLED = true;
+
   const socket = new CardGameSocket('/ws/poker');
   const gameState = writable<any>(null);
   const error = writable<string | null>(null);
@@ -96,7 +100,14 @@
     <div class="panel">
       <div class="panel-border" aria-hidden="true"></div>
 
-      {#if mode === 'menu'}
+      {#if POKER_DISABLED}
+        <div class="panel-inner fade-in">
+          <p style="text-align:center; line-height:1.5;">
+            Poker is temporarily disabled while we investigate a hosting issue.
+            Other games are still available from the lobby.
+          </p>
+        </div>
+      {:else if mode === 'menu'}
         <div class="panel-inner fade-in">
           <div class="identity">
             <span class="identity-label">Playing as</span>

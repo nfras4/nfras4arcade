@@ -96,9 +96,27 @@ export class PokerRoom extends CardRoom {
     };
   }
 
+  // ─── KILL SWITCH (poker disabled, DO usage runaway) ─────────────
+
+  async alarm(): Promise<void> {
+    // Drain any pending alarm without rescheduling. Base class would otherwise
+    // re-arm the 30-min room-expiry watchdog, keeping the DO billable forever.
+    try { await this.ctx.storage.deleteAlarm(); } catch {}
+  }
+
+  async webSocketMessage(ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {
+    // Force-close any leftover sessions so they stop waking the DO.
+    try { ws.close(1011, 'Poker temporarily disabled'); } catch {}
+  }
+
   // ─── Override fetch for chip loading ────────────────────────────
 
   async fetch(request: Request): Promise<Response> {
+    // KILL SWITCH: poker disabled. Refuse all traffic so DO is never woken
+    // by HTTP/WS. Existing alarms drained via the alarm() override above.
+    return new Response('Poker is temporarily disabled', { status: 503 });
+
+    // eslint-disable-next-line no-unreachable
     await this.loadState();
 
     // Before the base class handles the WS upgrade, extract chip headers

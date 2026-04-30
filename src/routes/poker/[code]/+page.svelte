@@ -19,6 +19,7 @@
   const code = $page.params.code!;
   const roleParam = $page.url.searchParams.get('role');
   const initialRole = roleParam === 'controller' || roleParam === 'table' || roleParam === 'both' ? roleParam : undefined;
+  const isSpectateUrl = $page.url.searchParams.get('spectate') === '1';
   const socket = new CardGameSocket('/ws/poker');
 
   const gameState = writable<any>(null);
@@ -154,7 +155,7 @@
       dispatchRelayMessages(msg);
     });
 
-    socket.connect(code, !$isLoggedIn, initialRole)
+    socket.connect(code, !$isLoggedIn, initialRole, isSpectateUrl)
       .then(() => { socket.joinRoom(code); })
       .catch(() => goto('/poker'));
 

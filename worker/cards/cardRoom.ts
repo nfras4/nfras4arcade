@@ -222,28 +222,13 @@ export abstract class CardRoom extends DurableObject<Env> {
       roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
         ? roleParam
         : 'both';
+    const isSpectateIntent = url.searchParams.get('spectate') === '1';
     const socketId = crypto.randomUUID();
 
-    // F4: single-session policy per (userId, role). Two tabs / phone+pc for
-    // the same authed user with the same role would otherwise coexist as
-    // parallel WebSockets with last-write-wins races on chip persistence.
-    // Evict any prior sockets for this (userId, role) before accepting the
-    // new one. Different roles (e.g. controller + table) coexist by design.
-    try {
-      for (const existingWs of this.ctx.getWebSockets(userId)) {
-        const existingTags = this.ctx.getTags(existingWs);
-        if (existingTags[1] !== role) continue;
-        try {
-          existingWs.close(4001, 'replaced');
-        } catch {
-          /* already closing */
-        }
-      }
-    } catch (err) {
-      console.error('[CardRoom] failed to evict prior sockets', err);
-    }
-
-    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+    const acceptTags = isSpectateIntent
+      ? [userId, role, socketId, 'spectate']
+      : [userId, role, socketId];
+    this.ctx.acceptWebSocket(server, acceptTags);
 
     if (role === 'controller') {
       this.recentlyPairedPlayers.set(userId, Date.now());
@@ -252,7 +237,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     }
 
     const player = this.players.get(userId);
-    if (player) {
+    if (player && !isSpectateIntent) {
       pushDevice(player, makeDevice(socketId, role, Date.now()));
       this.broadcastPairedDeviceChange(userId, role, 'added', player.devices.length);
     }
@@ -397,6 +382,14 @@ export abstract class CardRoom extends DurableObject<Env> {
       await this.saveState();
       return;
     }
+    // RR-1: if grace is already armed for this player (e.g. controller dropped
+    // earlier and now a co-existing different-role socket is closing), defer
+    // to the grace timer regardless of the closing socket's role.
+    const existingGrace = await this.ctx.storage.get<number>(`grace:${playerId}`);
+    if (typeof existingGrace === 'number' && existingGrace > Date.now()) {
+      await this.saveState();
+      return;
+    }
     await this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -424,6 +417,12 @@ export abstract class CardRoom extends DurableObject<Env> {
     ) {
       await armReconnectGrace(this.ctx, playerId, 60_000);
       console.info('[grace] armed for', playerId);
+      await this.saveState();
+      return;
+    }
+    // RR-1: see webSocketClose — defer to existing grace if already armed.
+    const existingGrace = await this.ctx.storage.get<number>(`grace:${playerId}`);
+    if (typeof existingGrace === 'number' && existingGrace > Date.now()) {
       await this.saveState();
       return;
     }
@@ -556,11 +555,14 @@ export abstract class CardRoom extends DurableObject<Env> {
   // --- Join / Disconnect ---
 
   private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
-    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
+    const tags = this.ctx.getTags(ws);
+    const role = (tags[1] as DeviceRole) || 'both';
+    const isSpectateIntent = tags[3] === 'spectate';
     const existing = this.players.get(playerId);
 
     if (existing) {
-      // Reconnection — re-resolve cosmetics in case the player changed loadout
+      // Reconnection — re-resolve cosmetics in case the player changed loadout.
+      // A returning player ignores spectate intent (prevents accidental self-demotion).
       this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
@@ -576,8 +578,8 @@ export abstract class CardRoom extends DurableObject<Env> {
       return;
     }
 
-    if (this.phase !== 'lobby') {
-      // Allow joining mid-game as spectator
+    if (isSpectateIntent) {
+      // Register as spectator regardless of phase (intent-gated).
       const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
       this.spectators.set(playerId, storedName || 'Spectator');
       this.sendToWs(ws, {
@@ -678,10 +680,14 @@ export abstract class CardRoom extends DurableObject<Env> {
   }
 
   private async handleDisconnect(playerId: string): Promise<void> {
-    // Handle spectator disconnect
+    // Handle spectator disconnect — only delete the spectator entry when no
+    // remaining sockets exist for this user, otherwise a multi-tab spectator
+    // closing one tab would silently demote the surviving sockets.
     if (this.spectators.has(playerId)) {
-      this.spectators.delete(playerId);
-      this.broadcastState();
+      if (this.ctx.getWebSockets(playerId).length === 0) {
+        this.spectators.delete(playerId);
+        this.broadcastState();
+      }
       return;
     }
 

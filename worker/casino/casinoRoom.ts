@@ -178,28 +178,16 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
         ? roleParam
         : 'both';
+    const isSpectateIntent = url.searchParams.get('spectate') === '1';
     const socketId = crypto.randomUUID();
 
-    // Single-session policy per (userId, role): evict any prior sockets so
-    // chip persistence has a single source of truth per surface.
-    try {
-      for (const existingWs of this.ctx.getWebSockets(userId)) {
-        const existingTags = this.ctx.getTags(existingWs);
-        if (existingTags[1] !== role) continue;
-        try {
-          existingWs.close(4001, 'replaced');
-        } catch {
-          /* already closing */
-        }
-      }
-    } catch (err) {
-      console.error('[CasinoRoom] failed to evict prior sockets', err);
-    }
-
-    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+    const acceptTags = isSpectateIntent
+      ? [userId, role, socketId, 'spectate']
+      : [userId, role, socketId];
+    this.ctx.acceptWebSocket(server, acceptTags);
 
     const playerForDevice = this.players.get(userId);
-    if (playerForDevice) {
+    if (playerForDevice && !isSpectateIntent) {
       pushDevice(playerForDevice, makeDevice(socketId, role, Date.now()));
     }
 
@@ -392,11 +380,14 @@ export abstract class CasinoRoom extends DurableObject<Env> {
   // --- Join / Disconnect ---
 
   protected async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
-    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
+    const tags = this.ctx.getTags(ws);
+    const role = (tags[1] as DeviceRole) || 'both';
+    const isSpectateIntent = tags[3] === 'spectate';
     const existing = this.players.get(playerId);
 
     if (existing) {
-      // Reconnection — re-resolve cosmetics in case loadout changed
+      // Reconnection — re-resolve cosmetics in case loadout changed.
+      // A returning player ignores spectate intent (prevents accidental self-demotion).
       this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
@@ -411,7 +402,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       return;
     }
 
-    if (this.phase !== 'lobby') {
+    if (isSpectateIntent) {
       const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
       this.spectators.set(playerId, storedName || 'Spectator');
       this.sendToWs(ws, {
@@ -479,8 +470,12 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
   private async handleDisconnect(playerId: string): Promise<void> {
     if (this.spectators.has(playerId)) {
-      this.spectators.delete(playerId);
-      this.broadcastState();
+      // Multi-socket guard: only delete the spectator entry when no remaining
+      // sockets exist for this user.
+      if (this.ctx.getWebSockets(playerId).length === 0) {
+        this.spectators.delete(playerId);
+        this.broadcastState();
+      }
       return;
     }
 

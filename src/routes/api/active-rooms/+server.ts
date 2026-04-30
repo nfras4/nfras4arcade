@@ -93,7 +93,7 @@ export const GET: RequestHandler = async ({ platform, setHeaders }) => {
       players,
       startedAt: row.started_at,
       lastUpdatedAt: row.last_updated_at,
-      spectateUrl: `/${gameToRoute(row.game)}/${row.code}`,
+      spectateUrl: `/${gameToRoute(row.game)}/${row.code}?spectate=1`,
     };
   });
 

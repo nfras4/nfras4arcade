@@ -6,21 +6,22 @@ import { getGuestId } from './guest';
 
 type MessageHandler = (msg: any) => void;
 
-function getWsUrl(roomCode: string, wsPath: string, role?: string): string {
+function getWsUrl(roomCode: string, wsPath: string, role?: string, spectate?: boolean): string {
   // Always include guestId, logged-in users' session cookie takes priority
   // in the worker, so this is harmless for authenticated users but ensures
   // guests can always connect.
   const guestParam = `&guestId=${getGuestId()}`;
   const roleParam = role === 'controller' || role === 'table' || role === 'both' ? `&role=${role}` : '';
+  const spectateParam = spectate ? `&spectate=1` : '';
 
-  if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}${roleParam}`;
+  if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}${roleParam}${spectateParam}`;
 
   if (window.location.hostname !== 'localhost') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}${wsPath}?room=${roomCode}${guestParam}${roleParam}`;
+    return `${protocol}//${window.location.host}${wsPath}?room=${roomCode}${guestParam}${roleParam}${spectateParam}`;
   }
 
-  return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}${roleParam}`;
+  return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}${roleParam}${spectateParam}`;
 }
 
 export class CardGameSocket {
@@ -32,14 +33,18 @@ export class CardGameSocket {
   private currentRoom: string | null = null;
   private wsPath: string;
   private currentRole: string | undefined = undefined;
+  private isSpectateMode = false;
 
   constructor(wsPath: string) {
     this.wsPath = wsPath;
   }
 
-  connect(roomCode: string, _isGuest?: boolean, role?: string): Promise<void> {
+  connect(roomCode: string, _isGuest?: boolean, role?: string, spectate?: boolean): Promise<void> {
     this.currentRoom = roomCode;
     if (role !== undefined) this.currentRole = role;
+    // Sticky spectate intent: once set, persists across reconnects so
+    // scheduleReconnect's call of connect(this.currentRoom) preserves it.
+    if (spectate !== undefined) this.isSpectateMode = spectate;
     // Close any existing WebSocket before creating a new one
     if (this.ws) {
       this.ws.onclose = null;
@@ -47,7 +52,7 @@ export class CardGameSocket {
       this.ws = null;
     }
     return new Promise((resolve, reject) => {
-      const url = getWsUrl(roomCode, this.wsPath, this.currentRole);
+      const url = getWsUrl(roomCode, this.wsPath, this.currentRole, this.isSpectateMode);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -69,8 +74,9 @@ export class CardGameSocket {
         } catch {}
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
         this.stopPing();
+        if (event.code === 4001) return; // deliberate eviction; do not reconnect
         this.scheduleReconnect();
       };
 

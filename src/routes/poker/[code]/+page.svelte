@@ -12,6 +12,7 @@
   import TableView from '$lib/components/poker/TableView.svelte';
   import ControllerView from '$lib/components/poker/ControllerView.svelte';
   import MobilePokerView from '$lib/components/poker/MobilePokerView.svelte';
+  import DropoutToast from '$lib/components/poker/DropoutToast.svelte';
   import { evaluateHandName } from '$lib/utils/pokerHelpers';
 
   const code = $page.params.code!;
@@ -39,6 +40,13 @@
 
   // Phase 4: viewport / input capability detection drives layout selection.
   let isMobile = $state(false);
+
+  // Phase 5: paired-device dropout toast state. Mirrors server's broadcast.
+  let dropoutVisible = $state(false);
+  let dropoutReconnected = $state(false);
+  let dropoutPartnerRole = $state<'controller' | 'table'>('controller');
+  let dropoutGraceMs = $state(60_000);
+  let dropoutHideTimer: ReturnType<typeof setTimeout> | undefined;
 
   function detectMobile(): boolean {
     if (typeof window === 'undefined') return false;
@@ -105,6 +113,32 @@
         demotedToTable = true;
         socket.setRole('table').catch(() => { demotedToTable = false; });
       }
+
+      // Phase 5: dropout toast handlers. Show toast when our partner role
+      // drops; flip to reconnected when it returns; clear on grace expiry.
+      if (msg.type === 'paired_device_removed' && msg.playerId === $myPlayerId) {
+        if (roleParam !== 'controller' && roleParam !== 'table') return;
+        const partnerRole = roleParam === 'controller' ? 'table' : 'controller';
+        if (msg.role === partnerRole) {
+          dropoutPartnerRole = partnerRole;
+          dropoutGraceMs = typeof msg.graceDurationMs === 'number' ? msg.graceDurationMs : 60_000;
+          dropoutReconnected = false;
+          dropoutVisible = true;
+          if (dropoutHideTimer) clearTimeout(dropoutHideTimer);
+        }
+      } else if (msg.type === 'paired_device_added' && msg.playerId === $myPlayerId) {
+        if (roleParam !== 'controller' && roleParam !== 'table') return;
+        const partnerRole = roleParam === 'controller' ? 'table' : 'controller';
+        if (msg.role === partnerRole && dropoutVisible) {
+          dropoutReconnected = true;
+          if (dropoutHideTimer) clearTimeout(dropoutHideTimer);
+          dropoutHideTimer = setTimeout(() => { dropoutVisible = false; dropoutReconnected = false; }, 2500);
+        }
+      } else if (msg.type === 'paired_grace_expired' && msg.playerId === $myPlayerId) {
+        if (roleParam !== 'controller' && roleParam !== 'table') return;
+        dropoutVisible = false;
+        dropoutReconnected = false;
+      }
       dispatchRelayMessages(msg);
     });
 
@@ -163,7 +197,7 @@
       id: p.id,
       name: p.name,
       isBot: p.isBot,
-      eliminated: (playerChips[p.id] ?? 0) <= 0,
+      eliminated: Object.hasOwn(playerChips, p.id) ? playerChips[p.id] <= 0 : false,
     }))
   );
 
@@ -255,6 +289,13 @@
 {#if $error}
   <div class="error-toast">{$error}</div>
 {/if}
+
+<DropoutToast
+  partnerRole={dropoutPartnerRole}
+  visible={dropoutVisible}
+  reconnected={dropoutReconnected}
+  graceDurationMs={dropoutGraceMs}
+/>
 
 <div class="game-page" style={tableFeltStyle}>
   {#if !state}

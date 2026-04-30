@@ -30,6 +30,7 @@ export interface CardPlayer {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  titleText?: string | null;
   devices: Device[];
 }
 
@@ -47,6 +48,7 @@ export interface CardGameState {
     emblemSvg?: string | null;
     nameColour?: string | null;
     titleBadgeId?: string | null;
+    titleText?: string | null;
   }[];
   turnOrder: string[];
   currentTurn: string | null;

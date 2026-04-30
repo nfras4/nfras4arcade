@@ -142,12 +142,6 @@
     letter-spacing: 0.06em;
   }
 
-  .armed-dimmed {
-    opacity: 0.3;
-    pointer-events: none;
-    transition: opacity 120ms ease-out;
-  }
-
   .game-over-mini {
     display: flex;
     flex-direction: column;

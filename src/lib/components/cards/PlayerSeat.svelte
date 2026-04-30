@@ -127,6 +127,7 @@
     border: 2px solid var(--border);
     border-radius: 4px;
     min-width: 85px;
+    /* Intentional: 150ms transitions on seat state are short enough to feel responsive, not laggy */
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
     position: relative;
   }

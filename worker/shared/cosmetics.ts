@@ -12,6 +12,7 @@ export interface CosmeticPayload {
   emblemSvg: string | null;   // resolved URL path e.g. "/cosmetics/emblems/flame.svg"
   nameColour: string | null;  // hex colour e.g. "#f39c12"
   titleBadgeId: string | null;// badge id (client resolves display text)
+  titleText: string | null;   // resolved badge label for opponent display
 }
 
 export const DEFAULT_COSMETICS: CosmeticPayload = {
@@ -19,10 +20,12 @@ export const DEFAULT_COSMETICS: CosmeticPayload = {
   emblemSvg: null,
   nameColour: null,
   titleBadgeId: null,
+  titleText: null,
 };
 
 interface EquippedRow {
   title_badge_id: string | null;
+  title_label: string | null;
   frame_metadata: string | null;
   emblem_metadata: string | null;
   name_colour_metadata: string | null;
@@ -49,10 +52,14 @@ export async function resolvePlayerCosmetics(
   }
 
   try {
+    // WHY LEFT JOIN on badges: player_equipped.title_badge_id has no FK; a
+    // stale or null id correctly produces titleText: null instead of dropping
+    // the row.
     const row = await db
       .prepare(
         `SELECT
           pe.title_badge_id,
+          b.label AS title_label,
           f.metadata AS frame_metadata,
           e.metadata AS emblem_metadata,
           n.metadata AS name_colour_metadata
@@ -60,6 +67,7 @@ export async function resolvePlayerCosmetics(
         LEFT JOIN shop_items f ON pe.frame_id = f.id
         LEFT JOIN shop_items e ON pe.emblem_id = e.id
         LEFT JOIN shop_items n ON pe.name_colour_id = n.id
+        LEFT JOIN badges b ON pe.title_badge_id = b.id
         WHERE pe.player_id = ?`
       )
       .bind(playerId)
@@ -110,6 +118,7 @@ export async function resolvePlayerCosmetics(
       emblemSvg,
       nameColour,
       titleBadgeId: row.title_badge_id ?? null,
+      titleText: row.title_label ?? null,
     };
   } catch {
     return DEFAULT_COSMETICS;

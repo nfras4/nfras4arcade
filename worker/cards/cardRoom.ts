@@ -333,14 +333,19 @@ export abstract class CardRoom extends DurableObject<Env> {
       for (const p of this.players.values()) {
         p.hand = [];
       }
-      // Promote spectators to players
+      // Promote spectators to players. WHY hook: PokerRoom overrides
+      // canPromoteSpectator to atomically debit the buy-in from D1; failures
+      // skip the promotion and emit an error to the spectator.
+      const promotedIds: string[] = [];
       for (const [specId, specName] of this.spectators) {
-        if (this.players.size < this.maxPlayers) {
-          const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false, devices: [] };
-          this.players.set(specId, p);
-        }
+        if (this.players.size >= this.maxPlayers) break;
+        const ok = await this.canPromoteSpectator(specId);
+        if (!ok) continue;
+        const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false, devices: [] };
+        this.players.set(specId, p);
+        promotedIds.push(specId);
       }
-      this.spectators.clear();
+      for (const id of promotedIds) this.spectators.delete(id);
       this.broadcastState();
       // Back to lobby — keep the entry alive so spectators can still see it.
       await this.writeActiveRoom();
@@ -380,6 +385,8 @@ export abstract class CardRoom extends DurableObject<Env> {
       return;
     }
     // Last device gone. Decide whether to arm reconnect grace or disconnect now.
+    // WHY: only controller-drops arm grace; the phone is the fragile link.
+    // Table-drops are handled by the remaining controller socket continuing solo.
     if (
       role === 'controller' &&
       this.recentlyPairedPlayers.has(playerId) &&
@@ -430,7 +437,9 @@ export abstract class CardRoom extends DurableObject<Env> {
     kind: 'added' | 'removed',
     deviceCount: number,
   ): void {
-    this.broadcast({ type: 'paired_device_' + kind, playerId, role, deviceCount });
+    const msg: Record<string, unknown> = { type: 'paired_device_' + kind, playerId, role, deviceCount };
+    if (kind === 'removed') msg.graceDurationMs = 60_000;
+    this.broadcast(msg);
   }
 
   private removeDevice(playerId: string, socketId: string | undefined): void {
@@ -461,6 +470,7 @@ export abstract class CardRoom extends DurableObject<Env> {
         console.info('[grace] fired for', playerId, 'rejoined=', !stillEmpty);
         if (stillEmpty) {
           await this.handleDisconnect(playerId);
+          this.broadcast({ type: 'paired_grace_expired', playerId });
         }
         await this.ctx.storage.delete(key);
       }
@@ -650,6 +660,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       player.emblemSvg = DEFAULT_COSMETICS.emblemSvg;
       player.nameColour = DEFAULT_COSMETICS.nameColour;
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
+      player.titleText = null;
       return;
     }
     try {
@@ -660,6 +671,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
+      p.titleText = cosmetics.titleText;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
@@ -756,6 +768,15 @@ export abstract class CardRoom extends DurableObject<Env> {
   /** Hook for subclasses to process start_game message options. */
   protected onStartGameOptions(_msg: any): void {}
 
+  /**
+   * Hook for subclasses to gate spectator promotion (e.g. atomic chip debit).
+   * Default: always allow. Subclasses returning false MUST notify the
+   * spectator via sendTo themselves.
+   */
+  protected async canPromoteSpectator(_specId: string): Promise<boolean> {
+    return true;
+  }
+
   // --- Bot management ---
 
   /** Add a bot player to the room. Returns the bot or null if room is full / not in lobby. */
@@ -805,7 +826,14 @@ export abstract class CardRoom extends DurableObject<Env> {
     this.botTurnPending = true;
     this.botTurnScheduledAt = Date.now();
     const delay = botThinkDelay();
-    await this.ctx.storage.setAlarm(Date.now() + delay);
+    // WHY: DOs allow only ONE pending alarm. If a sooner disconnect-grace
+    // alarm is already armed, overwriting it with the bot-turn alarm would
+    // delay the disconnect timeout. Mirror scheduleDisconnectCheck's guard.
+    const target = Date.now() + delay;
+    const existing = await this.ctx.storage.getAlarm();
+    if (!existing || target < existing) {
+      await this.ctx.storage.setAlarm(target);
+    }
   }
 
   /**

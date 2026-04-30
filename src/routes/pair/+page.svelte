@@ -9,7 +9,6 @@
   let codeInput = $state('');
   let errorMsg: string | null = $state(null);
   let remembered = $state(false);
-  let rememberCheckbox = $state(false);
   let submitting = $state(false);
 
   let urlToken = $derived($page.url.searchParams.get('token'));
@@ -81,21 +80,6 @@
         return;
       }
 
-      // WHY: in v1 the "remember" record is keyed (user_id, partner_fingerprint) where partner_fingerprint is THIS phone's own fingerprint. PairButton on the PC also stores under the same user_id with the SAME fingerprint scheme so subsequent /pair visits from this phone can detect a remembered pair without needing the PC to push state. This is the documented Phase 3 simplification.
-      if (rememberCheckbox) {
-        try {
-          const fp = await getDeviceFingerprint();
-          if (fp) {
-            await fetch('/api/pair/remember', {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ partnerFingerprint: fp }),
-            });
-          }
-        } catch {}
-      }
-
       mode = 'paired';
       const roomCode = body.roomCode!;
       goto(`/poker/${roomCode}?role=controller`);
@@ -163,11 +147,6 @@
             maxlength="7"
             required
           />
-        </label>
-
-        <label class="pair-checkbox">
-          <input type="checkbox" bind:checked={rememberCheckbox} />
-          <span>Remember this device pair for 7 days</span>
         </label>
 
         {#if errorMsg}
@@ -239,18 +218,6 @@
   .pair-form input:focus {
     outline: none;
     border-color: var(--accent);
-  }
-  .pair-checkbox {
-    flex-direction: row !important;
-    align-items: center;
-    gap: 0.5rem !important;
-  }
-  .pair-checkbox span {
-    font-size: 0.85rem;
-    color: var(--text);
-    text-transform: none !important;
-    letter-spacing: 0 !important;
-    font-weight: 400 !important;
   }
   .pair-error-msg {
     color: var(--red, #e74c3c);

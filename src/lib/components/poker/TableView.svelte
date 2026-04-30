@@ -169,6 +169,7 @@
             frameSvg={opp.frameSvg}
             emblemSvg={opp.emblemSvg}
             nameColour={opp.nameColour}
+            titleText={opp.titleText}
             isBot={opp.isBot}
           />
         </div>
@@ -428,12 +429,6 @@
   .action-bar .btn-primary { flex: 1; max-width: 200px; }
 
   .waiting-text { font-size: 0.875rem; color: var(--text-muted); text-align: center; }
-
-  .armed-dimmed {
-    opacity: 0.3;
-    pointer-events: none;
-    transition: opacity 120ms ease-out;
-  }
 
   .game-over-panel {
     width: 100%;

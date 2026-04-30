@@ -899,6 +899,33 @@ export class PokerRoom extends CardRoom {
     }
   }
 
+  /**
+   * Gate spectator promotion in competitive mode by atomically debiting the
+   * buy-in from the player's D1 chip balance. Casual mode skips D1.
+   */
+  protected async canPromoteSpectator(specId: string): Promise<boolean> {
+    const ts = this.getTable();
+    if (ts.gameMode !== 'competitive') return true;
+    if (specId.startsWith('guest_')) return true;
+    try {
+      const result = await this.env.DB.prepare(
+        'UPDATE player_profiles SET chips = chips - ?, updated_at = ? WHERE id = ? AND chips >= ?'
+      ).bind(DEFAULT_BUY_IN, Math.floor(Date.now() / 1000), specId, DEFAULT_BUY_IN).run();
+      const changed = (result.meta?.changes ?? 0) > 0;
+      if (!changed) {
+        this.sendTo(specId, { type: 'error', message: 'Insufficient chips' });
+        return false;
+      }
+      ts.playerChips[specId] = DEFAULT_BUY_IN;
+      this.setTable(ts);
+      return true;
+    } catch (err) {
+      console.error('[PokerRoom] canPromoteSpectator failed', err);
+      this.sendTo(specId, { type: 'error', message: 'Insufficient chips' });
+      return false;
+    }
+  }
+
   protected getStateFor(playerId: string, deviceRole: DeviceRole): CardGameState {
     const ts = this.getTable();
     const player = this.players.get(playerId);
@@ -918,6 +945,7 @@ export class PokerRoom extends CardRoom {
       emblemSvg: p.emblemSvg ?? null,
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
+      titleText: p.titleText ?? null,
     }));
 
     // Build player hands visibility: only show own cards, or all at showdown

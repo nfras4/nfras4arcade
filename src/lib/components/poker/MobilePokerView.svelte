@@ -125,9 +125,7 @@
 </script>
 
 <div class="mobile-poker-view">
-  {#if !state}
-    <div class="loading"><p>Connecting...</p></div>
-  {:else if state.phase === 'lobby'}
+  {#if state?.phase === 'lobby'}
     <div class="phase-panel">
       <h2 class="geo-title phase-title">Lobby</h2>
       <div class="player-list">
@@ -227,6 +225,7 @@
             frameSvg={opp.frameSvg}
             emblemSvg={opp.emblemSvg}
             nameColour={opp.nameColour}
+            titleText={opp.titleText}
             isBot={opp.isBot}
           />
         {/each}
@@ -362,14 +361,6 @@
     margin: 0 auto;
     padding: 0.5rem;
     gap: 0.5rem;
-  }
-
-  .loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 50vh;
-    color: var(--text-muted);
   }
 
   .phase-panel {
@@ -525,12 +516,6 @@
   .action-bar .btn-primary { flex: 1; max-width: 200px; }
 
   .waiting-text { font-size: 0.85rem; color: var(--text-muted); text-align: center; }
-
-  .armed-dimmed {
-    opacity: 0.3;
-    pointer-events: none;
-    transition: opacity 120ms ease-out;
-  }
 
   /* Lobby pieces */
   .player-list { display: flex; flex-direction: column; gap: 0.375rem; }

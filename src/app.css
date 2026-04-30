@@ -340,6 +340,12 @@ input::placeholder {
   flex-shrink: 0;
 }
 
+.armed-dimmed {
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+
 /* Admin player name highlight */
 .owner-name {
   color: #e74c3c !important;

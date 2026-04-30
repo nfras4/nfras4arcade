@@ -438,6 +438,12 @@
   }
 
   function isReleaseOverMuck(e: PointerEvent, snapshot: DOMRect | null): boolean {
+    if (muckTarget.kind === 'offscreen-top') {
+      // WHY viewport gate: paired-phone surface has no on-screen muck rect.
+      // Treat any release in the upper 30% of the viewport as a fold commit.
+      const vh = getViewportHeight();
+      return e.clientY < vh * 0.3;
+    }
     if (muckTarget.kind !== 'element') return false;
     // Prefer the pointerdown-time snapshot (FIX 4); fall back to live rect
     // if the snapshot was unavailable for some reason.
@@ -509,8 +515,6 @@
         };
       }
     } else if (muckTarget.kind === 'offscreen-top') {
-      // TODO: paired-phone surface, handle muckTarget.kind === 'offscreen-top'
-      console.warn('[HoleCards] paired-phone offscreen-top muck target not yet implemented');
       endCenter = { x: vw / 2, y: -vh };
     }
 

@@ -1,6 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
+import type { Device, DeviceRole } from '../cards/types';
 import type { BotPlayer } from '../bots/botPlayer';
+import { removeDevice as removeDeviceShared, hasRemainingDevices as hasRemainingDevicesShared, pushDevice, synthesiseLegacyDevice, makeDevice } from '../shared/deviceManager';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { shuffleDeck, type SpectrumCard } from '../../src/lib/wavelength/cards';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
@@ -28,6 +30,7 @@ interface WavelengthPlayer {
   connected: boolean;
   isHost: boolean;
   isBot: boolean;
+  devices?: Device[];
   frameSvg?: string | null;
   emblemSvg?: string | null;
   nameColour?: string | null;
@@ -73,6 +76,7 @@ interface WavelengthRoomState {
   lastActivity: number;
   botTurnPending: boolean;
   spectators?: [string, string][];
+  devices?: [string, Device[]][];
 }
 
 // Server -> Client message types
@@ -228,6 +232,20 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.botTurnPending = stored.botTurnPending;
       this.spectators = new Map(stored.spectators ?? []);
 
+      // Hydrate devices: legacy state files lack devices, so synthesise a
+      // 'both' placeholder per player. legacy:* placeholders are filtered
+      // out by hasRemainingDevices to prevent ghost-player turn stalls.
+      const storedDevices = new Map<string, Device[]>(stored.devices ?? []);
+      const nowDev = Date.now();
+      for (const [id, p] of this.players) {
+        const existing = storedDevices.get(id);
+        if (existing && existing.length > 0) {
+          p.devices = existing;
+        } else {
+          p.devices = [synthesiseLegacyDevice(id, nowDev)];
+        }
+      }
+
       // Reconcile connected status with actual live WebSocket connections
       const livePlayerIds = new Set<string>();
       for (const ws of this.ctx.getWebSockets()) {
@@ -266,6 +284,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       lastActivity: this.lastActivity,
       botTurnPending: this.botTurnPending,
       spectators: Array.from(this.spectators.entries()),
+      devices: Array.from(this.players.entries()).map(([id, p]) => [id, p.devices ?? []]),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -319,7 +338,19 @@ export class WavelengthRoom extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
-    this.ctx.acceptWebSocket(server, [userId]);
+    const roleParam = url.searchParams.get('role');
+    const role: DeviceRole =
+      roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
+        ? roleParam
+        : 'both';
+    const socketId = crypto.randomUUID();
+
+    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+
+    const playerForDevice = this.players.get(userId);
+    if (playerForDevice) {
+      pushDevice(playerForDevice, makeDevice(socketId, role, Date.now()));
+    }
 
     this.touch();
     await this.setExpireAlarm();
@@ -385,8 +416,14 @@ export class WavelengthRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
 
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -395,8 +432,14 @@ export class WavelengthRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
 
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -490,6 +533,7 @@ export class WavelengthRoom extends DurableObject<Env> {
   // --- Join / Disconnect ---
 
   private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
     const existingPlayer = this.players.get(playerId);
 
     if (existingPlayer) {
@@ -501,7 +545,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
       });
       this.broadcastState();
       await this.saveState();
@@ -517,7 +561,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
         isSpectator: true,
       });
       this.broadcastState();
@@ -553,7 +597,7 @@ export class WavelengthRoom extends DurableObject<Env> {
     this.sendToWs(ws, {
       type: 'joined',
       playerId,
-      state: this.getStateForPlayer(playerId),
+      state: this.getStateFor(playerId, role),
     });
     this.broadcastState();
     await this.saveState();
@@ -1415,9 +1459,13 @@ export class WavelengthRoom extends DurableObject<Env> {
 
   // --- State for players ---
 
-  private getStateForPlayer(playerId: string): Record<string, unknown> {
+  private getStateFor(playerId: string, deviceRole: DeviceRole): Record<string, unknown> {
     const isPsychic = playerId === this.psychicId;
     const isRevealOrGameOver = this.phase === 'reveal' || this.phase === 'game_over';
+    // Table surface is a shared display visible to others in the room, so it
+    // never sees the psychic's secret target angle even when the psychic is
+    // the viewer.
+    const isTable = deviceRole === 'table';
 
     const players = Array.from(this.players.values()).map(p => ({
       id: p.id,
@@ -1443,8 +1491,9 @@ export class WavelengthRoom extends DurableObject<Env> {
       psychicId: this.psychicId,
       currentCard: this.currentCard,
       clues: this.clues,
-      // Only the psychic sees targetAngle during clue_giving/guessing; everyone sees it during reveal/game_over
-      targetAngle: (isPsychic || isRevealOrGameOver) ? this.targetAngle : null,
+      // Only the psychic sees targetAngle during clue_giving/guessing; everyone sees it during reveal/game_over.
+      // Tables never see it pre-reveal, even for the psychic, since the surface is shared.
+      targetAngle: ((isPsychic && !isTable) || isRevealOrGameOver) ? this.targetAngle : null,
       guesses: Object.fromEntries(this.guesses),
       lockedIn: Array.from(this.lockedIn),
       customCards: this.customCards,
@@ -1490,12 +1539,21 @@ export class WavelengthRoom extends DurableObject<Env> {
     const spectatorList = this.spectators.size > 0
       ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
       : undefined;
+    // Cache payloads per (playerId, role) so paired devices on the same user
+    // don't recompute the same redacted state twice.
+    const cache = new Map<string, Record<string, unknown>>();
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const playerId = tags[0];
       if (!playerId) continue;
-      const state = this.getStateForPlayer(playerId);
-      if (spectatorList) state.spectators = spectatorList;
+      const role = (tags[1] as DeviceRole) || 'both';
+      const key = `${playerId}:${role}`;
+      let state = cache.get(key);
+      if (!state) {
+        state = this.getStateFor(playerId, role);
+        if (spectatorList) state.spectators = spectatorList;
+        cache.set(key, state);
+      }
       this.sendToWs(ws, {
         type: 'state_update',
         state,

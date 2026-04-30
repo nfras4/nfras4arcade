@@ -1,5 +1,5 @@
 import { CardRoom } from '../cards/cardRoom';
-import type { Card, CardAction, CardGameState } from '../cards/types';
+import type { Card, CardAction, CardGameState, DeviceRole } from '../cards/types';
 import { createDeck, shuffle } from '../cards/deck';
 import { evaluateHand, compareHands } from './handEvaluator';
 import { calculatePots, type Pot } from './potCalculator';
@@ -819,6 +819,26 @@ export class PokerRoom extends CardRoom {
 
   // ─── Game state for player ─────────────────────────────────────
 
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    // Informational hook for the paired-device flow: phones notify the room
+    // that they have been paired; server-driven device-add already happened
+    // in the accept path. Logged-and-ignored for v1.
+    if (typeof message === 'string' && message.length < 200) {
+      try {
+        const peek = JSON.parse(message);
+        if (peek && peek.type === 'pair_added') {
+          const tags = this.ctx.getTags(ws);
+          const playerId = tags[0];
+          console.info('[pair_added] received from', playerId);
+          return;
+        }
+      } catch {
+        /* fall through to super */
+      }
+    }
+    await super.webSocketMessage(ws, message);
+  }
+
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
     await super.webSocketClose(ws, code, reason);
   }
@@ -879,10 +899,13 @@ export class PokerRoom extends CardRoom {
     }
   }
 
-  protected getGameStateForPlayer(playerId: string): CardGameState {
+  protected getStateFor(playerId: string, deviceRole: DeviceRole): CardGameState {
     const ts = this.getTable();
     const player = this.players.get(playerId);
     const isShowdown = ts.bettingRound === 'showdown';
+    // Table surface gets zero hole cards because the controller is the source
+    // of truth for private state.
+    const isTable = deviceRole === 'table';
 
     const players = Array.from(this.players.values()).map(p => ({
       id: p.id,
@@ -900,7 +923,9 @@ export class PokerRoom extends CardRoom {
     // Build player hands visibility: only show own cards, or all at showdown
     const playerHands: Record<string, Card[] | null> = {};
     for (const [id, p] of this.players) {
-      if (id === playerId) {
+      if (isTable) {
+        playerHands[id] = null;
+      } else if (id === playerId) {
         playerHands[id] = p.hand;
       } else if (isShowdown && !ts.playerFolded[id]) {
         playerHands[id] = p.hand;
@@ -948,7 +973,7 @@ export class PokerRoom extends CardRoom {
         smallBlindPlayerId: sbPlayerId,
         bigBlindPlayerId: bbPlayerId,
         actionOnPlayerId: ts.actionOnPlayerId,
-        myHand: player?.hand ?? [],
+        myHand: isTable ? [] : (player?.hand ?? []),
         gameMode: ts.gameMode,
         casualChipCount: ts.casualChipCount,
       },

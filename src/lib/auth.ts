@@ -112,6 +112,16 @@ export async function register(
 
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST' });
+  // Clear guest identity so a re-join after logout cannot reuse the same guest_<id>
+  // (identity laundering prevention). Key duplicated here to avoid import cycle with guest.ts.
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('arcade-guest-id');
+      sessionStorage.removeItem('arcade-guest-id');
+    }
+  } catch {
+    // storage may be unavailable; ignore
+  }
   currentUser.set(null);
   userStats.set(null);
   userBadges.set([]);

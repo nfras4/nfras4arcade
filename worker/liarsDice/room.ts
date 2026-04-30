@@ -1,6 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
+import type { Device, DeviceRole } from '../cards/types';
 import { validateBid, countBidFace, nextInTurnOrder } from './logic';
+import { removeDevice as removeDeviceShared, hasRemainingDevices as hasRemainingDevicesShared, pushDevice, synthesiseLegacyDevice, makeDevice } from '../shared/deviceManager';
 import { decideLiarsDiceAction } from '../bots/liarsDiceBot';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
@@ -37,6 +39,7 @@ interface Player {
   isBot: boolean;
   dice: number[];
   eliminated: boolean;
+  devices?: Device[];
   frameSvg?: string | null;
   emblemSvg?: string | null;
   nameColour?: string | null;
@@ -77,6 +80,7 @@ interface StoredState {
   spectators: [string, string][];
   disconnectTimestamps: [string, number][];
   botTurnPending: boolean;
+  devices?: [string, Device[]][];
 }
 
 type ServerMessage =
@@ -193,6 +197,20 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       this.spectators = new Map(stored.spectators ?? []);
       this.disconnectTimestamps = new Map(stored.disconnectTimestamps ?? []);
 
+      // Hydrate devices: legacy state files lack devices, so synthesise a
+      // 'both' placeholder per player. legacy:* placeholders are filtered
+      // out by hasRemainingDevices to prevent ghost-player turn stalls.
+      const storedDevices = new Map<string, Device[]>(stored.devices ?? []);
+      const nowDev = Date.now();
+      for (const [id, p] of this.players) {
+        const existing = storedDevices.get(id);
+        if (existing && existing.length > 0) {
+          p.devices = existing;
+        } else {
+          p.devices = [synthesiseLegacyDevice(id, nowDev)];
+        }
+      }
+
       const livePlayerIds = new Set<string>();
       for (const ws of this.ctx.getWebSockets()) {
         const tags = this.ctx.getTags(ws);
@@ -225,6 +243,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       lastActivity: this.lastActivity,
       spectators: Array.from(this.spectators.entries()),
       disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
+      devices: Array.from(this.players.entries()).map(([id, p]) => [id, p.devices ?? []]),
     };
     try {
       await this.ctx.storage.put('room', state);
@@ -280,7 +299,20 @@ export class LiarsDiceRoom extends DurableObject<Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
-    this.ctx.acceptWebSocket(server, [userId]);
+
+    const roleParam = url.searchParams.get('role');
+    const role: DeviceRole =
+      roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
+        ? roleParam
+        : 'both';
+    const socketId = crypto.randomUUID();
+
+    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+
+    const playerForDevice = this.players.get(userId);
+    if (playerForDevice) {
+      pushDevice(playerForDevice, makeDevice(socketId, role, Date.now()));
+    }
 
     this.touch();
     await this.setExpireAlarm();
@@ -343,7 +375,13 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -352,7 +390,13 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -411,13 +455,14 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   // --- Join / Disconnect ---
 
   private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
     const existing = this.players.get(playerId);
     if (existing) {
       this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
       await this.resolveCosmeticsForPlayer(playerId);
-      this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId) });
+      this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId, role) });
       this.broadcastState();
       await this.saveState();
       return;
@@ -429,7 +474,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getClientState(playerId),
+        state: this.getClientState(playerId, role),
         isSpectator: true,
       });
       this.broadcastState();
@@ -464,7 +509,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
 
     await this.resolveCosmeticsForPlayer(playerId);
 
-    this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId) });
+    this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId, role) });
     this.broadcastState();
     await this.saveState();
   }
@@ -986,8 +1031,11 @@ export class LiarsDiceRoom extends DurableObject<Env> {
 
   // --- Client state ---
 
-  private getClientState(viewerId: string): ClientState {
+  private getClientState(viewerId: string, deviceRole: DeviceRole): ClientState {
     const isSpectator = this.spectators.has(viewerId);
+    // Table surface is a shared display visible to others in the room, so it
+    // never sees the viewer's secret dice; the controller phone holds those.
+    const isTable = deviceRole === 'table';
     const spectatorList = this.spectators.size > 0
       ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
       : undefined;
@@ -1018,7 +1066,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       gameMode: this.gameMode,
       ante: this.ante,
       onesWild: this.onesWild,
-      myDice: isSpectator ? [] : (this.players.get(viewerId)?.dice ?? []),
+      myDice: (isSpectator || isTable) ? [] : (this.players.get(viewerId)?.dice ?? []),
       lastRoundResult: this.lastRoundResult,
       winnerId: this.winnerId,
       spectators: spectatorList,
@@ -1026,13 +1074,23 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   }
 
   private broadcastState(): void {
+    // Cache payloads per (playerId, role) so paired devices on the same user
+    // don't recompute the same redacted state twice.
+    const cache = new Map<string, ClientState>();
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const pid = tags[0];
       if (!pid) continue;
+      const role = (tags[1] as DeviceRole) || 'both';
+      const key = `${pid}:${role}`;
+      let state = cache.get(key);
+      if (!state) {
+        state = this.getClientState(pid, role);
+        cache.set(key, state);
+      }
       this.sendToWs(ws, {
         type: 'state_update',
-        state: this.getClientState(pid),
+        state,
         isSpectator: this.spectators.has(pid),
       });
     }

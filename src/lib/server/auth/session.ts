@@ -14,6 +14,25 @@ function generateToken(): string {
     .replace(/=+$/, '');
 }
 
+async function sha256Base64Url(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+// Constant-time compare to avoid leaking token-hash bytes via response timing.
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -25,10 +44,11 @@ export async function createSession(db: D1Database, userId: string): Promise<str
   const token = generateToken();
   const id = crypto.randomUUID();
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_EXPIRY_SECONDS;
+  const tokenHash = await sha256Base64Url(token);
 
   await db
-    .prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
-    .bind(id, userId, expiresAt)
+    .prepare('INSERT INTO sessions (id, user_id, expires_at, token_hash) VALUES (?, ?, ?, ?)')
+    .bind(id, userId, expiresAt, tokenHash)
     .run();
 
   return token + '.' + id;
@@ -38,21 +58,26 @@ export async function validateSession(db: D1Database, sessionValue: string): Pro
   const dotIndex = sessionValue.indexOf('.');
   if (dotIndex === -1) return null;
 
+  const token = sessionValue.slice(0, dotIndex);
   const sessionId = sessionValue.slice(dotIndex + 1);
   const now = Math.floor(Date.now() / 1000);
 
   const row = await db
     .prepare(
-      `SELECT u.id, u.email, p.display_name, p.avatar
+      `SELECT u.id, u.email, p.display_name, p.avatar, s.token_hash
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        JOIN player_profiles p ON p.id = u.id
        WHERE s.id = ? AND s.expires_at > ?`
     )
     .bind(sessionId, now)
-    .first<{ id: string; email: string; display_name: string; avatar: string | null }>();
+    .first<{ id: string; email: string; display_name: string; avatar: string | null; token_hash: string }>();
 
   if (!row) return null;
+
+  const expectedHash = await sha256Base64Url(token);
+  if (!row.token_hash || !constantTimeEquals(expectedHash, row.token_hash)) return null;
+
   return { id: row.id, email: row.email, displayName: row.display_name, avatar: row.avatar };
 }
 

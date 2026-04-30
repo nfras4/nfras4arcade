@@ -8,6 +8,15 @@ export interface Card {
   value: number;
 }
 
+export type DeviceRole = 'controller' | 'table' | 'both';
+
+export interface Device {
+  socketId: string;
+  role: DeviceRole;
+  addedAt: number;
+  lastSeenAt: number;
+}
+
 export type CardGamePhase = 'lobby' | 'playing' | 'round_over' | 'game_over';
 
 export interface CardPlayer {
@@ -21,6 +30,7 @@ export interface CardPlayer {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  devices: Device[];
 }
 
 export interface CardGameState {
@@ -67,4 +77,5 @@ export interface CardRoomStoredState {
   disconnectTimestamps?: [string, number][];
   spectators?: [string, string][];
   botTurnPending?: boolean;
+  devices?: [string, Device[]][];
 }

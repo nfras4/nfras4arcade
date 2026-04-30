@@ -1,5 +1,5 @@
 import { CardRoom } from './cardRoom';
-import type { Card, CardAction, CardGameState, CardGamePhase } from './types';
+import type { Card, CardAction, CardGameState, CardGamePhase, DeviceRole } from './types';
 import { createDeck, shuffle, dealHands } from './deck';
 import { presidentBotDecision } from '../bots/botDecision';
 
@@ -410,9 +410,12 @@ export class PresidentRoom extends CardRoom {
     }
   }
 
-  protected getGameStateForPlayer(playerId: string): CardGameState {
+  protected getStateFor(playerId: string, deviceRole: DeviceRole): CardGameState {
     const table = this.getTable();
     const player = this.players.get(playerId);
+    // Table surface gets zero hole cards because the controller is the source
+    // of truth for private state.
+    const isTable = deviceRole === 'table';
 
     const players = Array.from(this.players.values()).map(p => ({
       id: p.id,
@@ -440,7 +443,7 @@ export class PresidentRoom extends CardRoom {
         pilePlayCount: table.pilePlayCount,
         finishOrder: table.finishOrder,
         titles: table.titles,
-        myHand: player?.hand || [],
+        myHand: isTable ? [] : (player?.hand || []),
         passedPlayers: Array.from(table.passedPlayers),
       },
     };

@@ -1,5 +1,5 @@
 import { CardRoom } from '../cards/cardRoom';
-import type { CardAction, CardGameState } from '../cards/types';
+import type { CardAction, CardGameState, DeviceRole } from '../cards/types';
 import { connectFourBotDecision } from '../bots/connectFourBot';
 
 const ROWS = 6;
@@ -259,7 +259,7 @@ export class ConnectFourRoom extends CardRoom {
     await super.webSocketError(ws, error);
   }
 
-  protected getGameStateForPlayer(playerId: string): CardGameState {
+  protected getStateFor(playerId: string, _deviceRole: DeviceRole): CardGameState {
     const table = this.getTable();
 
     const players = Array.from(this.players.values()).map(p => ({

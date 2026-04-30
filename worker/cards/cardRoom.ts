@@ -1,12 +1,13 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
-import type { Card, CardPlayer, CardGamePhase, CardGameState, CardAction, CardRoomStoredState } from './types';
+import type { Card, CardPlayer, CardGamePhase, CardGameState, CardAction, CardRoomStoredState, Device, DeviceRole } from './types';
 import type { BotPlayer } from '../bots/botPlayer';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
 import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { resolveBets } from '../shared/bets';
+import { removeDevice as removeDeviceShared, hasRemainingDevices as hasRemainingDevicesShared, pushDevice, synthesiseLegacyDevice, makeDevice, armReconnectGrace, clearReconnectGrace } from '../shared/deviceManager';
 import { xpToLevel } from '../../src/lib/xp';
 
 const MAX_MESSAGE_SIZE = 2048;
@@ -55,13 +56,27 @@ export abstract class CardRoom extends DurableObject<Env> {
   /** Per-DO cosmetics cache (resolved player cosmetic payloads). */
   protected cosmeticsCache = new CosmeticsCache();
 
+  /**
+   * Tracks playerIds that have been paired this session (i.e. had a controller
+   * device added via /api/pair). Used by webSocketClose to decide whether to
+   * arm a 60s reconnect grace instead of immediate-disconnect when the last
+   * device drops mid-game. Reset on DO eviction; that's acceptable since grace
+   * is a UX nicety, not a correctness invariant.
+   */
+  private recentlyPairedPlayers: Map<string, number> = new Map();
+
   // --- Abstract methods each game must implement ---
 
   /** Process a game-specific player action. */
   protected abstract handleAction(playerId: string, action: CardAction): Promise<void> | void;
 
-  /** Return the state visible to a specific player (hide other hands, etc). */
-  protected abstract getGameStateForPlayer(playerId: string): CardGameState;
+  /**
+   * Return the state visible to a specific player from a specific device role.
+   * Subclasses override this to redact private state (hands, role assignments).
+   * Table surface gets zero hole cards because the controller is the source of
+   * truth for private state.
+   */
+  protected abstract getStateFor(playerId: string, deviceRole: DeviceRole): CardGameState;
 
   /** Check if the current round has ended. Return winner ID or null. */
   protected abstract checkRoundEnd(): string | null;
@@ -102,6 +117,20 @@ export abstract class CardRoom extends DurableObject<Env> {
       // Restore spectators
       this.spectators = new Map(stored.spectators ?? []);
 
+      // loadState fallback for legacy state files without devices field:
+      // synthesise one default 'both' device per player so downstream code
+      // can assume devices is always populated.
+      const storedDevices = new Map<string, Device[]>(stored.devices ?? []);
+      const now = Date.now();
+      for (const [id, p] of this.players) {
+        const existing = storedDevices.get(id);
+        if (existing && existing.length > 0) {
+          p.devices = existing;
+        } else {
+          p.devices = [synthesiseLegacyDevice(id, now)];
+        }
+      }
+
       // Restore bot map from players
       this.bots = new Map();
       for (const [id, p] of this.players) {
@@ -137,6 +166,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       botTurnPending: this.botTurnPending,
       disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
       spectators: Array.from(this.spectators.entries()),
+      devices: Array.from(this.players.entries()).map(([id, p]) => [id, p.devices]),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -187,12 +217,22 @@ export abstract class CardRoom extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
-    // F4: single-session policy. Two tabs / phone+pc for the same authed user
-    // would otherwise coexist as parallel WebSockets with last-write-wins races
-    // on chip persistence. Evict any prior sockets for this userId before
-    // accepting the new one so the new socket is the sole authority.
+    const roleParam = url.searchParams.get('role');
+    const role: DeviceRole =
+      roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
+        ? roleParam
+        : 'both';
+    const socketId = crypto.randomUUID();
+
+    // F4: single-session policy per (userId, role). Two tabs / phone+pc for
+    // the same authed user with the same role would otherwise coexist as
+    // parallel WebSockets with last-write-wins races on chip persistence.
+    // Evict any prior sockets for this (userId, role) before accepting the
+    // new one. Different roles (e.g. controller + table) coexist by design.
     try {
       for (const existingWs of this.ctx.getWebSockets(userId)) {
+        const existingTags = this.ctx.getTags(existingWs);
+        if (existingTags[1] !== role) continue;
         try {
           existingWs.close(4001, 'replaced');
         } catch {
@@ -203,7 +243,19 @@ export abstract class CardRoom extends DurableObject<Env> {
       console.error('[CardRoom] failed to evict prior sockets', err);
     }
 
-    this.ctx.acceptWebSocket(server, [userId]);
+    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+
+    if (role === 'controller') {
+      this.recentlyPairedPlayers.set(userId, Date.now());
+      // Auto-rebind: a freshly paired controller cancels any in-flight grace.
+      await clearReconnectGrace(this.ctx, userId);
+    }
+
+    const player = this.players.get(userId);
+    if (player) {
+      pushDevice(player, makeDevice(socketId, role, Date.now()));
+      this.broadcastPairedDeviceChange(userId, role, 'added', player.devices.length);
+    }
 
     this.touch();
     await this.setExpireAlarm();
@@ -284,7 +336,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       // Promote spectators to players
       for (const [specId, specName] of this.spectators) {
         if (this.players.size < this.maxPlayers) {
-          const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false };
+          const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false, devices: [] };
           this.players.set(specId, p);
         }
       }
@@ -313,7 +365,31 @@ export abstract class CardRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const role = (tags[1] as DeviceRole) || 'both';
+    const socketId = tags[2];
     if (!playerId) return;
+    // Capture the player BEFORE removeDevice so we can read devices.length
+    // without it racing the early-return path.
+    const player = this.players.get(playerId);
+    this.removeDevice(playerId, socketId);
+    if (this.hasRemainingDevices(playerId)) {
+      if (player) {
+        this.broadcastPairedDeviceChange(playerId, role, 'removed', player.devices.length);
+      }
+      await this.saveState();
+      return;
+    }
+    // Last device gone. Decide whether to arm reconnect grace or disconnect now.
+    if (
+      role === 'controller' &&
+      this.recentlyPairedPlayers.has(playerId) &&
+      this.phase !== 'lobby'
+    ) {
+      await armReconnectGrace(this.ctx, playerId, 60_000);
+      console.info('[grace] armed for', playerId);
+      await this.saveState();
+      return;
+    }
     await this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -322,13 +398,73 @@ export abstract class CardRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const role = (tags[1] as DeviceRole) || 'both';
+    const socketId = tags[2];
     if (!playerId) return;
+    const player = this.players.get(playerId);
+    this.removeDevice(playerId, socketId);
+    if (this.hasRemainingDevices(playerId)) {
+      if (player) {
+        this.broadcastPairedDeviceChange(playerId, role, 'removed', player.devices.length);
+      }
+      await this.saveState();
+      return;
+    }
+    if (
+      role === 'controller' &&
+      this.recentlyPairedPlayers.has(playerId) &&
+      this.phase !== 'lobby'
+    ) {
+      await armReconnectGrace(this.ctx, playerId, 60_000);
+      console.info('[grace] armed for', playerId);
+      await this.saveState();
+      return;
+    }
     await this.handleDisconnect(playerId);
     await this.saveState();
   }
 
+  private broadcastPairedDeviceChange(
+    playerId: string,
+    role: DeviceRole,
+    kind: 'added' | 'removed',
+    deviceCount: number,
+  ): void {
+    this.broadcast({ type: 'paired_device_' + kind, playerId, role, deviceCount });
+  }
+
+  private removeDevice(playerId: string, socketId: string | undefined): void {
+    removeDeviceShared(this.players.get(playerId), socketId);
+  }
+
+  private hasRemainingDevices(playerId: string): boolean {
+    return hasRemainingDevicesShared(this.players.get(playerId));
+  }
+
   async alarm(): Promise<void> {
     await this.loadState();
+
+    // GRACE CHECK: must be the FIRST block, BEFORE the bot-turn check, and
+    // must FALL THROUGH (no return) so subsequent bot-turn / watchdog /
+    // disconnect-timeout / room-expiry logic still runs in the same fire.
+    // Without this ordering, the early-return paths below (lines after
+    // bot-turn / watchdog) would silently suppress grace expiry until the
+    // 30-min room-expiry alarm fired, producing zombie players.
+    {
+      const now = Date.now();
+      const all = await this.ctx.storage.list<number>({ prefix: 'grace:' });
+      for (const [key, deadline] of all.entries()) {
+        if (typeof deadline !== 'number' || deadline > now) continue;
+        const playerId = key.slice('grace:'.length);
+        const player = this.players.get(playerId);
+        const stillEmpty = !player || !hasRemainingDevicesShared(player);
+        console.info('[grace] fired for', playerId, 'rejoined=', !stillEmpty);
+        if (stillEmpty) {
+          await this.handleDisconnect(playerId);
+        }
+        await this.ctx.storage.delete(key);
+      }
+    }
 
     // Bot turn alarm
     if (this.botTurnPending && this.phase === 'playing') {
@@ -410,6 +546,7 @@ export abstract class CardRoom extends DurableObject<Env> {
   // --- Join / Disconnect ---
 
   private async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
     const existing = this.players.get(playerId);
 
     if (existing) {
@@ -421,7 +558,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getGameStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
       });
       this.broadcastState();
       await this.saveState();
@@ -437,7 +574,7 @@ export abstract class CardRoom extends DurableObject<Env> {
         type: 'joined',
         playerId,
         isSpectator: true,
-        state: this.getGameStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
       });
       this.broadcastState();
       await this.saveState();
@@ -454,7 +591,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     const noHumanHost = !this.hostId || this.bots.has(this.hostId);
     const isHost = this.players.size === 0 || noHumanHost;
 
-    const player: CardPlayer = { id: playerId, name, hand: [], connected: true, isHost };
+    const player: CardPlayer = { id: playerId, name, hand: [], connected: true, isHost, devices: [] };
     this.players.set(playerId, player);
 
     if (isHost) {
@@ -470,7 +607,7 @@ export abstract class CardRoom extends DurableObject<Env> {
     this.sendToWs(ws, {
       type: 'joined',
       playerId,
-      state: this.getGameStateForPlayer(playerId),
+      state: this.getStateFor(playerId, role),
     });
     this.broadcastState();
     await this.saveState();
@@ -640,6 +777,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       connected: true,
       isHost: false,
       isBot: true,
+      devices: [],
     };
     this.players.set(id, player);
 
@@ -950,8 +1088,12 @@ export abstract class CardRoom extends DurableObject<Env> {
     } catch {}
   }
 
-  protected sendTo(playerId: string, msg: object): void {
+  protected sendTo(playerId: string, msg: object, role?: DeviceRole): void {
     for (const ws of this.ctx.getWebSockets(playerId)) {
+      if (role) {
+        const tags = this.ctx.getTags(ws);
+        if (tags[1] !== role) continue;
+      }
       this.sendToWs(ws, msg);
     }
   }
@@ -968,12 +1110,21 @@ export abstract class CardRoom extends DurableObject<Env> {
     const spectatorList = this.spectators.size > 0
       ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
       : undefined;
+    // Cache payloads per (playerId, role) so paired devices on the same user
+    // don't recompute the same redacted state twice.
+    const cache = new Map<string, CardGameState>();
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const pid = tags[0];
       if (!pid) continue;
-      const state = this.getGameStateForPlayer(pid);
-      if (spectatorList) state.spectators = spectatorList;
+      const role = (tags[1] as DeviceRole) || 'both';
+      const key = `${pid}:${role}`;
+      let state = cache.get(key);
+      if (!state) {
+        state = this.getStateFor(pid, role);
+        if (spectatorList) state.spectators = spectatorList;
+        cache.set(key, state);
+      }
       this.sendToWs(ws, {
         type: 'state_update',
         state,

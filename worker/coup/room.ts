@@ -1,5 +1,5 @@
 import { CardRoom } from '../cards/cardRoom';
-import type { CardAction, CardGameState } from '../cards/types';
+import type { CardAction, CardGameState, DeviceRole } from '../cards/types';
 import {
   initialDeal,
   applyAction as engineApplyAction,
@@ -685,8 +685,11 @@ export class CoupRoom extends CardRoom {
 
   // ─── State broadcast: hide other players' face-down cards ──────
 
-  protected getGameStateForPlayer(playerId: string): CardGameState {
+  protected getStateFor(playerId: string, deviceRole: DeviceRole): CardGameState {
     const ts = this.getTable();
+    // Table surface gets zero hole cards because the controller is the source
+    // of truth for private state.
+    const isTable = deviceRole === 'table';
 
     const players = Array.from(this.players.values()).map((p) => ({
       id: p.id,
@@ -720,7 +723,7 @@ export class CoupRoom extends CardRoom {
           hiddenCardCount,
         };
         // The viewer themselves sees their own face-down cards
-        if (id === playerId && !isSpectator) {
+        if (id === playerId && !isSpectator && !isTable) {
           view.myCards = ps.cards.filter((c) => !c.revealed).map((c) => c.role);
         }
         playerView[id] = view;
@@ -731,7 +734,7 @@ export class CoupRoom extends CardRoom {
       if (ts.pendingAction) {
         const pa = ts.pendingAction;
         if (pa.phase === 'exchange_select') {
-          if (pa.playerId === playerId && !isSpectator) {
+          if (pa.playerId === playerId && !isSpectator && !isTable) {
             pendingForClient = pa;
           } else {
             pendingForClient = {

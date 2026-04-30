@@ -6,17 +6,17 @@
   import { dispatchRelayMessages } from '$lib/levelUpDispatch';
   import { writable } from 'svelte/store';
   import { isLoggedIn, userStats, currentUser } from '$lib/auth';
-  import { getGuestDisplayName } from '$lib/guest';
   import { fireWinConfetti } from '$lib/vfx';
-  import Card from '$lib/components/cards/Card.svelte';
-  import PlayerSeat from '$lib/components/cards/PlayerSeat.svelte';
-  import CommunityCards from '$lib/components/cards/CommunityCards.svelte';
-  import BetControls from '$lib/components/poker/BetControls.svelte';
-  import HoleCards from '$lib/components/poker/HoleCards.svelte';
-  import BetPanel from '$lib/components/BetPanel.svelte';
   import { detectInputMode } from '$lib/utils/inputMode';
+  import PairButton from '$lib/components/pairing/PairButton.svelte';
+  import TableView from '$lib/components/poker/TableView.svelte';
+  import ControllerView from '$lib/components/poker/ControllerView.svelte';
+  import MobilePokerView from '$lib/components/poker/MobilePokerView.svelte';
+  import { evaluateHandName } from '$lib/utils/pokerHelpers';
 
   const code = $page.params.code!;
+  const roleParam = $page.url.searchParams.get('role');
+  const initialRole = roleParam === 'controller' || roleParam === 'table' || roleParam === 'both' ? roleParam : undefined;
   const socket = new CardGameSocket('/ws/poker');
 
   const gameState = writable<any>(null);
@@ -34,9 +34,37 @@
   let muckTargetRef = $state<HTMLElement | undefined>(undefined);
   let isArmed = $state(false);
   let inputMode = $state<'touch' | 'pointer'>('touch');
+  // Phase 3 Bug 2: latch so we only swap to 'table' once when the phone pairs.
+  let demotedToTable = $state(false);
+
+  // Phase 4: viewport / input capability detection drives layout selection.
+  let isMobile = $state(false);
+
+  function detectMobile(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 900;
+    } catch {
+      return false;
+    }
+  }
 
   $effect(() => {
     inputMode = detectInputMode();
+  });
+
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    isMobile = detectMobile();
+    const mq = window.matchMedia('(pointer: coarse)');
+    const onChange = () => { isMobile = detectMobile(); };
+    const onResize = () => { isMobile = detectMobile(); };
+    mq.addEventListener('change', onChange);
+    window.addEventListener('resize', onResize);
+    return () => {
+      mq.removeEventListener('change', onChange);
+      window.removeEventListener('resize', onResize);
+    };
   });
 
   $effect(() => {
@@ -53,12 +81,24 @@
         error.set(msg.message);
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => error.set(null), 4000);
+      } else if (
+        msg.type === 'paired_device_added' &&
+        msg.role === 'controller' &&
+        roleParam !== 'controller' &&
+        !demotedToTable &&
+        msg.playerId === $myPlayerId
+      ) {
+        // Phase 3 Bug 2: phone just paired as our controller; demote this
+        // device to 'table' so the server's role-aware getStateFor strips
+        // hole cards from subsequent state broadcasts.
+        demotedToTable = true;
+        socket.setRole('table').catch(() => { demotedToTable = false; });
       }
       dispatchRelayMessages(msg);
     });
 
-    socket.connect(code, !$isLoggedIn)
-      .then(() => socket.joinRoom(code))
+    socket.connect(code, !$isLoggedIn, initialRole)
+      .then(() => { socket.joinRoom(code); })
       .catch(() => goto('/poker'));
 
     setTimeout(() => { reconnecting = false; }, 3000);
@@ -76,7 +116,6 @@
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
   let isHost = $derived(state?.players?.find((p: any) => p.id === pid)?.isHost ?? false);
-  let myPlayer = $derived(state?.players?.find((p: any) => p.id === pid));
   let ts = $derived(state?.tableState);
   let isMyTurn = $derived(ts?.actionOnPlayerId === pid);
   let bettingRound = $derived(ts?.bettingRound ?? 'preflop');
@@ -106,10 +145,7 @@
   let minRaise = $derived(currentBet + bigBlindAmount);
   let maxRaise = $derived(myChips + myBet);
 
-  // ─── Spectator bet panel data ─────────────────────────────────
-  // A poker player is bet-eligible if they still have chips and are not folded for this hand.
-  // For v1 we treat folded (current hand) as still eligible since they remain in the tournament.
-  // Eliminated = no chips remaining.
+  // Spectator bet panel data
   let myUserId = $derived($currentUser?.id ?? null);
   let betPlayers = $derived(
     (state?.players ?? []).map((p: any) => ({
@@ -121,7 +157,6 @@
   );
 
   // Cosmetics: card back and table felt from auth store
-  // TODO: wire feature flag — COSMETIC_TILES_ENABLED hardcoded true until accessible client-side
   let myCardBackStyle = $derived($currentUser?.cardBack ?? null);
   let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
   let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
@@ -132,65 +167,6 @@
       userStats.update(s => s ? { ...s, chips: myChips } : s);
     }
   });
-
-  // Client-side hand name evaluator
-  const RANK_VAL: Record<string, number> = {
-    '2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14
-  };
-  const RANK_LABEL: Record<number, string> = {
-    2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8',9:'9',10:'10',11:'J',12:'Q',13:'K',14:'A'
-  };
-
-  function evaluateHandName(holeCards: {suit:string;rank:string}[], community: {suit:string;rank:string}[]): string {
-    const all = [...holeCards, ...community];
-    if (all.length < 2) return '';
-    const vals = all.map(c => RANK_VAL[c.rank] ?? 0).sort((a,b) => b - a);
-    const suits = all.map(c => c.suit);
-
-    // Count ranks
-    const counts = new Map<number, number>();
-    for (const v of vals) counts.set(v, (counts.get(v) ?? 0) + 1);
-    const groups = [...counts.entries()].sort((a,b) => b[1] - a[1] || b[0] - a[0]);
-
-    // Check flush (5+ of same suit)
-    const suitCounts = new Map<string, number>();
-    for (const s of suits) suitCounts.set(s, (suitCounts.get(s) ?? 0) + 1);
-    let flushSuit: string | null = null;
-    for (const [s, c] of suitCounts) { if (c >= 5) { flushSuit = s; break; } }
-
-    // Check straight (using unique sorted values)
-    const unique = [...new Set(vals)].sort((a,b) => a - b);
-    // Add low ace for A-2-3-4-5
-    if (unique.includes(14)) unique.unshift(1);
-    let straightHigh = 0;
-    for (let i = 0; i <= unique.length - 5; i++) {
-      if (unique[i+4] - unique[i] === 4) {
-        straightHigh = unique[i+4];
-      }
-    }
-
-    // Straight flush / royal flush
-    if (flushSuit && straightHigh) {
-      const flushCards = all.filter(c => c.suit === flushSuit);
-      const fv = [...new Set(flushCards.map(c => RANK_VAL[c.rank]))].sort((a,b) => a - b);
-      if (fv.includes(14)) fv.unshift(1);
-      let sfHigh = 0;
-      for (let i = 0; i <= fv.length - 5; i++) {
-        if (fv[i+4] - fv[i] === 4) sfHigh = fv[i+4];
-      }
-      if (sfHigh === 14) return 'Royal Flush';
-      if (sfHigh > 0) return 'Straight Flush';
-    }
-
-    if (groups[0][1] >= 4) return `Four of a Kind, ${RANK_LABEL[groups[0][0]]}s`;
-    if (groups[0][1] >= 3 && groups.length > 1 && groups[1][1] >= 2) return `Full House`;
-    if (flushSuit) return 'Flush';
-    if (straightHigh) return `Straight`;
-    if (groups[0][1] >= 3) return `Three of a Kind`;
-    if (groups[0][1] >= 2 && groups.length > 1 && groups[1][1] >= 2) return `Two Pair`;
-    if (groups[0][1] >= 2) return `Pair of ${RANK_LABEL[groups[0][0]]}s`;
-    return `High Card ${RANK_LABEL[groups[0][0]]}`;
-  }
 
   let myHandName = $derived(
     myHand.length >= 2 && !amIFolded
@@ -233,29 +209,36 @@
     goto('/poker');
   }
 
-  function playerName(id: string): string {
-    return state?.players?.find((p: any) => p.id === id)?.name ?? 'Unknown';
-  }
-
-  function getBlindLabel(playerId: string): string | undefined {
-    if (playerId === sbPlayerId) return 'SB';
-    if (playerId === bbPlayerId) return 'BB';
-    return undefined;
-  }
-
   let addingBot = $state(false);
 
   async function addBot() {
     addingBot = true;
     try {
       await fetch(`/api/add-bot?room=${code}&game=poker`, { method: 'POST' });
-    } catch {}
+    } catch (e) {
+      console.error('addBot failed', e);
+    }
     addingBot = false;
   }
 
   async function removeAllBots() {
-    await fetch(`/api/remove-bots?room=${code}&game=poker`, { method: 'POST' });
+    try {
+      await fetch(`/api/remove-bots?room=${code}&game=poker`, { method: 'POST' });
+    } catch (e) {
+      console.error('removeAllBots failed', e);
+    }
   }
+
+  // Phase 4: layout selector. controller -> phone-only paired surface.
+  // mobile -> phone solo (or any coarse-pointer / narrow viewport solo).
+  // table -> PC table-only paired OR PC solo (default desktop fallback).
+  type LayoutKind = 'controller' | 'mobile' | 'table';
+  let layout: LayoutKind = $derived.by(() => {
+    if (roleParam === 'controller') return 'controller';
+    if (isMobile && (roleParam === 'both' || roleParam == null)) return 'mobile';
+    return 'table';
+  });
+  let showOwnHandOnTable = $derived(roleParam === 'both' || roleParam == null);
 </script>
 
 {#if $error}
@@ -264,266 +247,139 @@
 
 <div class="game-page" style={tableFeltStyle}>
   {#if !state}
-    <div class="loading">
-      <p>Connecting...</p>
-    </div>
-  {:else}
-
-    <!-- LOBBY -->
-    {#if state.phase === 'lobby'}
-      <div class="phase-panel">
-        <h2 class="geo-title phase-title">Lobby</h2>
-        <div class="player-list">
-          {#each state.players as player}
-            <div class="player-item" class:disconnected={!player.connected}>
-              <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
-              {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
-              {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
-              {#if player.isHost}<span class="host-badge">HOST</span>{/if}
-              {#if !player.connected && !player.isBot}<span class="dc-badge">DC</span>{/if}
-              <span class="chip-count">{playerChips[player.id] ?? 1000} chips</span>
-            </div>
-          {/each}
-        </div>
-        <p class="player-count">
-          {state.players.length} / 8 players
-          {#if state.players.length < 2}
-            -- Need {2 - state.players.length} more to start
-          {/if}
-        </p>
-        {#if isHost}
-          <div class="blind-selector">
-            <label class="field-label" for="blind-select">Big Blind</label>
-            <select id="blind-select" bind:value={blindSetting}>
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-          <div class="mode-selector">
-            <label class="field-label">Game Mode</label>
-            <div class="mode-toggle">
-              <button class="mode-btn" class:active={gameMode === 'casual'} onclick={() => gameMode = 'casual'}>
-                Casual
-              </button>
-              <button class="mode-btn" class:active={gameMode === 'competitive'} onclick={() => gameMode = 'competitive'}>
-                Competitive
-              </button>
-            </div>
-          </div>
-
-          {#if gameMode === 'casual'}
-            <div class="chip-config">
-              <label class="field-label" for="chip-select">Starting Chips</label>
-              <select id="chip-select" class="input-field" bind:value={casualChipCount}>
-                <option value={500}>500</option>
-                <option value={1000}>1,000</option>
-                <option value={2500}>2,500</option>
-                <option value={5000}>5,000</option>
-                <option value={10000}>10,000</option>
-              </select>
-            </div>
-          {:else}
-            <p class="competitive-note">Using real chip balances from your profile</p>
-          {/if}
-
-          <button class="btn-primary" onclick={startGame} disabled={state.players.length < 2}>
-            Start Game
-          </button>
-          <div class="bot-controls">
-            <button class="btn-secondary btn-sm" onclick={addBot} disabled={state.players.length >= 8 || addingBot}>
-              {addingBot ? 'Adding...' : 'Add Bot'}
-            </button>
-            {#if state.players.some((p: any) => p.isBot)}
-              <button class="btn-secondary btn-sm btn-danger" onclick={removeAllBots}>
-                Remove All Bots
-              </button>
-            {/if}
-          </div>
-        {:else}
-          <p class="waiting-text">Waiting for host to start...</p>
-        {/if}
-        <button class="btn-secondary" onclick={leaveGame}>Leave</button>
-      </div>
-
-    <!-- PLAYING / SHOWDOWN -->
-    {:else if state.phase === 'playing' || state.phase === 'round_over'}
-
-      <div class="phase-panel">
-        {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
-
-        {#if isSpectator}
-          <BetPanel
-            roomCode={code}
-            game="poker"
-            players={betPlayers}
-            isSpectator={isSpectator}
-            isGameEnded={bettingRound === 'showdown'}
-            myUserId={myUserId}
-          />
-        {/if}
-        <!-- Turn indicator -->
-        <div class="turn-indicator">
-          {#if bettingRound === 'showdown'}
-            <span class="round-label">Showdown</span>
-          {:else if isMyTurn && !amIFolded}
-            <span class="your-turn">Your turn!</span>
-          {:else if amIFolded}
-            <span class="waiting-turn">You folded this hand</span>
-          {:else if ts?.actionOnPlayerId}
-            <span class="waiting-turn">Waiting for {playerName(ts.actionOnPlayerId)}...</span>
-          {:else}
-            <span class="waiting-turn">Waiting...</span>
-          {/if}
-        </div>
-
-        <!-- Community Cards (wrapped: serves as muck target for HoleCards throw arc) -->
-        <div bind:this={muckTargetRef}>
-          <CommunityCards cards={communityCards} {bettingRound} />
-
-          <!-- Pot display -->
-          {#if totalPot > 0}
-            <div class="pot-display">
-              {#if pots.length <= 1}
-                <span class="pot-total geo-title">Pot: {totalPot}</span>
-              {:else}
-                {#each pots as pot, i}
-                  <span class="pot-item geo-title">
-                    {i === 0 ? 'Main Pot' : `Side Pot ${i}`}: {pot.amount}
-                  </span>
-                {/each}
-                {#if Object.values(playerBets).some((b) => b > 0)}
-                  <span class="pot-item geo-title pot-bets">Current bets: {Object.values(playerBets).reduce((s, b) => s + b, 0)}</span>
-                {/if}
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Player ring -->
-        <div class="player-bar">
-          {#each state.players as player}
-            <PlayerSeat
-              name={player.name}
-              cardCount={player.cardCount}
-              active={ts?.actionOnPlayerId === player.id}
-              connected={player.connected}
-              chipCount={playerChips[player.id]}
-              currentBet={playerBets[player.id]}
-              dealerBadge={dealerId === player.id}
-              blindLabel={getBlindLabel(player.id)}
-              folded={playerFolded[player.id] ?? false}
-              allIn={playerAllIn[player.id] ?? false}
-              cardBackStyle={myCardBackStyle}
-            />
-          {/each}
-        </div>
-
-        <!-- Last action -->
-        {#if ts?.lastAction}
-          <div class="last-action fade-in">
-            <span class="action-text">
-              {playerName(ts.lastAction.playerId)}
-              {#if ts.lastAction.action === 'fold'}folded
-              {:else if ts.lastAction.action === 'check'}checked
-              {:else if ts.lastAction.action === 'call'}called {ts.lastAction.amount ?? ''}
-              {:else if ts.lastAction.action === 'raise'}raised to {ts.lastAction.amount ?? ''}
-              {:else if ts.lastAction.action === 'all_in'}went all in ({ts.lastAction.amount ?? ''})
-              {/if}
-            </span>
-          </div>
-        {/if}
-
-        <!-- My hand: hand-name label only; hole cards rendered by HoleCards (fixed-position) -->
-        <div class="hand-area">
-          {#if myHandName}
-            <div class="hand-name">{myHandName}</div>
-          {/if}
-        </div>
-
-        <HoleCards
-          cards={myHand}
-          isPlayerTurn={isMyTurn}
-          gameState={amIFolded ? 'folded' : (bettingRound === 'showdown' ? 'showdown' : (myHand.length === 0 ? 'pre-deal' : 'in-hand'))}
-          {inputMode}
-          muckTarget={muckTargetRef ? { kind: 'element', ref: muckTargetRef } : { kind: 'offscreen-top' }}
-          onaction={sendAction}
-          onpeek={() => { /* optional telemetry */ }}
-          onflip={() => { /* optional telemetry */ }}
-          onarmedchange={(armed) => isArmed = armed}
-        />
-
-        <!-- Showdown: reveal opponent hands -->
-        {#if bettingRound === 'showdown' && playerHands}
-          <div class="showdown-hands">
-            {#each state.players as player}
-              {#if player.id !== pid && playerHands[player.id] && !playerFolded[player.id]}
-                <div class="opponent-hand fade-in">
-                  <span class="opponent-name">{player.name}</span>
-                  <div class="opponent-cards">
-                    {#each playerHands[player.id] ?? [] as card, i}
-                      <Card {card} faceUp={true} dealDelay={i * 100} />
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-
-        <!-- Winners info -->
-        {#if winnersInfo && winnersInfo.length > 0}
-          <div class="winners-panel fade-in">
-            {#each winnersInfo as winner}
-              <div class="winner-row">
-                <span class="winner-name">{playerName(winner.playerId)}</span>
-                <span class="winner-amount">wins {winner.amount}</span>
-                {#if winner.hand}
-                  <span class="winner-hand">with {winner.hand}</span>
-                {/if}
-              </div>
-            {/each}
-          </div>
-
-          {#if isHost}
-            <div class="action-bar">
-              <button class="btn-primary" onclick={nextHand}>Next Hand</button>
-            </div>
-          {:else}
-            <p class="waiting-text">Waiting for host to deal next hand...</p>
-          {/if}
-        {/if}
-
-        <!-- Bet controls -->
-        {#if isMyTurn && !amIFolded && bettingRound !== 'showdown'}
-          <div class:armed-dimmed={isArmed}>
-            <BetControls
-              {canCheck}
-              {callAmount}
-              {minRaise}
-              {maxRaise}
-              playerChips={myChips}
-              disabled={false}
-              onaction={sendAction}
-            />
-          </div>
-        {/if}
-      </div>
-
-    <!-- GAME OVER -->
-    {:else if state.phase === 'game_over'}
-      <div class="phase-panel">
-        <h2 class="geo-title phase-title">Game Over</h2>
+    <div class="loading"><p>Connecting...</p></div>
+  {:else if state.phase === 'lobby' && layout !== 'mobile'}
+    <!-- PC lobby: kept inline; mobile lobby is handled inside MobilePokerView. -->
+    <div class="phase-panel">
+      <h2 class="geo-title phase-title">Lobby</h2>
+      <div class="player-list">
         {#each state.players as player}
-          <div class="result-row" class:result-winner={playerChips[player.id] > 0}>
-            <span class="result-name">{player.name}</span>
-            <span class="result-chips">{playerChips[player.id] ?? 0} chips</span>
+          <div class="player-item" class:disconnected={!player.connected}>
+            <span class="player-name" class:owner-name={player.name === 'nfras4'}>{player.name}</span>
+            {#if player.name === 'nfras4'}<span class="owner-crown" title="Site Owner">&#x1F451;</span>{/if}
+            {#if player.isBot}<span class="bot-badge">BOT</span>{/if}
+            {#if player.isHost}<span class="host-badge">HOST</span>{/if}
+            {#if !player.connected && !player.isBot}<span class="dc-badge">DC</span>{/if}
+            <span class="chip-count">{playerChips[player.id] ?? 1000} chips</span>
           </div>
         {/each}
-        <button class="btn-primary" onclick={leaveGame}>Back to Lobby</button>
       </div>
-    {/if}
+      <p class="player-count">
+        {state.players.length} / 8 players
+        {#if state.players.length < 2}
+          -- Need {2 - state.players.length} more to start
+        {/if}
+      </p>
+      {#if isHost}
+        <div class="blind-selector">
+          <label class="field-label" for="blind-select">Big Blind</label>
+          <select id="blind-select" bind:value={blindSetting}>
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
+        </div>
+        <div class="mode-selector">
+          <label class="field-label">Game Mode</label>
+          <div class="mode-toggle">
+            <button class="mode-btn" class:active={gameMode === 'casual'} onclick={() => gameMode = 'casual'}>Casual</button>
+            <button class="mode-btn" class:active={gameMode === 'competitive'} onclick={() => gameMode = 'competitive'}>Competitive</button>
+          </div>
+        </div>
 
+        {#if gameMode === 'casual'}
+          <div class="chip-config">
+            <label class="field-label" for="chip-select">Starting Chips</label>
+            <select id="chip-select" class="input-field" bind:value={casualChipCount}>
+              <option value={500}>500</option>
+              <option value={1000}>1,000</option>
+              <option value={2500}>2,500</option>
+              <option value={5000}>5,000</option>
+              <option value={10000}>10,000</option>
+            </select>
+          </div>
+        {:else}
+          <p class="competitive-note">Using real chip balances from your profile</p>
+        {/if}
+
+        <button class="btn-primary" onclick={startGame} disabled={state.players.length < 2}>
+          Start Game
+        </button>
+        <div class="bot-controls">
+          <button class="btn-secondary btn-sm" onclick={addBot} disabled={state.players.length >= 8 || addingBot}>
+            {addingBot ? 'Adding...' : 'Add Bot'}
+          </button>
+          {#if state.players.some((p: any) => p.isBot)}
+            <button class="btn-secondary btn-sm btn-danger" onclick={removeAllBots}>
+              Remove All Bots
+            </button>
+          {/if}
+        </div>
+      {:else}
+        <p class="waiting-text">Waiting for host to start...</p>
+      {/if}
+      {#if pid && roleParam !== 'controller' && roleParam !== 'table'}
+        <PairButton roomCode={code} playerId={pid} phase={state.phase} {socket} />
+      {/if}
+      <button class="btn-secondary" onclick={leaveGame}>Leave</button>
+    </div>
+
+  {:else if layout === 'controller'}
+    <ControllerView
+      {state} {pid}
+      {myHand} {isMyTurn} {amIFolded} {bettingRound}
+      {myChips} {myBet} {myHandName}
+      {inputMode}
+      {canCheck} {callAmount} {minRaise} {maxRaise}
+      {isArmed}
+      {playerChips} {winnersInfo}
+      onaction={sendAction}
+      onarmedchange={(armed) => isArmed = armed}
+      onleaveGame={leaveGame}
+    />
+
+  {:else if layout === 'mobile'}
+    <MobilePokerView
+      {state} {pid} {ts} {isHost} {isSpectator}
+      {isMyTurn} {amIFolded} {myHand} {myHandName} {myChips} {myBet}
+      {bettingRound} {communityCards} {pots} {totalPot}
+      {playerChips} {playerBets} {playerFolded} {playerAllIn} {playerHands}
+      {dealerId} {sbPlayerId} {bbPlayerId} {winnersInfo} {myCardBackStyle}
+      {canCheck} {callAmount} {minRaise} {maxRaise}
+      {inputMode} {isArmed}
+      setMuckRef={(el) => muckTargetRef = el}
+      {blindSetting} {gameMode} {casualChipCount} {addingBot}
+      {betPlayers} {myUserId} {code} {socket} {roleParam}
+      onaction={sendAction}
+      onarmedchange={(armed) => isArmed = armed}
+      onstartGame={startGame}
+      onnextHand={nextHand}
+      onleaveGame={leaveGame}
+      onaddBot={addBot}
+      onremoveAllBots={removeAllBots}
+      onblindChange={(v) => blindSetting = v}
+      ongameModeChange={(v) => gameMode = v}
+      oncasualChipCountChange={(v) => casualChipCount = v}
+    />
+
+  {:else}
+    <TableView
+      {state} {pid} {ts} {isSpectator}
+      {isMyTurn} {amIFolded} {myHand} {myHandName} {myChips} {myBet}
+      {bettingRound} {communityCards} {pots} {totalPot}
+      {playerChips} {playerBets} {playerFolded} {playerAllIn} {playerHands}
+      {dealerId} {sbPlayerId} {bbPlayerId} {winnersInfo} {myCardBackStyle}
+      {canCheck} {callAmount} {minRaise} {maxRaise}
+      {inputMode} {isArmed}
+      setMuckRef={(el) => muckTargetRef = el}
+      showOwnHandAndActions={showOwnHandOnTable}
+      {isHost}
+      onnextHand={nextHand}
+      onleaveGame={leaveGame}
+      {betPlayers} {myUserId} {code}
+      onaction={sendAction}
+      onarmedchange={(armed) => isArmed = armed}
+    />
   {/if}
 </div>
 
@@ -538,12 +394,6 @@
     padding: 4.5rem 1rem max(2rem, env(safe-area-inset-bottom, 2rem));
     background-color: var(--table-felt-bg, transparent);
     overscroll-behavior: contain;
-  }
-
-  .armed-dimmed {
-    opacity: 0.3;
-    pointer-events: none;
-    transition: opacity 120ms ease-out;
   }
 
   .loading {
@@ -671,211 +521,6 @@
     text-align: center;
   }
 
-  /* Turn indicator */
-  .turn-indicator {
-    text-align: center;
-    padding: 0.5rem;
-  }
-
-  .your-turn {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--accent);
-  }
-
-  .round-label {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 1.1rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--yellow);
-  }
-
-  .waiting-turn {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-  }
-
-  /* Pot display */
-  .pot-display {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem 1rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-
-  .pot-total {
-    font-size: 1.1rem;
-    letter-spacing: 0.1em;
-    color: var(--yellow);
-  }
-
-  .pot-item {
-    font-size: 0.85rem;
-    letter-spacing: 0.08em;
-    color: var(--text-muted);
-  }
-
-  .pot-bets {
-    color: var(--text-subtle);
-    font-size: 0.75rem;
-  }
-
-  /* Player bar */
-  .player-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    justify-content: center;
-  }
-
-  /* Last action */
-  .last-action {
-    text-align: center;
-    padding: 0.25rem;
-  }
-
-  .action-text {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    font-style: italic;
-  }
-
-  /* Hand */
-  .hand-area {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .hand-name {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: var(--accent);
-    text-align: center;
-    margin-top: 0.25rem;
-  }
-
-  /* Showdown hands */
-  .showdown-hands {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    justify-content: center;
-  }
-
-  .opponent-hand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.5rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-
-  .opponent-name {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    font-weight: 600;
-  }
-
-  .opponent-cards {
-    display: flex;
-    gap: 0.25rem;
-  }
-
-  /* Winners panel */
-  .winners-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-    padding: 0.75rem;
-    background: rgba(108, 180, 130, 0.08);
-    border: 1px solid rgba(108, 180, 130, 0.3);
-    border-radius: 4px;
-  }
-
-  .winner-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .winner-name {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--accent);
-  }
-
-  .winner-amount {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--yellow);
-  }
-
-  .winner-hand {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-  }
-
-  /* Actions */
-  .action-bar {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-  }
-
-  .action-bar .btn-primary,
-  .action-bar .btn-secondary {
-    flex: 1;
-    max-width: 200px;
-  }
-
-  /* Results (game over) */
-  .result-row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-
-  .result-row.result-winner {
-    background: rgba(108, 180, 130, 0.1);
-    border-color: rgba(108, 180, 130, 0.4);
-    box-shadow: 0 0 16px rgba(108, 180, 130, 0.15);
-  }
-
-  .result-name {
-    flex: 1;
-    font-size: 1rem;
-    color: var(--text);
-  }
-
-  .result-chips {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--accent);
-  }
-
   /* Mode selector */
   .mode-selector {
     display: flex;
@@ -926,7 +571,6 @@
     text-align: center;
   }
 
-  /* Mobile responsiveness */
   @media (max-width: 420px) {
     .game-page {
       padding-left: 0.5rem;
@@ -937,23 +581,9 @@
     /* HOTFIX2 FIX 1: at <=420px BetControls becomes position:fixed bottom:0 z-index:40
        and visually collides with the fixed HoleCards (bottom:0 z-index:50). Push the
        fixed bet controls upward by ~card area height so action buttons sit above
-       the cards. 140px = ~115px card height (22vw * 1.4 ratio on 375px viewport)
-       + 12px BOTTOM_INSET_PX + small gap. */
+       the cards. */
     :global(.bet-controls) {
       bottom: calc(env(safe-area-inset-bottom, 0px) + 140px) !important;
-    }
-
-    .player-bar {
-      gap: 0.375rem;
-    }
-
-    .showdown-hands {
-      gap: 0.5rem;
-    }
-
-    .result-row {
-      gap: 0.5rem;
-      padding: 0.6rem 0.75rem;
     }
   }
 
@@ -971,20 +601,6 @@
     .phase-panel {
       max-width: 460px;
     }
-  }
-
-  .spectator-banner {
-    font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--yellow, #eab308);
-    border: 1px solid rgba(234, 179, 8, 0.3);
-    border-radius: 2px;
-    padding: 0.3rem 0.75rem;
-    text-align: center;
-    margin-bottom: 0.5rem;
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }

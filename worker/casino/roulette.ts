@@ -1,5 +1,6 @@
 import { CasinoRoom } from './casinoRoom';
 import type { CasinoAction, CasinoGameState } from './types';
+import type { DeviceRole } from '../cards/types';
 
 type BetType = 'red' | 'black' | 'green';
 
@@ -90,7 +91,7 @@ export class RouletteRoom extends CasinoRoom {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getGameStateForPlayer(playerId),
+        state: this.getStateFor(playerId, (this.ctx.getTags(ws)[1] as DeviceRole) || 'both'),
       });
       this.broadcastState();
       await this.saveState();
@@ -138,7 +139,7 @@ export class RouletteRoom extends CasinoRoom {
     this.sendToWs(ws, {
       type: 'joined',
       playerId,
-      state: this.getGameStateForPlayer(playerId),
+      state: this.getStateFor(playerId, (this.ctx.getTags(ws)[1] as DeviceRole) || 'both'),
     });
     this.broadcastState();
     await this.saveState();
@@ -426,8 +427,11 @@ export class RouletteRoom extends CasinoRoom {
     await super.webSocketError(ws, error);
   }
 
-  protected getGameStateForPlayer(playerId: string): CasinoGameState {
+  protected getStateFor(playerId: string, deviceRole: DeviceRole): CasinoGameState {
     const ts = this.getTable();
+    // Table surface gets zero personal-bet info because the controller is the
+    // source of truth for private state.
+    const isTable = deviceRole === 'table';
     const players = Array.from(this.players.values()).map(p => ({
       id: p.id,
       name: p.name,
@@ -449,8 +453,8 @@ export class RouletteRoom extends CasinoRoom {
       maxBet: this.maxBet,
       tableState: {
         playerBets: ts.playerBets,
-        myBets: ts.playerBets[playerId] ?? [],
-        myBetTotal: ts.betTotals[playerId] ?? 0,
+        myBets: isTable ? [] : (ts.playerBets[playerId] ?? []),
+        myBetTotal: isTable ? 0 : (ts.betTotals[playerId] ?? 0),
         result: ts.result,
         resultSlotIndex: ts.resultSlotIndex,
         history: ts.history,

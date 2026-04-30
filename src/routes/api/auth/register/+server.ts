@@ -2,10 +2,17 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { hashPassword } from '$lib/server/auth/password';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
+import { check, getClientIp } from '$lib/server/auth/rateLimit';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'Database not available' }, { status: 500 });
+
+  const ip = getClientIp(request);
+  const rl = check(`register:${ip}`, 3, 3_600_000);
+  if (!rl.ok) {
+    return json({ error: 'Too many attempts, try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
+  }
 
   const body = await request.json().catch(() => null);
   if (!body) return json({ error: 'Invalid JSON' }, { status: 400 });
@@ -45,7 +52,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   const now = Math.floor(Date.now() / 1000);
   const hashedPassword = await hashPassword(password);
 
-  // Insert user and profile in a batch
+  // db.batch is atomic in D1: if either INSERT fails, both rollback (no orphan rows).
   await db.batch([
     db.prepare('INSERT INTO users (id, email, hashed_password, created_at) VALUES (?, ?, ?, ?)')
       .bind(userId, email.toLowerCase(), hashedPassword, now),

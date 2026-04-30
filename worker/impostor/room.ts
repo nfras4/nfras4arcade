@@ -1,6 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
+import type { Device, DeviceRole } from '../cards/types';
 import type { ConnectedPlayerData, RoomState } from './types';
+import { removeDevice as removeDeviceShared, hasRemainingDevices as hasRemainingDevicesShared, pushDevice, synthesiseLegacyDevice, makeDevice } from '../shared/deviceManager';
 import type {
   GamePhase, GameMode, Player, HintEntry, VoteResult,
   RoundResult, GameState, ClientMessage, ServerMessage,
@@ -94,6 +96,20 @@ export class ImpostorRoom extends DurableObject<Env> {
       }
       this.spectators = new Map(stored.spectators ?? []);
 
+      // Hydrate devices: legacy state files lack devices, so synthesise a
+      // 'both' placeholder per player. legacy:* placeholders are filtered
+      // out by hasRemainingDevices to prevent ghost-player turn stalls.
+      const storedDevices = new Map<string, Device[]>(stored.devices ?? []);
+      const nowDev = Date.now();
+      for (const [id, cp] of this.players) {
+        const existing = storedDevices.get(id);
+        if (existing && existing.length > 0) {
+          cp.devices = existing;
+        } else {
+          cp.devices = [synthesiseLegacyDevice(id, nowDev)];
+        }
+      }
+
       // Reconcile connected status with actual live WebSocket connections.
       // The Hibernation API keeps WebSockets alive across hibernation, so
       // check which players still have an open socket rather than marking
@@ -136,6 +152,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       gameSessionId: this.gameSessionId,
       disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
       spectators: Array.from(this.spectators.entries()),
+      devices: Array.from(this.players.entries()).map(([id, cp]) => [id, cp.devices ?? []]),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -184,8 +201,20 @@ export class ImpostorRoom extends DurableObject<Env> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
-    // Tag the WebSocket with the userId for later lookup
-    this.ctx.acceptWebSocket(server, [userId]);
+    const roleParam = url.searchParams.get('role');
+    const role: DeviceRole =
+      roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
+        ? roleParam
+        : 'both';
+    const socketId = crypto.randomUUID();
+
+    // Tag the WebSocket with [userId, role, socketId] for later lookup
+    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+
+    const cpForDevice = this.players.get(userId);
+    if (cpForDevice) {
+      pushDevice(cpForDevice, makeDevice(socketId, role, Date.now()));
+    }
 
     this.touch();
     await this.setExpireAlarm();
@@ -251,8 +280,14 @@ export class ImpostorRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
 
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -261,8 +296,14 @@ export class ImpostorRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
 
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -308,6 +349,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     // Get display name from the WebSocket upgrade headers (stored via tag)
     // The display name was passed as X-Display-Name during upgrade
     // For reconnection, use the existing player name
+    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
     const existingPlayer = this.players.get(playerId);
 
     if (existingPlayer) {
@@ -320,7 +362,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       const joinMsg: ServerMessage = {
         type: 'joined',
         playerId,
-        state: this.getStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
       };
       this.sendToWs(ws, joinMsg);
       this.broadcastState();
@@ -337,7 +379,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
         isSpectator: true,
       });
       this.broadcastState();
@@ -375,7 +417,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     const joinMsg: ServerMessage = {
       type: 'joined',
       playerId,
-      state: this.getStateForPlayer(playerId),
+      state: this.getStateFor(playerId, role),
     };
     this.sendToWs(ws, joinMsg);
     this.broadcastState();
@@ -1212,9 +1254,13 @@ export class ImpostorRoom extends DurableObject<Env> {
     this.spectators.clear();
   }
 
-  private getStateForPlayer(playerId: string): GameState {
+  private getStateFor(playerId: string, deviceRole: DeviceRole): GameState {
     const cp = this.players.get(playerId);
     const players: Player[] = Array.from(this.players.values()).map((p) => p.player);
+    // Table surface is a shared display visible to others in the room, so it
+    // never sees the viewer's secret role/word/hint even when they are an
+    // impostor or a regular player. The controller phone holds those.
+    const isTable = deviceRole === 'table';
 
     return {
       code: this.code,
@@ -1226,9 +1272,9 @@ export class ImpostorRoom extends DurableObject<Env> {
       totalHintRounds: this.totalHintRounds,
       canExtraRound: this.hintRound >= this.totalHintRounds && this.hintRound < 3,
       category: this.category,
-      role: cp?.role,
-      word: cp?.role === 'player' ? cp.word : undefined,
-      impostorHint: cp?.role === 'impostor' ? cp.impostorHint : undefined,
+      role: isTable ? undefined : cp?.role,
+      word: !isTable && cp?.role === 'player' ? cp.word : undefined,
+      impostorHint: !isTable && cp?.role === 'impostor' ? cp.impostorHint : undefined,
       turnOrder: this.turnOrder,
       currentTurnIndex: this.currentTurnIndex,
       hints: this.hints,
@@ -1270,12 +1316,21 @@ export class ImpostorRoom extends DurableObject<Env> {
     const spectatorList = this.spectators.size > 0
       ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
       : undefined;
+    // Cache payloads per (playerId, role) so paired devices on the same user
+    // don't recompute the same redacted state twice.
+    const cache = new Map<string, GameState>();
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const playerId = tags[0];
       if (!playerId) continue;
-      const state = this.getStateForPlayer(playerId);
-      if (spectatorList) state.spectators = spectatorList;
+      const role = (tags[1] as DeviceRole) || 'both';
+      const key = `${playerId}:${role}`;
+      let state = cache.get(key);
+      if (!state) {
+        state = this.getStateFor(playerId, role);
+        if (spectatorList) state.spectators = spectatorList;
+        cache.set(key, state);
+      }
       this.sendToWs(ws, {
         type: 'state_update',
         state,

@@ -19,6 +19,9 @@ const FALSE_SNAP_PENALTY = 3;
 
 // --- Types ---
 
+// Snap intentionally excluded from paired-device device-set migration:
+// it has no per-player private state and uses its own 'center'|'player' role
+// concept that is semantically different from controller/table/both.
 type SnapPhase = 'lobby' | 'playing' | 'game_over';
 type DeviceRole = 'center' | 'player';
 

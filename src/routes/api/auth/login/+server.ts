@@ -1,11 +1,18 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { verifyPassword } from '$lib/server/auth/password';
+import { verifyPassword, needsRehash, hashPassword } from '$lib/server/auth/password';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
+import { check, getClientIp } from '$lib/server/auth/rateLimit';
 
 export const POST: RequestHandler = async ({ request, platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'Database not available' }, { status: 500 });
+
+  const ip = getClientIp(request);
+  const rl = check(`login:${ip}`, 5, 60_000);
+  if (!rl.ok) {
+    return json({ error: 'Too many attempts, try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
+  }
 
   const body = await request.json().catch(() => null);
   if (!body) return json({ error: 'Invalid JSON' }, { status: 400 });
@@ -33,6 +40,15 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   const valid = await verifyPassword(password, user.hashed_password);
   if (!valid) {
     return json({ error: 'Invalid email or password' }, { status: 401 });
+  }
+
+  if (needsRehash(user.hashed_password)) {
+    try {
+      const newHash = await hashPassword(password);
+      await db.prepare('UPDATE users SET hashed_password = ? WHERE id = ?').bind(newHash, user.id).run();
+    } catch {
+      // best-effort upgrade; login must succeed even if rehash fails
+    }
   }
 
   const sessionToken = await createSession(db, user.id);

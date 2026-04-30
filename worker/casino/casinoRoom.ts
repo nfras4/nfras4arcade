@@ -1,7 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Env } from '../types';
 import type { CasinoPlayer, CasinoPhase, CasinoGameState, CasinoAction, CasinoStoredState } from './types';
+import type { Device, DeviceRole } from '../cards/types';
 import { CosmeticsCache } from '../shared/cosmetics';
+import { removeDevice as removeDeviceShared, hasRemainingDevices as hasRemainingDevicesShared, pushDevice, synthesiseLegacyDevice, makeDevice } from '../shared/deviceManager';
 import { checkLevelGrants } from '../shared/levelRewards';
 import { xpToLevel } from '../../src/lib/xp';
 
@@ -41,7 +43,13 @@ export abstract class CasinoRoom extends DurableObject<Env> {
   // --- Abstract methods ---
 
   protected abstract handlePlayerAction(playerId: string, action: CasinoAction): Promise<void> | void;
-  protected abstract getGameStateForPlayer(playerId: string): CasinoGameState;
+  /**
+   * Return the state visible to a specific player from a specific device role.
+   * Subclasses override this to redact private state (own bets, hole cards).
+   * Table surface gets zero personal-bet info because the controller is the
+   * source of truth for private state.
+   */
+  protected abstract getStateFor(playerId: string, deviceRole: DeviceRole): CasinoGameState;
   protected abstract resolveRound(): Promise<void>;
   protected abstract initRound(): void;
   protected abstract get gameType(): string;
@@ -67,6 +75,21 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       this.spectators = new Map(stored.spectators ?? []);
       this.gameSessionId = stored.gameSessionId ?? null;
 
+      // Hydrate devices: legacy state files have no devices field, so
+      // synthesise a 'both' placeholder per player to keep the device-set
+      // invariant. The legacy:* placeholders are filtered out by
+      // hasRemainingDevices so they cannot keep ghost players alive.
+      const storedDevices = new Map<string, Device[]>(stored.devices ?? []);
+      const now = Date.now();
+      for (const [id, p] of this.players) {
+        const existing = storedDevices.get(id);
+        if (existing && existing.length > 0) {
+          p.devices = existing;
+        } else {
+          p.devices = [synthesiseLegacyDevice(id, now)];
+        }
+      }
+
       for (const p of this.players.values()) {
         p.connected = false;
       }
@@ -89,6 +112,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       disconnectTimestamps: Array.from(this.disconnectTimestamps.entries()),
       spectators: Array.from(this.spectators.entries()),
       gameSessionId: this.gameSessionId,
+      devices: Array.from(this.players.entries()).map(([id, p]) => [id, p.devices ?? []]),
     };
     await this.ctx.storage.put('room', state);
   }
@@ -148,7 +172,36 @@ export abstract class CasinoRoom extends DurableObject<Env> {
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
-    this.ctx.acceptWebSocket(server, [userId]);
+
+    const roleParam = url.searchParams.get('role');
+    const role: DeviceRole =
+      roleParam === 'controller' || roleParam === 'table' || roleParam === 'both'
+        ? roleParam
+        : 'both';
+    const socketId = crypto.randomUUID();
+
+    // Single-session policy per (userId, role): evict any prior sockets so
+    // chip persistence has a single source of truth per surface.
+    try {
+      for (const existingWs of this.ctx.getWebSockets(userId)) {
+        const existingTags = this.ctx.getTags(existingWs);
+        if (existingTags[1] !== role) continue;
+        try {
+          existingWs.close(4001, 'replaced');
+        } catch {
+          /* already closing */
+        }
+      }
+    } catch (err) {
+      console.error('[CasinoRoom] failed to evict prior sockets', err);
+    }
+
+    this.ctx.acceptWebSocket(server, [userId, role, socketId]);
+
+    const playerForDevice = this.players.get(userId);
+    if (playerForDevice) {
+      pushDevice(playerForDevice, makeDevice(socketId, role, Date.now()));
+    }
 
     this.touch();
     await this.setExpireAlarm();
@@ -240,7 +293,13 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     await this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -249,7 +308,13 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     await this.loadState();
     const tags = this.ctx.getTags(ws);
     const playerId = tags[0];
+    const socketId = tags[2];
     if (!playerId) return;
+    removeDeviceShared(this.players.get(playerId), socketId);
+    if (this.players.has(playerId) && hasRemainingDevicesShared(this.players.get(playerId))) {
+      await this.saveState();
+      return;
+    }
     await this.handleDisconnect(playerId);
     await this.saveState();
   }
@@ -327,6 +392,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
   // --- Join / Disconnect ---
 
   protected async handleJoin(ws: WebSocket, playerId: string): Promise<void> {
+    const role = (this.ctx.getTags(ws)[1] as DeviceRole) || 'both';
     const existing = this.players.get(playerId);
 
     if (existing) {
@@ -338,7 +404,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       this.sendToWs(ws, {
         type: 'joined',
         playerId,
-        state: this.getGameStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
       });
       this.broadcastState();
       await this.saveState();
@@ -352,7 +418,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
         type: 'joined',
         playerId,
         isSpectator: true,
-        state: this.getGameStateForPlayer(playerId),
+        state: this.getStateFor(playerId, role),
       });
       this.broadcastState();
       await this.saveState();
@@ -383,7 +449,7 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     this.sendToWs(ws, {
       type: 'joined',
       playerId,
-      state: this.getGameStateForPlayer(playerId),
+      state: this.getStateFor(playerId, role),
     });
     this.broadcastState();
     await this.saveState();
@@ -664,8 +730,12 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     } catch {}
   }
 
-  protected sendTo(playerId: string, msg: object): void {
+  protected sendTo(playerId: string, msg: object, role?: DeviceRole): void {
     for (const ws of this.ctx.getWebSockets(playerId)) {
+      if (role) {
+        const tags = this.ctx.getTags(ws);
+        if (tags[1] !== role) continue;
+      }
       this.sendToWs(ws, msg);
     }
   }
@@ -682,12 +752,21 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     const spectatorList = this.spectators.size > 0
       ? Array.from(this.spectators.entries()).map(([id, name]) => ({ id, name }))
       : undefined;
+    // Cache payloads per (playerId, role) so paired devices on the same user
+    // don't recompute the same redacted state twice.
+    const cache = new Map<string, CasinoGameState>();
     for (const ws of this.ctx.getWebSockets()) {
       const tags = this.ctx.getTags(ws);
       const pid = tags[0];
       if (!pid) continue;
-      const state = this.getGameStateForPlayer(pid);
-      if (spectatorList) state.spectators = spectatorList;
+      const role = (tags[1] as DeviceRole) || 'both';
+      const key = `${pid}:${role}`;
+      let state = cache.get(key);
+      if (!state) {
+        state = this.getStateFor(pid, role);
+        if (spectatorList) state.spectators = spectatorList;
+        cache.set(key, state);
+      }
       this.sendToWs(ws, {
         type: 'state_update',
         state,

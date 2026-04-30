@@ -3,7 +3,8 @@
  * Fully compatible with Cloudflare Workers runtime.
  */
 
-const ITERATIONS = 100_000;
+const ITERATIONS = 600_000;
+const LEGACY_ITERATIONS = 100_000;
 const KEY_LENGTH = 32; // bytes
 const SALT_LENGTH = 16; // bytes
 
@@ -29,11 +30,27 @@ export async function hashPassword(password: string): Promise<string> {
     key,
     KEY_LENGTH * 8
   );
-  return `${toBase64(salt.buffer as ArrayBuffer)}:${toBase64(derived)}`;
+  return `${ITERATIONS}:${toBase64(salt.buffer as ArrayBuffer)}:${toBase64(derived)}`;
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltB64, hashB64] = stored.split(':');
+  const parts = stored.split(':');
+  let iterations: number;
+  let saltB64: string;
+  let hashB64: string;
+  if (parts.length === 3) {
+    const parsed = parseInt(parts[0], 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return false;
+    iterations = parsed;
+    saltB64 = parts[1];
+    hashB64 = parts[2];
+  } else if (parts.length === 2) {
+    iterations = LEGACY_ITERATIONS;
+    saltB64 = parts[0];
+    hashB64 = parts[1];
+  } else {
+    return false;
+  }
   const salt = fromBase64(saltB64);
   const expectedHash = fromBase64(hashB64);
   const key = await crypto.subtle.importKey(
@@ -45,7 +62,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   );
   const derived = new Uint8Array(
     await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', hash: 'SHA-256', salt: salt.buffer as ArrayBuffer, iterations: ITERATIONS },
+      { name: 'PBKDF2', hash: 'SHA-256', salt: salt.buffer as ArrayBuffer, iterations },
       key,
       KEY_LENGTH * 8
     )
@@ -56,4 +73,15 @@ export async function verifyPassword(password: string, stored: string): Promise<
     diff |= derived[i] ^ expectedHash[i];
   }
   return diff === 0;
+}
+
+export function needsRehash(stored: string): boolean {
+  const parts = stored.split(':');
+  if (parts.length === 2) return true;
+  if (parts.length === 3) {
+    const iter = parseInt(parts[0], 10);
+    if (!Number.isFinite(iter)) return true;
+    return iter < ITERATIONS;
+  }
+  return true;
 }

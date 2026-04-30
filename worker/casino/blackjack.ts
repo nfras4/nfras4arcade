@@ -1,6 +1,6 @@
 import { CasinoRoom } from './casinoRoom';
 import type { CasinoAction, CasinoGameState } from './types';
-import type { Card } from '../cards/types';
+import type { Card, DeviceRole } from '../cards/types';
 import { createDeck, shuffle } from '../cards/deck';
 import { calculateHandValue, isBlackjack, isBusted, dealerShouldHit } from './handValue';
 
@@ -597,8 +597,12 @@ export class BlackjackRoom extends CasinoRoom {
     await super.webSocketError(ws, error);
   }
 
-  protected getGameStateForPlayer(playerId: string): CasinoGameState {
+  protected getStateFor(playerId: string, deviceRole: DeviceRole): CasinoGameState {
     const ts = this.getTable();
+    // Table surface gets zero personal-bet info because the controller is the
+    // source of truth for private state. (Player hands themselves are public
+    // in casino blackjack — only the convenience myBet field is per-viewer.)
+    const isTable = deviceRole === 'table';
     const players = Array.from(this.players.values()).map(p => ({
       id: p.id,
       name: p.name,
@@ -640,7 +644,7 @@ export class BlackjackRoom extends CasinoRoom {
         results: ts.results,
         payouts: ts.payouts,
         betsPlaced: ts.betsPlaced,
-        myBet: ts.betsPlaced[playerId] ?? null,
+        myBet: isTable ? null : (ts.betsPlaced[playerId] ?? null),
         bettingEndsAt: ts.bettingEndsAt,
         displayEndsAt: ts.displayEndsAt,
       },

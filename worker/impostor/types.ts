@@ -1,4 +1,5 @@
 import type { GamePhase, GameMode, Player, HintEntry, RoundResult } from '../../src/lib/types';
+import type { Device } from '../cards/types';
 
 export interface ConnectedPlayerData {
   player: Player;
@@ -8,6 +9,7 @@ export interface ConnectedPlayerData {
   hasVoted?: boolean;
   votedFor?: string;
   hintGiven?: boolean;
+  devices?: Device[];
 }
 
 export interface RoomState {
@@ -30,4 +32,5 @@ export interface RoomState {
   gameSessionId: string | null;
   disconnectTimestamps: [string, number][];
   spectators?: [string, string][];
+  devices?: [string, Device[]][];
 }

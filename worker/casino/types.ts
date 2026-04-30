@@ -1,5 +1,7 @@
 export type CasinoPhase = 'lobby' | 'betting' | 'playing' | 'resolving' | 'round_over';
 
+import type { Device } from '../cards/types';
+
 export interface CasinoPlayer {
   id: string;
   name: string;
@@ -7,6 +9,7 @@ export interface CasinoPlayer {
   isHost: boolean;
   chips: number;
   isGuest: boolean;
+  devices?: Device[];
   frameSvg?: string | null;
   emblemSvg?: string | null;
   nameColour?: string | null;
@@ -51,4 +54,5 @@ export interface CasinoStoredState {
   disconnectTimestamps?: [string, number][];
   spectators?: [string, string][];
   gameSessionId?: string | null;
+  devices?: [string, Device[]][];
 }

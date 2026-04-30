@@ -6,20 +6,21 @@ import { getGuestId } from './guest';
 
 type MessageHandler = (msg: any) => void;
 
-function getWsUrl(roomCode: string, wsPath: string): string {
-  // Always include guestId — logged-in users' session cookie takes priority
+function getWsUrl(roomCode: string, wsPath: string, role?: string): string {
+  // Always include guestId, logged-in users' session cookie takes priority
   // in the worker, so this is harmless for authenticated users but ensures
   // guests can always connect.
   const guestParam = `&guestId=${getGuestId()}`;
+  const roleParam = role === 'controller' || role === 'table' || role === 'both' ? `&role=${role}` : '';
 
-  if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}`;
+  if (typeof window === 'undefined') return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}${roleParam}`;
 
   if (window.location.hostname !== 'localhost') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}${wsPath}?room=${roomCode}${guestParam}`;
+    return `${protocol}//${window.location.host}${wsPath}?room=${roomCode}${guestParam}${roleParam}`;
   }
 
-  return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}`;
+  return `ws://localhost:8787${wsPath}?room=${roomCode}${guestParam}${roleParam}`;
 }
 
 export class CardGameSocket {
@@ -30,13 +31,15 @@ export class CardGameSocket {
   private pendingJoin: boolean = false;
   private currentRoom: string | null = null;
   private wsPath: string;
+  private currentRole: string | undefined = undefined;
 
   constructor(wsPath: string) {
     this.wsPath = wsPath;
   }
 
-  connect(roomCode: string, _isGuest?: boolean): Promise<void> {
+  connect(roomCode: string, _isGuest?: boolean, role?: string): Promise<void> {
     this.currentRoom = roomCode;
+    if (role !== undefined) this.currentRole = role;
     // Close any existing WebSocket before creating a new one
     if (this.ws) {
       this.ws.onclose = null;
@@ -44,7 +47,7 @@ export class CardGameSocket {
       this.ws = null;
     }
     return new Promise((resolve, reject) => {
-      const url = getWsUrl(roomCode, this.wsPath);
+      const url = getWsUrl(roomCode, this.wsPath, this.currentRole);
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
@@ -106,6 +109,29 @@ export class CardGameSocket {
     this.stopPing();
     this.ws?.close();
     this.ws = null;
+  }
+
+  // Phase 3: swap the device role on the live socket. Closes the current
+  // WebSocket and reconnects with the new role so the server retags the
+  // device and the role-aware getStateFor filter applies on the next state
+  // broadcast (e.g. demoting a 'both' PC to 'table' once a phone pairs in
+  // strips hole cards from server payloads).
+  async setRole(newRole: string): Promise<void> {
+    const room = this.currentRoom;
+    if (!room) return;
+    this.currentRole = newRole;
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.stopPing();
+    this.pendingJoin = true;
+    await this.connect(room, undefined, newRole);
   }
 
   get connected(): boolean {

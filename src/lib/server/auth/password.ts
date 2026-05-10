@@ -3,7 +3,11 @@
  * Fully compatible with Cloudflare Workers runtime.
  */
 
-const ITERATIONS = 600_000;
+// 210k matches OWASP 2023 PBKDF2-SHA256 guidance and stays within Cloudflare
+// Workers' default 50ms-per-request CPU budget. 600k overran the budget on
+// register and surfaced as opaque 500s; verifyPassword still accepts any
+// iteration count from the prefix, so older hashes keep working unchanged.
+const ITERATIONS = 210_000;
 const LEGACY_ITERATIONS = 100_000;
 const KEY_LENGTH = 32; // bytes
 const SALT_LENGTH = 16; // bytes

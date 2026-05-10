@@ -30,3 +30,10 @@ Thumbs.db
 
 # Local benchmark scripts
 scripts/*.sh
+
+# Obsidian junction artifacts (added by vault migration)
+.obsidian/
+.trash/
+Trash/
+*.tmp
+.obsidian.vimrc

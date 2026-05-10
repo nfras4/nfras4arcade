@@ -82,14 +82,24 @@ export async function fetchUser(): Promise<AuthUser | null> {
   }
 }
 
+// SvelteKit's framework-level error response uses `message`, not `error`, so we
+// fall back to it before the generic string. Without this the user sees the
+// bland fallback even when the server emitted a useful reason.
+async function readAuthError(res: Response, fallback: string): Promise<string> {
+  const data = (await res.json().catch(() => null)) as
+    | { error?: string; message?: string }
+    | null;
+  return data?.error || data?.message || fallback;
+}
+
 export async function login(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  const data: { user?: AuthUser; error?: string } = await res.json();
-  if (!res.ok) return { ok: false, error: data.error || 'Login failed' };
+  if (!res.ok) return { ok: false, error: await readAuthError(res, 'Login failed') };
+  const data: { user?: AuthUser } = await res.json();
   if (data.user) currentUser.set(data.user);
   return { ok: true };
 }
@@ -104,8 +114,8 @@ export async function register(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, displayName }),
   });
-  const data: { user?: AuthUser; error?: string } = await res.json();
-  if (!res.ok) return { ok: false, error: data.error || 'Registration failed' };
+  if (!res.ok) return { ok: false, error: await readAuthError(res, 'Registration failed') };
+  const data: { user?: AuthUser } = await res.json();
   if (data.user) currentUser.set(data.user);
   return { ok: true };
 }

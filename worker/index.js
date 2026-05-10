@@ -144,6 +144,11 @@ worker_default.fetch = async function(req, env, ctx) {
   }
 
   // WebSocket upgrade -> authenticate then forward to Durable Object
+  // KILL SWITCH: poker disabled (DO usage runaway). Reject before DO is touched.
+  if (url.pathname === '/ws/poker') {
+    return new Response('Poker is temporarily disabled', { status: 503 });
+  }
+
   const wsRoutes = { '/ws': 'IMPOSTOR_ROOM', '/ws/president': 'PRESIDENT_ROOM', '/ws/chase-the-queen': 'CHASE_QUEEN_ROOM', '/ws/connect-four': 'CONNECT_FOUR_ROOM', '/ws/wavelength': 'WAVELENGTH_ROOM', '/ws/poker': 'POKER_ROOM', '/ws/snap': 'SNAP_ROOM', '/ws/blackjack': 'BLACKJACK_ROOM', '/ws/roulette': 'ROULETTE_ROOM', '/ws/baccarat': 'BACCARAT_ROOM', '/ws/liars-dice': 'LIARS_DICE_ROOM', '/ws/coup': 'COUP_ROOM' };
   const doBinding = wsRoutes[url.pathname];
   if (doBinding && req.headers.get('Upgrade') === 'websocket') {

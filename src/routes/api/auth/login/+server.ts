@@ -2,16 +2,23 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { verifyPassword, needsRehash, hashPassword } from '$lib/server/auth/password';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
-import { check, getClientIp } from '$lib/server/auth/rateLimit';
+import { peek, record, getClientIp } from '$lib/server/auth/rateLimit';
+
+const FAIL_LIMIT = 30;
+const FAIL_WINDOW = 60_000;
 
 export const POST: RequestHandler = async ({ request, platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'Database not available' }, { status: 500 });
 
   const ip = getClientIp(request);
-  const rl = check(`login:${ip}`, 5, 60_000);
+  const failKey = `login:fail:${ip}`;
+
+  // Only count FAILED attempts toward the bucket. Successful logins don't
+  // consume, so a busy household sharing one NAT can keep logging in.
+  const rl = peek(failKey, FAIL_LIMIT, FAIL_WINDOW);
   if (!rl.ok) {
-    return json({ error: 'Too many attempts, try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
+    return json({ error: 'Too many failed attempts, try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
 
   const body = await request.json().catch(() => null);
@@ -34,11 +41,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     .first<{ id: string; email: string; hashed_password: string; display_name: string; avatar: string | null }>();
 
   if (!user) {
+    record(failKey, FAIL_WINDOW);
     return json({ error: 'Invalid email or password' }, { status: 401 });
   }
 
   const valid = await verifyPassword(password, user.hashed_password);
   if (!valid) {
+    record(failKey, FAIL_WINDOW);
     return json({ error: 'Invalid email or password' }, { status: 401 });
   }
 

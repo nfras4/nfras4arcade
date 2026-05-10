@@ -3,11 +3,12 @@
  * Fully compatible with Cloudflare Workers runtime.
  */
 
-// 210k matches OWASP 2023 PBKDF2-SHA256 guidance and stays within Cloudflare
-// Workers' default 50ms-per-request CPU budget. 600k overran the budget on
-// register and surfaced as opaque 500s; verifyPassword still accepts any
-// iteration count from the prefix, so older hashes keep working unchanged.
-const ITERATIONS = 210_000;
+// Cloudflare Workers' WebCrypto PBKDF2 hard-caps iteration count at 100_000;
+// anything higher throws `Pbkdf2 failed: iteration counts above 100000 are
+// not supported`. 600k and 210k both broke register in production. This is a
+// platform ceiling, not a CPU-budget choice — do not raise without confirming
+// the Workers runtime has lifted the cap.
+const ITERATIONS = 100_000;
 const LEGACY_ITERATIONS = 100_000;
 const KEY_LENGTH = 32; // bytes
 const SALT_LENGTH = 16; // bytes

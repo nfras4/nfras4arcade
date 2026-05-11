@@ -48,7 +48,35 @@ const FALLBACK: TintSpec = {
 	pattern: 'none'
 };
 
+function hexToRgbTriplet(hex: string): string | null {
+	const clean = hex.replace(/^#/, '');
+	if (clean.length !== 3 && clean.length !== 6) return null;
+	const expanded = clean.length === 3
+		? clean.split('').map((c) => c + c).join('')
+		: clean;
+	const r = parseInt(expanded.slice(0, 2), 16);
+	const g = parseInt(expanded.slice(2, 4), 16);
+	const b = parseInt(expanded.slice(4, 6), 16);
+	if ([r, g, b].some(Number.isNaN)) return null;
+	return `${r} ${g} ${b}`;
+}
+
+function tintFromDataUri(uri: string): TintSpec | null {
+	const decoded = decodeURIComponent(uri);
+	const match = decoded.match(/stroke=['"]?(#[0-9a-fA-F]{3,6})/);
+	if (!match) return null;
+	const rgb = hexToRgbTriplet(match[1]);
+	if (!rgb) return null;
+	return { tier: 'none', tintRgb: rgb, opacity: 0.24, pattern: 'none' };
+}
+
 export function resolveTint(frameSvg: string | null | undefined): TintSpec | null {
 	if (!frameSvg) return null;
-	return TIER_SPECS[frameSvg] ?? FALLBACK;
+	const direct = TIER_SPECS[frameSvg];
+	if (direct) return direct;
+	if (frameSvg.startsWith('data:')) {
+		const fromData = tintFromDataUri(frameSvg);
+		if (fromData) return fromData;
+	}
+	return FALLBACK;
 }

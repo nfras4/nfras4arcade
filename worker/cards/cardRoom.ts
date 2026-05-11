@@ -7,8 +7,24 @@ import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
 import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { resolveBets } from '../shared/bets';
+import { recordGameEnd as recordProgressionGameEnd, type GameType } from '../shared/progression';
 import { removeDevice as removeDeviceShared, hasRemainingDevices as hasRemainingDevicesShared, pushDevice, synthesiseLegacyDevice, makeDevice, armReconnectGrace, clearReconnectGrace } from '../shared/deviceManager';
 import { xpToLevel } from '../../src/lib/xp';
+
+/**
+ * Map the internal snake_case gameType used by CardRoom subclasses to the
+ * kebab-case GameType union expected by shared/progression.ts. Returns null
+ * for game types (e.g. 'coup') that don't participate in seasonal scoring.
+ */
+function mapCardGameType(internal: string): GameType | null {
+  switch (internal) {
+    case 'poker': return 'poker';
+    case 'chase_the_queen': return 'chase-the-queen';
+    case 'president': return 'president';
+    case 'connect_four': return 'connect-four';
+    default: return null;
+  }
+}
 
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
@@ -674,6 +690,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
       p.titleText = cosmetics.titleText;
+      p.avatarId = cosmetics.avatarId ?? null;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
@@ -1027,6 +1044,24 @@ export abstract class CardRoom extends DurableObject<Env> {
       await this.checkPostGameBadges(winnerId, now);
     } catch (err) {
       console.error('[CardRoom] recordGameEnd failed', err);
+    }
+
+    // Progression hooks: daily quests + seasonal leaderboard. Wrapped per-player
+    // so one failure doesn't drop the rest. Skip bots/guests defensively.
+    const progressionGameType = mapCardGameType(this.gameType);
+    if (progressionGameType) {
+      for (const [id] of this.players) {
+        if (!id || this.bots.has(id) || id.startsWith('guest_') || id.startsWith('bot_')) continue;
+        try {
+          await recordProgressionGameEnd(this.env, {
+            playerId: id,
+            gameType: progressionGameType,
+            didWin: id === winnerId,
+          });
+        } catch (err) {
+          console.error('[CardRoom] progression recordGameEnd failed', err);
+        }
+      }
     }
 
     // Resolve any spectator bets on this game. Wrapped separately so a bet

@@ -25,6 +25,7 @@
     emblemSvg = null,
     nameColour = null,
     titleText = null,
+    avatarId = null,
     isBot = false,
   }: {
     name?: string;
@@ -50,8 +51,18 @@
     emblemSvg?: string | null;
     nameColour?: string | null;
     titleText?: string | null;
+    avatarId?: string | null;
     isBot?: boolean;
   } = $props();
+
+  const avatarEmoji = $derived.by(() => {
+    if (!avatarId) return null;
+    try {
+      const cp = parseInt(avatarId, 16);
+      if (!isNaN(cp) && cp > 0) return String.fromCodePoint(cp);
+    } catch {}
+    return null;
+  });
 </script>
 
 <div class="seat" class:active class:finished class:passed class:disconnected={!connected} class:folded class:all-in={allIn}>
@@ -62,6 +73,9 @@
     <span class="blind-label">{blindLabel}</span>
   {/if}
   <div class="seat-name-wrap" class:folded-name={folded}>
+    {#if avatarEmoji}
+      <span class="seat-avatar" aria-hidden="true">{avatarEmoji}</span>
+    {/if}
     <NameFrame {name} {frameSvg} {emblemSvg} {nameColour} {titleText} size="pill" {isHost} {isBot} />
   </div>
   {#if cardCount > 0}
@@ -151,7 +165,18 @@
     50% { box-shadow: 0 0 16px var(--felt-green-glow-50); }
   }
 
-  .seat-name-wrap { font-size: 0.9rem; }
+  .seat-name-wrap {
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+  }
+
+  .seat-avatar {
+    flex: 0 0 auto;
+    font-size: 1rem;
+    line-height: 1;
+  }
   .folded-name :global(.name) { text-decoration: line-through; }
   .seat-cards { font-size: 0.8rem; color: var(--text-muted); font-weight: 500; }
 

@@ -7,6 +7,7 @@ import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer
 import { shuffleDeck, type SpectrumCard } from '../../src/lib/wavelength/cards';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
 import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { xpToLevel } from '../../src/lib/xp';
 
@@ -1317,6 +1318,31 @@ export class WavelengthRoom extends DurableObject<Env> {
         if (nightOwlStmts.length > 0) await db.batch(nightOwlStmts);
       }
     } catch {}
+
+    // Progression: daily quests + seasonal leaderboard. Compute winner here
+    // (same logic as inside the try/catch above) so the hook still runs if the
+    // primary batch threw.
+    let progressionWinnerId: string | null = null;
+    let highScore = -1;
+    for (const [id] of this.players) {
+      const score = this.scores.get(id) ?? 0;
+      if (score > highScore) {
+        highScore = score;
+        progressionWinnerId = id;
+      }
+    }
+    for (const [id, player] of this.players) {
+      if (!id || player.isBot || id.startsWith('guest_') || id.startsWith('bot_')) continue;
+      try {
+        await recordProgressionGameEnd(this.env, {
+          playerId: id,
+          gameType: 'wavelength',
+          didWin: id === progressionWinnerId,
+        });
+      } catch (err) {
+        console.error('[WavelengthRoom] progression recordGameEnd failed', err);
+      }
+    }
   }
 
   private resetToLobby(): void {

@@ -10,6 +10,7 @@ import type {
 import { getRandomWord, getRandomCategory, getCategories } from './words';
 import { CosmeticsCache } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
 import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { xpToLevel } from '../../src/lib/xp';
 
@@ -1211,6 +1212,21 @@ export class ImpostorRoom extends DurableObject<Env> {
       }
     } catch {
       // D1 write failure should not block gameplay
+    }
+
+    // Progression: daily quests + seasonal leaderboard.
+    for (const [id] of this.players) {
+      if (!id || id.startsWith('guest_') || id.startsWith('bot_')) continue;
+      const isWinner = impostorCaught ? id !== this.impostorId : id === this.impostorId;
+      try {
+        await recordProgressionGameEnd(this.env, {
+          playerId: id,
+          gameType: 'impostor',
+          didWin: isWinner,
+        });
+      } catch (err) {
+        console.error('[ImpostorRoom] progression recordGameEnd failed', err);
+      }
     }
 
     return result;

@@ -31,6 +31,7 @@ export interface CardPlayer {
   nameColour?: string | null;
   titleBadgeId?: string | null;
   titleText?: string | null;
+  avatarId?: string | null;
   devices: Device[];
 }
 
@@ -49,6 +50,7 @@ export interface CardGameState {
     nameColour?: string | null;
     titleBadgeId?: string | null;
     titleText?: string | null;
+    avatarId?: string | null;
   }[];
   turnOrder: string[];
   currentTurn: string | null;

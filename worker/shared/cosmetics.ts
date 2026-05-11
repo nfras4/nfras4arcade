@@ -13,6 +13,7 @@ export interface CosmeticPayload {
   nameColour: string | null;  // hex colour e.g. "#f39c12"
   titleBadgeId: string | null;// badge id (client resolves display text)
   titleText: string | null;   // resolved badge label for opponent display
+  avatarId?: string;          // equipped avatar id e.g. "avatar_fox" (optional, additive)
 }
 
 export const DEFAULT_COSMETICS: CosmeticPayload = {
@@ -29,6 +30,7 @@ interface EquippedRow {
   frame_metadata: string | null;
   emblem_metadata: string | null;
   name_colour_metadata: string | null;
+  avatar_id: string | null;
 }
 
 interface FrameMeta {
@@ -62,7 +64,8 @@ export async function resolvePlayerCosmetics(
           b.label AS title_label,
           f.metadata AS frame_metadata,
           e.metadata AS emblem_metadata,
-          n.metadata AS name_colour_metadata
+          n.metadata AS name_colour_metadata,
+          pe.avatar_id AS avatar_id
         FROM player_equipped pe
         LEFT JOIN shop_items f ON pe.frame_id = f.id
         LEFT JOIN shop_items e ON pe.emblem_id = e.id
@@ -113,13 +116,17 @@ export async function resolvePlayerCosmetics(
       }
     }
 
-    return {
+    const payload: CosmeticPayload = {
       frameSvg,
       emblemSvg,
       nameColour,
       titleBadgeId: row.title_badge_id ?? null,
       titleText: row.title_label ?? null,
     };
+    if (row.avatar_id) {
+      payload.avatarId = row.avatar_id;
+    }
+    return payload;
   } catch {
     return DEFAULT_COSMETICS;
   }

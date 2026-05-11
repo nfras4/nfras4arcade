@@ -1,6 +1,30 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { fetchLiveRooms, gameLabel, playersSummary, phaseLabel, elapsedLabel, type LiveRoom } from '$lib/liveRooms'
+  import { isLoggedIn } from '$lib/auth'
+
+  interface DailyQuestSummary {
+    slot: number;
+    progress: number;
+    objective_target: number;
+    claimed: boolean;
+  }
+  let questSummary = $state<DailyQuestSummary[] | null>(null)
+  let questsCompleted = $derived(
+    questSummary ? questSummary.filter(q => q.progress >= q.objective_target).length : 0
+  )
+  let questsClaimed = $derived(
+    questSummary ? questSummary.filter(q => q.claimed).length : 0
+  )
+
+  $effect(() => {
+    if ($isLoggedIn) {
+      fetch('/api/quests/today')
+        .then(r => r.json() as Promise<{ quests: DailyQuestSummary[] }>)
+        .then(d => { questSummary = d.quests ?? [] })
+        .catch(() => {})
+    }
+  })
 
   type Props = { data: {
     leaderboard: null | {
@@ -88,6 +112,17 @@
       </div>
       <p class="tagline">Choose your arena</p>
     </header>
+
+    {#if $isLoggedIn && questSummary}
+      <a class="quests-pill" href="/profile#quests" aria-label="Daily quests">
+        <span class="quests-pill-icon" aria-hidden="true">★</span>
+        <span class="quests-pill-text">Daily Quests: {questsClaimed}/{questSummary.length} claimed</span>
+        {#if questsCompleted > questsClaimed}
+          <span class="quests-pill-ready">{questsCompleted - questsClaimed} ready</span>
+        {/if}
+        <span class="quests-pill-arrow" aria-hidden="true">→</span>
+      </a>
+    {/if}
 
     <nav class="category-grid" aria-label="Game categories">
 
@@ -752,4 +787,55 @@
   }
 
   .live-widget .lb-widget-hdr { justify-content: flex-start; gap: 0.5rem; }
+
+  .quests-pill {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.7rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--accent-border);
+    color: var(--text);
+    text-decoration: none;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .quests-pill:hover {
+    background: var(--bg-hover);
+    transform: translateY(-1px);
+  }
+
+  .quests-pill-icon {
+    color: var(--accent);
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .quests-pill-text {
+    flex: 1;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--text);
+  }
+
+  .quests-pill-ready {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    background: var(--accent-faint);
+  }
+
+  .quests-pill-arrow {
+    color: var(--accent);
+    font-size: 0.95rem;
+    opacity: 0.7;
+  }
 </style>

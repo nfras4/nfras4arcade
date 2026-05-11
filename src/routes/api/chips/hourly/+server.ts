@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { recordChipsEarned } from '../../../../../worker/shared/progression';
 
 const CLAIM_AMOUNT = 50;
 const COOLDOWN_MS = 3600000; // 1 hour
@@ -55,6 +56,16 @@ export const POST: RequestHandler = async ({ locals, platform }) => {
 		.prepare('SELECT chips FROM player_profiles WHERE id = ?')
 		.bind(locals.user.id)
 		.first<{ chips: number }>();
+
+	// Progression: feed daily quests + seasonal leaderboard with the claim amount.
+	const pid = locals.user.id;
+	if (pid && !pid.startsWith('guest_') && !pid.startsWith('bot_')) {
+		try {
+			await recordChipsEarned({ DB: db }, { playerId: pid, amount: CLAIM_AMOUNT });
+		} catch (err) {
+			console.error('[chips/hourly] progression recordChipsEarned failed', err);
+		}
+	}
 
 	return json({
 		success: true,

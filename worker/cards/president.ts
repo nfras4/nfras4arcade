@@ -429,6 +429,7 @@ export class PresidentRoom extends CardRoom {
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
       titleText: p.titleText ?? null,
+      avatarId: p.avatarId ?? null,
     }));
 
     return {

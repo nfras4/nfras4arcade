@@ -48,7 +48,27 @@
     { id: 'boost', label: 'Boosts' },
   ];
 
-  let visibleItems = $derived(items.filter(item => item.category === activeTab));
+  type CosmeticSubcategory = 'all' | 'avatar' | 'frame' | 'emblem' | 'card_back' | 'table_felt' | 'name_colour' | 'title';
+
+  const cosmeticSubcategories: { id: CosmeticSubcategory; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'avatar', label: 'Avatars' },
+    { id: 'frame', label: 'Frames' },
+    { id: 'emblem', label: 'Emblems' },
+    { id: 'card_back', label: 'Card Backs' },
+    { id: 'table_felt', label: 'Table Felts' },
+    { id: 'name_colour', label: 'Name Colours' },
+    { id: 'title', label: 'Titles' },
+  ];
+
+  let activeSubcategory: CosmeticSubcategory = $state('all');
+
+  let visibleItems = $derived(
+    items.filter(item =>
+      item.category === activeTab &&
+      (activeTab !== 'cosmetic' || activeSubcategory === 'all' || item.subcategory === activeSubcategory)
+    )
+  );
   let shopItems = $derived(visibleItems.filter(item => item.tier === 'shop'));
   let minorItems = $derived(visibleItems.filter(item => item.tier === 'minor').sort((a, b) => (a.level_requirement ?? 0) - (b.level_requirement ?? 0)));
   let heroItems = $derived(visibleItems.filter(item => item.tier === 'hero').sort((a, b) => (a.level_requirement ?? 0) - (b.level_requirement ?? 0)));
@@ -248,12 +268,27 @@
             class="tab-btn"
             class:active={activeTab === tab.id}
             aria-pressed={activeTab === tab.id}
-            onclick={() => { activeTab = tab.id; errorMsg = ''; }}
+            onclick={() => { activeTab = tab.id; activeSubcategory = 'all'; errorMsg = ''; }}
           >
             {tab.label}
           </button>
         {/each}
       </div>
+
+      {#if activeTab === 'cosmetic'}
+        <div class="subtab-bar" role="group" aria-label="Cosmetic subcategory">
+          {#each cosmeticSubcategories as sub}
+            <button
+              class="subtab-btn"
+              class:active={activeSubcategory === sub.id}
+              aria-pressed={activeSubcategory === sub.id}
+              onclick={() => { activeSubcategory = sub.id; errorMsg = ''; }}
+            >
+              {sub.label}
+            </button>
+          {/each}
+        </div>
+      {/if}
 
       {#if loading}
         <div class="loading-state">
@@ -606,6 +641,48 @@
   }
 
   .tab-btn:hover:not(.active) {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+
+  /* Subcategory tab bar */
+  .subtab-bar {
+    display: flex;
+    gap: 0.375rem;
+    overflow-x: auto;
+    padding-bottom: 0.125rem;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .subtab-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subtab-btn {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.65rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .subtab-btn.active {
+    color: var(--shop-gold);
+    border-color: var(--shop-gold-40);
+    background: var(--shop-gold-06);
+  }
+
+  .subtab-btn:hover:not(.active) {
     color: var(--text);
     background: var(--bg-hover);
   }

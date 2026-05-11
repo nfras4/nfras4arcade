@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
+import { recordDungeonProgress } from '../../../../../worker/shared/progression'
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
   const user = locals.user
@@ -41,6 +42,20 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
     `)
     .bind(user.id, saveData, savedAt ?? Math.floor(Date.now() / 1000), saveVersion)
     .run()
+
+  // Progression: feed dungeon_zone quest + seasonal leaderboard. The save blob
+  // is JSON containing `currentZone` (see src/lib/dungeon/player.svelte.ts).
+  if (user.id && !user.id.startsWith('guest_') && !user.id.startsWith('bot_')) {
+    try {
+      const parsed = JSON.parse(saveData) as { currentZone?: number; highestZone?: number }
+      const zone = Number(parsed?.highestZone ?? parsed?.currentZone ?? 0)
+      if (Number.isFinite(zone) && zone > 0) {
+        await recordDungeonProgress({ DB: db }, { playerId: user.id, highestZone: zone })
+      }
+    } catch (err) {
+      console.error('[dungeon/save] progression recordDungeonProgress failed', err)
+    }
+  }
 
   return json({ ok: true })
 }

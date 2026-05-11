@@ -1,6 +1,7 @@
 import { CasinoRoom } from './casinoRoom';
 import type { CasinoAction, CasinoGameState } from './types';
 import type { DeviceRole } from '../cards/types';
+import { recordChipsEarned } from '../shared/progression';
 
 type BetType = 'red' | 'black' | 'green';
 
@@ -259,6 +260,18 @@ export class RouletteRoom extends CasinoRoom {
       }
       if (stmts.length > 0) await this.env.DB.batch(stmts);
     } catch {}
+
+    // Progression: chips earned feeds daily quests + seasonal leaderboard.
+    for (const [pid, netWin] of Object.entries(netWinByPlayer)) {
+      if (netWin <= 0) continue;
+      const player = this.players.get(pid);
+      if (!player || player.isGuest || pid.startsWith('guest_') || pid.startsWith('bot_')) continue;
+      try {
+        await recordChipsEarned(this.env, { playerId: pid, amount: netWin });
+      } catch (err) {
+        console.error('[RouletteRoom] progression recordChipsEarned failed', err);
+      }
+    }
 
     // Track history (last 20 results)
     ts.history.unshift(result);

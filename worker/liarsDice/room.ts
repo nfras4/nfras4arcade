@@ -7,6 +7,7 @@ import { decideLiarsDiceAction } from '../bots/liarsDiceBot';
 import { generateBotId, generateBotName, botThinkDelay } from '../bots/botPlayer';
 import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
 import { xpToLevel } from '../../src/lib/xp';
 
 // --- Constants ---
@@ -1030,6 +1031,20 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       }
     } catch {
       // Don't block on D1 failure
+    }
+
+    // Progression: daily quests + seasonal leaderboard.
+    for (const [id, p] of this.players) {
+      if (!id || p.isGuest || p.isBot || id.startsWith('guest_') || id.startsWith('bot_')) continue;
+      try {
+        await recordProgressionGameEnd(this.env, {
+          playerId: id,
+          gameType: 'liars-dice',
+          didWin: id === this.winnerId,
+        });
+      } catch (err) {
+        console.error('[LiarsDiceRoom] progression recordGameEnd failed', err);
+      }
     }
   }
 

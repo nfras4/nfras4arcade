@@ -41,6 +41,86 @@
   let claimingHourly = $state(false);
   let hourlyCountdown = $state('');
 
+  // Daily Quests
+  interface DailyQuest {
+    slot: number;
+    id: string;
+    title: string;
+    description: string;
+    objective_type: string;
+    objective_target: number;
+    objective_arg: string | null;
+    progress: number;
+    claimed: boolean;
+    reward_chips: number;
+    reward_xp: number;
+  }
+  let dailyQuests = $state<DailyQuest[]>([]);
+  let questsLoading = $state(false);
+  let questClaiming = $state<number | null>(null);
+  let questResetAt = $state<number>(0);
+  let questResetCountdown = $state('');
+
+  $effect(() => {
+    if ($isLoggedIn) {
+      questsLoading = true;
+      fetch('/api/quests/today')
+        .then(r => r.json() as Promise<{ quests: DailyQuest[]; reset_at: number }>)
+        .then(data => {
+          dailyQuests = data.quests ?? [];
+          questResetAt = data.reset_at ?? 0;
+        })
+        .catch(() => {})
+        .finally(() => { questsLoading = false; });
+    }
+  });
+
+  $effect(() => {
+    if (questResetAt > 0) {
+      const target = questResetAt * 1000;
+      const tick = () => {
+        const remaining = target - Date.now();
+        if (remaining <= 0) {
+          questResetCountdown = 'Resetting...';
+          return;
+        }
+        const h = Math.floor(remaining / 3600000);
+        const m = Math.floor((remaining % 3600000) / 60000);
+        questResetCountdown = `Resets in ${h}h ${m}m`;
+      };
+      tick();
+      const id = setInterval(tick, 30000);
+      return () => clearInterval(id);
+    }
+  });
+
+  async function claimQuest(slot: number) {
+    questClaiming = slot;
+    try {
+      const res = await fetch('/api/quests/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot }),
+      });
+      const data: { success?: boolean; chips_awarded?: number; xp_awarded?: number; new_chips?: number; new_xp?: number; error?: string } = await res.json();
+      if (data.success) {
+        dailyQuests = dailyQuests.map(q =>
+          q.slot === slot ? { ...q, claimed: true } : q
+        );
+        if (typeof data.new_chips === 'number' && typeof data.new_xp === 'number') {
+          userStats.update(s => s ? { ...s, chips: data.new_chips!, xp: data.new_xp! } : s);
+        }
+        console.log(`Claimed ${data.chips_awarded} chips, ${data.xp_awarded} XP`);
+      }
+    } catch {}
+    questClaiming = null;
+  }
+
+  function questProgressPercent(q: DailyQuest): number {
+    if (q.objective_target <= 0) return 0;
+    return Math.min(100, Math.round((q.progress / q.objective_target) * 100));
+  }
+
   interface BadgeDef {
     slug: string;
     label: string;
@@ -372,6 +452,56 @@
             <div class="xp-fill" style="width: {xp.percent}%"></div>
           </div>
         </div>
+      </div>
+
+      <!-- Daily Quests -->
+      <div class="card quests-card" id="quests">
+        <div class="quests-header">
+          <h3 class="card-heading geo-title">Daily Quests</h3>
+          {#if questResetCountdown}
+            <span class="quest-reset">{questResetCountdown}</span>
+          {/if}
+        </div>
+        {#if questsLoading && dailyQuests.length === 0}
+          <p class="empty-state">Loading quests...</p>
+        {:else if dailyQuests.length === 0}
+          <p class="empty-state">No quests available right now.</p>
+        {:else}
+          <div class="quest-list">
+            {#each dailyQuests as quest (quest.slot)}
+              {@const pct = questProgressPercent(quest)}
+              {@const ready = quest.progress >= quest.objective_target && !quest.claimed}
+              <div class="quest-row" class:quest-claimed={quest.claimed} class:quest-ready={ready}>
+                <div class="quest-info">
+                  <span class="quest-title">{quest.title}</span>
+                  <span class="quest-desc">{quest.description}</span>
+                  <div class="quest-progress-bar">
+                    <div class="quest-progress-fill" style="width: {pct}%"></div>
+                  </div>
+                  <div class="quest-meta">
+                    <span class="quest-count">{Math.min(quest.progress, quest.objective_target)} / {quest.objective_target}</span>
+                    <span class="quest-reward">+{quest.reward_chips} chips, +{quest.reward_xp} XP</span>
+                  </div>
+                </div>
+                <div class="quest-action">
+                  {#if quest.claimed}
+                    <span class="quest-claimed-tag">Claimed</span>
+                  {:else if ready}
+                    <button
+                      class="btn-claim"
+                      onclick={() => claimQuest(quest.slot)}
+                      disabled={questClaiming === quest.slot}
+                    >
+                      {questClaiming === quest.slot ? 'Claiming...' : 'Claim'}
+                    </button>
+                  {:else}
+                    <span class="quest-locked">In progress</span>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       <!-- Milestones -->
@@ -1279,5 +1409,146 @@
 
   .reward-buy-hint:hover {
     background: var(--accent-border);
+  }
+
+  /* Daily Quests */
+  .quests-card {
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.11s both;
+  }
+
+  .quests-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .quests-header .card-heading {
+    margin-bottom: 0;
+  }
+
+  .quest-reset {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+
+  .quest-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .quest-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .quest-row.quest-ready {
+    border-color: var(--accent-border);
+    background: var(--accent-faint);
+  }
+
+  .quest-row.quest-claimed {
+    opacity: 0.55;
+  }
+
+  .quest-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .quest-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+
+  .quest-desc {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .quest-progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-card);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.15rem;
+  }
+
+  .quest-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .quest-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.15rem;
+  }
+
+  .quest-count {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .quest-reward {
+    font-size: 0.65rem;
+    color: var(--text-subtle);
+    letter-spacing: 0.04em;
+  }
+
+  .quest-action {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+  }
+
+  .quest-claimed-tag {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    padding: 0.2rem 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+
+  .quest-locked {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
   }
 </style>

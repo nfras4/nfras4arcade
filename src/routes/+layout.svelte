@@ -51,12 +51,31 @@
   let hourlyCountdown = $state('');
   let claimingHourly = $state(false);
 
+  let friendRequestCount = $state(0);
+
   $effect(() => {
     fetchUser();
   });
 
   $effect(() => {
     if ($isLoggedIn) fetchChipStatus();
+  });
+
+  $effect(() => {
+    if ($isLoggedIn) {
+      (async () => {
+        try {
+          const res = await fetch('/api/friends/requests');
+          if (!res.ok) return;
+          const data = (await res.json()) as { incoming?: unknown[] };
+          if (data && Array.isArray(data.incoming)) {
+            friendRequestCount = data.incoming.length;
+          }
+        } catch {}
+      })();
+    } else {
+      friendRequestCount = 0;
+    }
   });
 
   $effect(() => {
@@ -193,6 +212,12 @@
         </span>
       {/if}
       <a href="/customize" class="nav-link nav-customize-link" title="Customize">Customize</a>
+      <a href="/friends" class="nav-link nav-friends-link" title="Friends">
+        Friends
+        {#if friendRequestCount > 0}
+          <span class="nav-friend-badge" title="{friendRequestCount} pending request{friendRequestCount === 1 ? '' : 's'}">{friendRequestCount}</span>
+        {/if}
+      </a>
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
         <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner" aria-hidden="true">
@@ -469,6 +494,30 @@
     padding: 0.5rem 0.6rem;
   }
 
+  .nav-friends-link {
+    position: relative;
+    padding: 0.5rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .nav-friend-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 0.3rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--red, #ef4444);
+    border-radius: 8px;
+    line-height: 1;
+  }
+
   @media (max-width: 480px) {
     .nav-display-name {
       display: none;
@@ -478,6 +527,9 @@
     }
     .nav-customize-link {
       display: none;
+    }
+    .nav-friends-link {
+      padding: 0.4rem 0.4rem;
     }
   }
 

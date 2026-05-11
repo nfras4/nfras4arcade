@@ -4,6 +4,7 @@ import type { Card } from '../cards/types';
 import { createDeck, shuffle } from '../cards/deck';
 import { CosmeticsCache } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
+import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
 import { xpToLevel } from '../../src/lib/xp';
 
 // --- Constants ---
@@ -993,6 +994,21 @@ export class SnapRoom extends DurableObject<Env> {
       }
     } catch {
       // Don't block game state on D1 failure
+    }
+
+    // Progression: daily quests + seasonal leaderboard. Per-player try/catch
+    // so one failure doesn't block the rest.
+    for (const [id, player] of this.players) {
+      if (!id || player.isGuest || id.startsWith('guest_') || id.startsWith('bot_')) continue;
+      try {
+        await recordProgressionGameEnd(this.env, {
+          playerId: id,
+          gameType: 'snap',
+          didWin: id === winnerId,
+        });
+      } catch (err) {
+        console.error('[SnapRoom] progression recordGameEnd failed', err);
+      }
     }
   }
 

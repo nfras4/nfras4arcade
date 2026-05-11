@@ -50,7 +50,7 @@
     title_badge_id?: string | null;
   }
 
-  type TabId = 'frame' | 'emblem' | 'colour' | 'title';
+  type TabId = 'frame' | 'emblem' | 'colour' | 'title' | 'card_back' | 'table_felt';
 
   interface OwnedCosmetic {
     id: string;
@@ -94,6 +94,8 @@
     { id: 'emblem', label: 'Emblem' },
     { id: 'colour', label: 'Name Colour' },
     { id: 'title', label: 'Title' },
+    { id: 'card_back', label: 'Card Back' },
+    { id: 'table_felt', label: 'Table Felt' },
   ];
 
   function iconChar(codePoint: string): string {
@@ -426,6 +428,74 @@
   function isColourEquipped(id: string | null): boolean {
     return (equipped.name_colour_id ?? null) === id;
   }
+
+  interface OwnedSlotItem {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+  }
+
+  let ownedCardBacks = $derived<OwnedSlotItem[]>(
+    inventory
+      .filter((row) => row.item.subcategory === 'card_back')
+      .map((row) => ({
+        id: row.item.id,
+        name: row.item.name,
+        description: row.item.description,
+        icon: row.item.icon,
+      }))
+  );
+
+  let ownedTableFelts = $derived<OwnedSlotItem[]>(
+    inventory
+      .filter((row) => row.item.subcategory === 'table_felt')
+      .map((row) => ({
+        id: row.item.id,
+        name: row.item.name,
+        description: row.item.description,
+        icon: row.item.icon,
+      }))
+  );
+
+  function isCardBackEquipped(id: string | null): boolean {
+    return (equipped.card_back_id ?? null) === id;
+  }
+
+  function isTableFeltEquipped(id: string | null): boolean {
+    return (equipped.table_felt_id ?? null) === id;
+  }
+
+  async function equipSlotItem(slot: 'card_back' | 'table_felt', item: OwnedSlotItem | null) {
+    const targetId = item?.id ?? null;
+    const slotKey: keyof EquippedState = slot === 'card_back' ? 'card_back_id' : 'table_felt_id';
+    const prevId = equipped[slotKey];
+
+    pendingId = item?.id ?? `__none_${slot}`;
+    errorMsg = '';
+
+    equipped = { ...equipped, [slotKey]: targetId };
+
+    try {
+      const res = await fetch('/api/shop/equip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot, itemId: targetId }),
+      });
+      const data: { success?: boolean; error?: string } = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'Equip failed');
+      }
+      successMsg = targetId ? `Equipped ${item?.name}` : `${slot === 'card_back' ? 'Card back' : 'Table felt'} cleared`;
+      setTimeout(() => { successMsg = ''; }, 2000);
+    } catch (err) {
+      equipped = { ...equipped, [slotKey]: prevId ?? null };
+      errorMsg = err instanceof Error ? err.message : 'Equip failed';
+    }
+
+    pendingId = null;
+  }
+
 </script>
 
 <svelte:head>
@@ -719,6 +789,102 @@
             </div>
           {/if}
         </div>
+      {:else if activeTab === 'card_back'}
+        <div
+          class="picker-panel"
+          role="tabpanel"
+          id="panel-card_back"
+          aria-labelledby="tab-card_back"
+        >
+          {#if ownedCardBacks.length === 0}
+            <div class="empty-state card">
+              <p>You don't own any card backs yet.</p>
+              <a class="btn-primary" href="/shop">Visit the shop</a>
+            </div>
+          {:else}
+            <div class="picker-grid" role="radiogroup" aria-label="Card Back">
+              <button
+                class="picker-card none-card"
+                role="radio"
+                aria-checked={isCardBackEquipped(null)}
+                class:selected={isCardBackEquipped(null)}
+                disabled={pendingId === '__none_card_back'}
+                onclick={() => equipSlotItem('card_back', null)}
+                aria-label="No card back"
+              >
+                <span class="picker-none" aria-hidden="true">∅</span>
+                <span class="picker-name">None</span>
+                {#if isCardBackEquipped(null)}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                {#if pendingId === '__none_card_back'}<span class="picker-loader" aria-hidden="true"></span>{/if}
+              </button>
+              {#each ownedCardBacks as cb}
+                {@const selected = isCardBackEquipped(cb.id)}
+                <button
+                  class="picker-card"
+                  role="radio"
+                  aria-checked={selected}
+                  class:selected
+                  disabled={pendingId === cb.id}
+                  onclick={() => equipSlotItem('card_back', cb)}
+                  aria-label="Equip {cb.name}"
+                >
+                  <span class="picker-icon" aria-hidden="true">{iconChar(cb.icon)}</span>
+                  <span class="picker-name">{cb.name}</span>
+                  {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                  {#if pendingId === cb.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {:else if activeTab === 'table_felt'}
+        <div
+          class="picker-panel"
+          role="tabpanel"
+          id="panel-table_felt"
+          aria-labelledby="tab-table_felt"
+        >
+          {#if ownedTableFelts.length === 0}
+            <div class="empty-state card">
+              <p>You don't own any table felts yet.</p>
+              <a class="btn-primary" href="/shop">Visit the shop</a>
+            </div>
+          {:else}
+            <div class="picker-grid" role="radiogroup" aria-label="Table Felt">
+              <button
+                class="picker-card none-card"
+                role="radio"
+                aria-checked={isTableFeltEquipped(null)}
+                class:selected={isTableFeltEquipped(null)}
+                disabled={pendingId === '__none_table_felt'}
+                onclick={() => equipSlotItem('table_felt', null)}
+                aria-label="No table felt"
+              >
+                <span class="picker-none" aria-hidden="true">∅</span>
+                <span class="picker-name">None</span>
+                {#if isTableFeltEquipped(null)}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                {#if pendingId === '__none_table_felt'}<span class="picker-loader" aria-hidden="true"></span>{/if}
+              </button>
+              {#each ownedTableFelts as tf}
+                {@const selected = isTableFeltEquipped(tf.id)}
+                <button
+                  class="picker-card"
+                  role="radio"
+                  aria-checked={selected}
+                  class:selected
+                  disabled={pendingId === tf.id}
+                  onclick={() => equipSlotItem('table_felt', tf)}
+                  aria-label="Equip {tf.name}"
+                >
+                  <span class="picker-icon" aria-hidden="true">{iconChar(tf.icon)}</span>
+                  <span class="picker-name">{tf.name}</span>
+                  {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                  {#if pendingId === tf.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       {:else}
         <div
           class="picker-panel"
@@ -881,10 +1047,17 @@
   .tab-bar {
     display: flex;
     gap: 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tab-bar::-webkit-scrollbar {
+    display: none;
   }
 
   .tab-btn {
-    flex: 1;
+    flex: 0 0 auto;
     padding: 0.55rem 0.75rem;
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.7rem;

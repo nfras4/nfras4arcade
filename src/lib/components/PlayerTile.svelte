@@ -9,6 +9,7 @@
     frameSvg?: string | null;
     emblemSvg?: string | null;
     titleBadgeId?: string | null;
+    avatarId?: string | null;
     isBot?: boolean;
     isHost?: boolean;
   }
@@ -42,6 +43,14 @@
 
   const nameColour = $derived(player.nameColour || '#e5e7eb');
   const tintSpec = $derived(resolveTint(player.frameSvg));
+  const avatarEmoji = $derived.by(() => {
+    if (!player.avatarId) return null;
+    try {
+      const cp = parseInt(player.avatarId, 16);
+      if (!isNaN(cp) && cp > 0) return String.fromCodePoint(cp);
+    } catch {}
+    return null;
+  });
 
   const ariaLabel = $derived.by(() => {
     const parts = [player.name, `level ${player.level}`, status];
@@ -95,6 +104,10 @@
   {/if}
 
   <div class="frame-inner">
+    {#if avatarEmoji}
+      <span class="avatar-circle" aria-hidden="true">{avatarEmoji}</span>
+    {/if}
+
     <span class="status-dot" aria-hidden="true">{statusDot}</span>
 
     {#if showEmblem && player.emblemSvg}
@@ -225,6 +238,17 @@
   .status-spectating .status-dot { color: var(--text-subtle, #6b7280); }
   .status-winner .status-dot { color: var(--winner-gold); }
   .is-bot .status-dot { color: var(--text-muted, #9ca3af); }
+
+  .avatar-circle {
+    flex: 0 0 auto;
+    font-size: 1rem;
+    line-height: 1;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
   .emblem {
     flex: 0 0 auto;

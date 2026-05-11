@@ -152,134 +152,139 @@
   <title>Seasonal Leaderboards · Monkey Barrel</title>
 </svelte:head>
 
-<div class="min-h-screen bg-zinc-950 text-zinc-100">
-  <div class="mx-auto max-w-5xl px-4 py-8">
-    <header class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight sm:text-3xl">Seasonal Leaderboards</h1>
-        {#if currentSeason}
-          <p class="mt-1 text-sm text-zinc-400">
-            {currentSeason.label}
-            {#if currentSeason.status === 'active'}
-              <span class="ml-2 rounded bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300">Active</span>
-            {:else}
-              <span class="ml-2 rounded bg-zinc-700/40 px-2 py-0.5 text-xs text-zinc-300">Archived</span>
-            {/if}
-          </p>
-        {/if}
-      </div>
+<div class="lb-page">
+  <div class="lb-content">
 
-      <label class="flex flex-col gap-1 text-sm">
-        <span class="text-zinc-400">Season</span>
+    <header class="lb-hero">
+      <div class="title-frame">
+        <span class="diamond-accent" aria-hidden="true"></span>
+        <h1 class="wordmark geo-title">Seasonal Leaderboards</h1>
+        <span class="diamond-accent" aria-hidden="true"></span>
+      </div>
+      {#if currentSeason}
+        <div class="season-meta">
+          <span class="season-label">{currentSeason.label}</span>
+          {#if currentSeason.status === 'active'}
+            <span class="status-badge status-active">Active</span>
+          {:else}
+            <span class="status-badge status-archived">Archived</span>
+          {/if}
+        </div>
+      {/if}
+    </header>
+
+    <div class="season-row">
+      <label class="season-select-wrap">
+        <span class="season-select-label">Season</span>
         <select
           bind:value={selectedSeasonId}
           disabled={loadingSeasons || seasons.length === 0}
-          class="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-100 focus:border-zinc-600 focus:outline-none"
+          class="season-select"
         >
           {#each seasons as s (s.id)}
             <option value={s.id}>{s.label}{s.status === 'active' ? ' (active)' : ''}</option>
           {/each}
         </select>
       </label>
-    </header>
+    </div>
 
-    <nav class="mb-5 -mx-4 overflow-x-auto px-4">
-      <div class="flex gap-2 whitespace-nowrap">
-        {#each METRICS as m (m.key)}
-          <button
-            type="button"
-            onclick={() => (selectedMetric = m.key)}
-            class={`rounded-full border px-3 py-1.5 text-sm transition ${
-              selectedMetric === m.key
-                ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-200'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:text-zinc-100'
-            }`}
-          >
-            {m.label}
-          </button>
-        {/each}
-      </div>
+    <nav class="metric-bar" aria-label="Leaderboard metric">
+      {#each METRICS as m (m.key)}
+        <button
+          type="button"
+          class="metric-btn"
+          class:active={selectedMetric === m.key}
+          aria-pressed={selectedMetric === m.key}
+          onclick={() => (selectedMetric = m.key)}
+        >
+          {m.label}
+        </button>
+      {/each}
     </nav>
 
-    <section class="rounded-xl border border-zinc-800 bg-zinc-900/50">
-      <div class="border-b border-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300">
-        Top 10 · {metricLabel(selectedMetric)}
+    <section class="lb-card card">
+      <div class="lb-card-header">
+        <span class="lb-card-title geo-title">Top 10</span>
+        <span class="lb-metric-name">{metricLabel(selectedMetric)}</span>
       </div>
 
       {#if loadingEntries}
-        <div class="px-4 py-10 text-center text-sm text-zinc-500">Loading...</div>
+        <div class="lb-state">
+          <p class="lb-state-text">Loading...</p>
+        </div>
       {:else if entries.length === 0}
-        <div class="px-4 py-10 text-center text-sm text-zinc-500">{emptyMessage(selectedMetric)}</div>
+        <div class="lb-state">
+          <p class="lb-state-text">{emptyMessage(selectedMetric)}</p>
+        </div>
       {:else}
-        <ul class="divide-y divide-zinc-800">
+        <ul class="entry-list" role="list">
           {#each entries as e (e.player_id)}
-            {@const isMe = currentUserId && e.player_id === currentUserId}
-            <li
-              class={`flex items-center gap-3 px-4 py-3 ${
-                isMe ? 'bg-emerald-500/10' : ''
-              }`}
-            >
-              <span class="w-8 text-right text-sm font-semibold text-zinc-400">{e.rank}</span>
+            {@const isMe = currentUserId != null && e.player_id === currentUserId}
+            <li class="entry-row" class:entry-me={isMe}>
+              <span class="entry-rank" aria-label="Rank {e.rank}">{e.rank}</span>
               {#if e.avatar}
-                <img src={e.avatar} alt="" class="h-8 w-8 rounded-full border border-zinc-700 object-cover" />
+                <img src={e.avatar} alt="" class="entry-avatar entry-avatar-img" />
               {:else}
-                <span class="grid h-8 w-8 place-items-center rounded-full border border-zinc-700 bg-zinc-800 text-xs text-zinc-300">
+                <span class="entry-avatar entry-avatar-initial" aria-hidden="true">
                   {e.display_name.slice(0, 1).toUpperCase()}
                 </span>
               {/if}
-              <span class="flex-1 truncate text-sm text-zinc-100">
+              <span class="entry-name">
                 {e.display_name}
-                {#if isMe}<span class="ml-2 text-xs text-emerald-300">(you)</span>{/if}
+                {#if isMe}<span class="entry-you">you</span>{/if}
               </span>
-              <span class="text-sm font-semibold tabular-nums text-zinc-100">
-                {formatValue(selectedMetric, e.value)}
-              </span>
+              <span class="entry-score">{formatValue(selectedMetric, e.value)}</span>
             </li>
           {/each}
         </ul>
       {/if}
     </section>
 
-    <section class="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/50">
+    <section class="winners-card card">
       <button
         type="button"
+        class="winners-toggle"
+        aria-expanded={showWinners}
         onclick={() => (showWinners = !showWinners)}
-        class="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-zinc-200 hover:bg-zinc-800/40"
       >
-        <span>Past season winners</span>
-        <span class="text-zinc-500">{showWinners ? '−' : '+'}</span>
+        <span class="geo-title winners-toggle-label">Past Season Winners</span>
+        <span class="winners-chevron" aria-hidden="true">{showWinners ? '−' : '+'}</span>
       </button>
 
       {#if showWinners}
-        <div class="border-t border-zinc-800 px-4 py-4">
+        <div class="winners-body">
           {#if loadingWinners}
-            <div class="py-6 text-center text-sm text-zinc-500">Loading...</div>
+            <div class="lb-state">
+              <p class="lb-state-text">Loading...</p>
+            </div>
           {:else if winners.length === 0}
-            <div class="py-6 text-center text-sm text-zinc-500">No archived winners for this season yet.</div>
+            <div class="lb-state">
+              <p class="lb-state-text">No archived winners for this season yet.</p>
+            </div>
           {:else}
-            <table class="w-full text-sm">
-              <thead class="text-left text-xs uppercase tracking-wide text-zinc-500">
+            <table class="winners-table">
+              <thead>
                 <tr>
-                  <th class="py-2">Metric</th>
-                  <th class="py-2">Rank</th>
-                  <th class="py-2">Player</th>
-                  <th class="py-2 text-right">Score</th>
+                  <th class="winners-th">Metric</th>
+                  <th class="winners-th">Rank</th>
+                  <th class="winners-th">Player</th>
+                  <th class="winners-th winners-th-right">Score</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-zinc-800">
+              <tbody>
                 {#each winners as w (w.metric + '-' + w.rank)}
-                  <tr>
-                    <td class="py-2 text-zinc-300">{metricLabel(w.metric)}</td>
-                    <td class="py-2 text-zinc-300">#{w.rank}</td>
-                    <td class="py-2">
-                      <span class="flex items-center gap-2">
+                  <tr class="winners-row">
+                    <td class="winners-td">{metricLabel(w.metric)}</td>
+                    <td class="winners-td winners-td-rank">#{w.rank}</td>
+                    <td class="winners-td">
+                      <span class="winners-player">
                         {#if w.avatar}
-                          <img src={w.avatar} alt="" class="h-6 w-6 rounded-full border border-zinc-700 object-cover" />
+                          <img src={w.avatar} alt="" class="winners-avatar" />
                         {/if}
-                        <span class="text-zinc-100">{w.display_name}</span>
+                        {w.display_name}
                       </span>
                     </td>
-                    <td class="py-2 text-right font-semibold tabular-nums text-zinc-100">
+                    <td class="winners-td winners-td-right winners-td-score">
                       {formatValue(w.metric, w.value)}
                     </td>
                   </tr>
@@ -290,5 +295,475 @@
         </div>
       {/if}
     </section>
+
   </div>
 </div>
+
+<style>
+  /* ── Layout ──────────────────────────────────────────── */
+  .lb-page {
+    position: relative;
+    z-index: 1;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 5rem 1.25rem 4rem;
+  }
+
+  .lb-content {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  /* ── Header ──────────────────────────────────────────── */
+  .lb-hero {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .title-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .wordmark {
+    font-size: clamp(1.5rem, 6vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    line-height: 1;
+    background: linear-gradient(180deg, var(--casino-hover, #f5ad3a) 0%, var(--casino, #f39c12) 60%, rgba(243,156,18,0.7) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .diamond-accent {
+    width: 8px;
+    height: 8px;
+    background: var(--casino, #f39c12);
+    transform: rotate(45deg);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .season-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .season-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .status-badge {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.4rem;
+    border-radius: 2px;
+  }
+
+  .status-active {
+    color: var(--green, #3dd68c);
+    background: rgba(61, 214, 140, 0.08);
+    border: 1px solid rgba(61, 214, 140, 0.3);
+  }
+
+  .status-archived {
+    color: var(--text-muted);
+    background: var(--bg-hover, #1e2830);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Season selector row ─────────────────────────────── */
+  .season-row {
+    display: flex;
+    justify-content: flex-end;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
+  }
+
+  .season-select-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .season-select-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .season-select {
+    padding: 0.4rem 0.65rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--casino-border, rgba(243,156,18,0.3));
+    border-radius: 2px;
+    cursor: pointer;
+    outline: none;
+    width: auto;
+    transition: border-color 0.15s ease;
+  }
+
+  .season-select:focus {
+    border-color: var(--casino, #f39c12);
+    box-shadow: 0 0 0 2px var(--casino-faint, rgba(243,156,18,0.08));
+  }
+
+  .season-select:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ── Metric tab bar ──────────────────────────────────── */
+  .metric-bar {
+    display: flex;
+    gap: 0.375rem;
+    overflow-x: auto;
+    padding-bottom: 0.125rem;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
+  }
+
+  .metric-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .metric-btn {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.65rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    clip-path: none;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .metric-btn.active {
+    color: var(--casino, #f39c12);
+    border-color: rgba(243, 156, 18, 0.4);
+    background: rgba(243, 156, 18, 0.06);
+  }
+
+  .metric-btn:hover:not(.active) {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+
+  /* ── Leaderboard card ────────────────────────────────── */
+  .lb-card {
+    padding: 0;
+    overflow: hidden;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+  }
+
+  .lb-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lb-card-title {
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    color: var(--text-subtle);
+  }
+
+  .lb-metric-name {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--casino, #f39c12);
+  }
+
+  /* ── Entry list ──────────────────────────────────────── */
+  .entry-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .entry-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s ease;
+  }
+
+  .entry-row:last-child {
+    border-bottom: none;
+  }
+
+  .entry-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .entry-row.entry-me {
+    background: rgba(243, 156, 18, 0.06);
+    border-left: 2px solid rgba(243, 156, 18, 0.4);
+  }
+
+  .entry-row.entry-me:hover {
+    background: rgba(243, 156, 18, 0.09);
+  }
+
+  .entry-rank {
+    width: 1.75rem;
+    text-align: right;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .entry-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .entry-avatar-img {
+    object-fit: cover;
+    border: 1px solid var(--border);
+  }
+
+  .entry-avatar-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--casino, #f39c12);
+    background: rgba(243, 156, 18, 0.08);
+    border: 1px solid rgba(243, 156, 18, 0.25);
+  }
+
+  .entry-name {
+    flex: 1;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entry-you {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--casino, #f39c12);
+    padding: 0.1rem 0.35rem;
+    border: 1px solid rgba(243, 156, 18, 0.35);
+    border-radius: 2px;
+    background: rgba(243, 156, 18, 0.06);
+    flex-shrink: 0;
+  }
+
+  .entry-score {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+
+  /* ── Empty / loading states ──────────────────────────── */
+  .lb-state {
+    padding: 2.5rem 1rem;
+    text-align: center;
+  }
+
+  .lb-state-text {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  /* ── Winners collapsible ─────────────────────────────── */
+  .winners-card {
+    padding: 0;
+    overflow: hidden;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+  }
+
+  .winners-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    border-radius: 0;
+    clip-path: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease;
+  }
+
+  .winners-toggle:hover {
+    background: var(--bg-hover);
+  }
+
+  .winners-toggle:active:not(:disabled) {
+    transform: none;
+    opacity: 1;
+  }
+
+  .winners-toggle-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    color: var(--text-subtle);
+  }
+
+  .winners-chevron {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    line-height: 1;
+  }
+
+  .winners-body {
+    border-top: 1px solid var(--border);
+    padding: 0.75rem 1rem 1rem;
+    animation: fadeUp 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* ── Winners table ───────────────────────────────────── */
+  .winners-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  .winners-th {
+    padding: 0.375rem 0.5rem 0.5rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .winners-th-right {
+    text-align: right;
+  }
+
+  .winners-row {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s ease;
+  }
+
+  .winners-row:last-child {
+    border-bottom: none;
+  }
+
+  .winners-row:hover {
+    background: var(--bg-hover);
+  }
+
+  .winners-td {
+    padding: 0.5rem 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  .winners-td-rank {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-weight: 700;
+    color: var(--casino, #f39c12);
+  }
+
+  .winners-td-right {
+    text-align: right;
+  }
+
+  .winners-td-score {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-weight: 700;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .winners-player {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .winners-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  /* ── Focus / interaction ─────────────────────────────── */
+  button:focus-visible {
+    outline: 2px solid var(--casino, #f39c12);
+    outline-offset: 2px;
+  }
+</style>

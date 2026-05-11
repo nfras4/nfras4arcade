@@ -223,34 +223,38 @@
     margin: 0 auto;
     padding: 5rem 1.25rem 4rem;
     color: var(--text);
+    position: relative;
+    z-index: 1;
   }
 
   .heading {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 1.75rem;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     margin: 0 0 1.5rem;
-    color: var(--accent);
+    color: var(--casino);
+    text-shadow: 0 0 18px var(--casino-glow);
   }
 
   .section {
-    margin-bottom: 2rem;
+    margin-bottom: 1.25rem;
     background: var(--bg-card);
-    border: 1px solid var(--border);
+    border: 1px solid var(--casino-border-soft);
     border-radius: 4px;
     padding: 1rem 1.25rem;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04);
   }
 
   .section-title {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.85rem;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--text-muted);
-    margin: 0 0 0.75rem;
+    color: var(--casino);
+    margin: 0 0 0.85rem;
   }
 
   .list {
@@ -268,34 +272,36 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.6rem 0.5rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    padding: 0.6rem 0.65rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border-bright);
     border-radius: 3px;
   }
 
   .row-small {
-    padding: 0.4rem 0.5rem;
+    padding: 0.4rem 0.65rem;
     opacity: 0.85;
   }
 
   .avatar {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 1rem;
-    font-weight: 600;
-    color: var(--accent);
-    background: var(--accent-faint);
+    font-weight: 700;
+    color: var(--casino);
+    background: var(--casino-faint);
+    border: 1px solid var(--casino-border-soft);
     border-radius: 50%;
     flex-shrink: 0;
+    font-family: 'Rajdhani', system-ui, sans-serif;
   }
 
   .avatar-small {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     font-size: 0.8rem;
   }
 
@@ -306,6 +312,9 @@
     gap: 0.4rem;
     font-weight: 600;
     color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .online-dot {
@@ -313,26 +322,27 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+    background: var(--green, #3dd68c);
+    box-shadow: 0 0 6px rgba(61, 214, 140, 0.6);
   }
 
   .row-actions {
     display: flex;
     gap: 0.4rem;
+    flex-shrink: 0;
   }
 
   .btn {
     font-family: 'Rajdhani', system-ui, sans-serif;
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    padding: 0.4rem 0.75rem;
+    padding: 0.45rem 0.85rem;
     border-radius: 2px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--casino-border-soft);
     background: transparent;
-    color: var(--text-muted);
+    color: var(--casino);
     cursor: pointer;
     text-decoration: none;
     display: inline-flex;
@@ -341,33 +351,42 @@
   }
 
   .btn:hover:not(:disabled) {
-    color: var(--accent);
-    border-color: var(--accent-border);
+    background: var(--casino-faint);
+    border-color: var(--casino-border);
   }
 
   .btn:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
   .btn-accept {
-    background: var(--accent);
-    color: var(--bg);
-    border-color: var(--accent);
+    background: var(--casino);
+    color: var(--btn-primary-text, #0c0e10);
+    border-color: var(--casino);
   }
 
   .btn-accept:hover:not(:disabled) {
-    opacity: 0.85;
-    color: var(--bg);
+    background: var(--casino-hover);
+    border-color: var(--casino-hover);
+    color: var(--btn-primary-text, #0c0e10);
   }
 
   .btn-ghost {
     background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border-bright);
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--red, #e94560);
+    border-color: rgba(233, 69, 96, 0.4);
+    background: rgba(233, 69, 96, 0.06);
   }
 
   .btn-small {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.6rem;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.62rem;
   }
 
   .add-form {
@@ -377,18 +396,23 @@
 
   .input {
     flex: 1;
-    padding: 0.55rem 0.75rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    padding: 0.6rem 0.85rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border-bright);
     border-radius: 2px;
     color: var(--text);
     font-family: inherit;
     font-size: 0.9rem;
   }
 
+  .input::placeholder {
+    color: var(--text-subtle);
+  }
+
   .input:focus {
-    outline: 2px solid var(--accent);
+    outline: 1px solid var(--casino);
     outline-offset: 1px;
+    border-color: var(--casino-border);
   }
 
   .muted {
@@ -398,13 +422,13 @@
 
   .error {
     margin: 0.5rem 0 0;
-    color: var(--red, #ef4444);
+    color: var(--red, #e94560);
     font-size: 0.8rem;
   }
 
   .success {
     margin: 0.5rem 0 0;
-    color: #22c55e;
+    color: var(--green, #3dd68c);
     font-size: 0.8rem;
   }
 
@@ -412,12 +436,18 @@
     text-align: center;
     padding: 2rem;
     background: var(--bg-card);
-    border: 1px solid var(--border);
+    border: 1px solid var(--casino-border-soft);
     border-radius: 4px;
   }
 
   .auth-prompt p {
     margin: 0 0 1rem;
     color: var(--text-muted);
+  }
+
+  @media (max-width: 520px) {
+    .add-form { flex-direction: column; }
+    .row { gap: 0.55rem; }
+    .name { font-size: 0.9rem; }
   }
 </style>

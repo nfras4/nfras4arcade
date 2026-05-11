@@ -13,6 +13,7 @@ export interface LiveRoom {
   startedAt: number | null;
   lastUpdatedAt: number;
   spectateUrl: string;
+  joinUrl: string;
 }
 
 const GAME_LABELS: Record<string, string> = {

@@ -37,6 +37,8 @@ interface PlayerEntry {
 }
 
 const STALE_LOBBY_SECONDS = 15 * 60;
+const STALE_PLAYING_SECONDS = 90 * 60;
+const STALE_ROUND_OVER_SECONDS = 10 * 60;
 
 export const GET: RequestHandler = async ({ platform, setHeaders }) => {
   setHeaders({ 'Cache-Control': 'no-store' });
@@ -47,7 +49,9 @@ export const GET: RequestHandler = async ({ platform, setHeaders }) => {
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const staleCutoff = nowSec - STALE_LOBBY_SECONDS;
+  const lobbyCutoff = nowSec - STALE_LOBBY_SECONDS;
+  const playingCutoff = nowSec - STALE_PLAYING_SECONDS;
+  const roundOverCutoff = nowSec - STALE_ROUND_OVER_SECONDS;
 
   let rows: ActiveRoomRow[] = [];
   try {
@@ -56,13 +60,18 @@ export const GET: RequestHandler = async ({ platform, setHeaders }) => {
         `SELECT code, game, phase, player_count, players_json, started_at, last_updated_at
          FROM active_rooms
          WHERE phase != 'game_over'
-           AND (phase != 'lobby' OR last_updated_at >= ?)
+           AND (
+             (phase = 'lobby' AND last_updated_at >= ?)
+             OR (phase = 'playing' AND last_updated_at >= ?)
+             OR (phase = 'round_over' AND last_updated_at >= ?)
+             OR (phase NOT IN ('lobby', 'playing', 'round_over', 'game_over'))
+           )
          ORDER BY
            CASE WHEN phase = 'playing' THEN 0 ELSE 1 END ASC,
            CASE WHEN phase = 'playing' THEN started_at END ASC,
            last_updated_at DESC`
       )
-      .bind(staleCutoff)
+      .bind(lobbyCutoff, playingCutoff, roundOverCutoff)
       .all<ActiveRoomRow>();
     rows = result.results ?? [];
   } catch (err) {
@@ -85,6 +94,7 @@ export const GET: RequestHandler = async ({ platform, setHeaders }) => {
       }
     } catch {}
 
+    const route = gameToRoute(row.game);
     return {
       code: row.code,
       game: row.game,
@@ -93,7 +103,8 @@ export const GET: RequestHandler = async ({ platform, setHeaders }) => {
       players,
       startedAt: row.started_at,
       lastUpdatedAt: row.last_updated_at,
-      spectateUrl: `/${gameToRoute(row.game)}/${row.code}?spectate=1`,
+      spectateUrl: `/${route}/${row.code}?spectate=1`,
+      joinUrl: `/${route}/${row.code}`,
     };
   });
 

@@ -208,7 +208,7 @@
         <ul class="live-rooms-list">
           {#each liveRooms as room (`${room.game}-${room.code}`)}
             <li class="live-room">
-              <a href={room.spectateUrl} class="live-room-link">
+              <a href={room.phase === 'lobby' ? room.joinUrl : room.spectateUrl} class="live-room-link">
                 <div class="live-room-main">
                   <div class="live-room-row">
                     <span class="live-game-name geo-title">{gameLabel(room.game)}</span>
@@ -219,7 +219,13 @@
                     <div class="live-elapsed">{elapsedLabel(room.startedAt)}</div>
                   {/if}
                 </div>
-                <span class="live-spectate" aria-hidden="true">Spectate ▶</span>
+                <div class="live-actions">
+                  {#if room.phase === 'lobby'}
+                    <span class="live-join" aria-hidden="true">Join ▶</span>
+                  {:else}
+                    <span class="live-spectate" aria-hidden="true">Spectate ▶</span>
+                  {/if}
+                </div>
               </a>
             </li>
           {/each}
@@ -779,6 +785,25 @@
     border-radius: 2px;
   }
   .live-room:hover .live-spectate { background: var(--accent-border); }
+  .live-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+  .live-join {
+    flex-shrink: 0;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ffe9a8;
+    padding: 0.4rem 0.75rem;
+    background: rgba(243, 156, 18, 0.18);
+    border: 1px solid rgba(243, 156, 18, 0.45);
+    border-radius: 2px;
+  }
+  .live-room:hover .live-join { background: rgba(243, 156, 18, 0.28); }
   .live-empty {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 0.8rem;

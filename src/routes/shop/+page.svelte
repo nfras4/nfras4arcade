@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { currentUser, isLoggedIn, userStats } from '$lib/auth';
+  import CosmeticPreview from '$lib/components/CosmeticPreview.svelte';
 
   interface ShopItem {
     id: string;
@@ -307,7 +308,13 @@
               {@const buyable = canBuy(item)}
               <div class="item-card card" class:owned={itemOwned}>
                 <div class="item-header">
-                  <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
+                  {#if item.category === 'cosmetic'}
+                    <div class="item-preview">
+                      <CosmeticPreview {item} size="shop" />
+                    </div>
+                  {:else}
+                    <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
+                  {/if}
                   {#if itemOwned}
                     <span class="owned-badge">Owned</span>
                   {/if}
@@ -373,7 +380,13 @@
               {@const levelMet = playerLevel >= (item.level_requirement ?? 0)}
               <div class="item-card card" class:owned={itemOwned} class:hero-card={isHero} class:minor-card={isMinor}>
                 <div class="item-header">
-                  <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
+                  {#if item.category === 'cosmetic'}
+                    <div class="item-preview">
+                      <CosmeticPreview {item} size="shop" />
+                    </div>
+                  {:else}
+                    <span class="item-icon" aria-hidden="true">{itemIcon(item)}</span>
+                  {/if}
                   <div class="badge-stack">
                     {#if isHero}
                       <span class="hero-badge">HERO</span>
@@ -724,6 +737,18 @@
   .item-icon {
     font-size: 2rem;
     line-height: 1;
+  }
+
+  /* Wrapper for CosmeticPreview in the item header — fills the icon slot
+     while letting the preview content centre itself within a fixed-height
+     area so cards in the grid stay vertically aligned. */
+  .item-preview {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 80px;
+    min-width: 0;
   }
 
   .owned-badge {

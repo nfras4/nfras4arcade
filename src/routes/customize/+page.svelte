@@ -2,7 +2,25 @@
   import { goto } from '$app/navigation';
   import { currentUser, userStats, userBadges, isLoggedIn, fetchUser } from '$lib/auth';
   import PlayerTile from '$lib/components/PlayerTile.svelte';
+  import CosmeticPreview from '$lib/components/CosmeticPreview.svelte';
   import { xpToLevel } from '$lib/xp';
+
+  /**
+   * Build the minimal CosmeticItem shape that CosmeticPreview expects from
+   * the inventory rows / level-reward records. Centralising this means the
+   * preview component stays decoupled from the customize page's domain
+   * types and we can pass either an OwnedCosmetic, OwnedColour, OwnedTitle,
+   * OwnedSlotItem, or any LockedCosmetic without bespoke wiring.
+   */
+  function toPreviewItem(
+    subcategory: string,
+    id: string,
+    name: string,
+    icon: string,
+    metadata: string | null
+  ): { id: string; subcategory: string | null; name: string; icon: string; metadata: string | null } {
+    return { id, subcategory, name, icon, metadata };
+  }
 
   interface ShopItemMetadata {
     svg?: string;
@@ -58,6 +76,7 @@
     description: string;
     icon: string;
     svgPath: string | null;
+    metadata: string | null;
   }
 
   interface OwnedTitle {
@@ -130,6 +149,7 @@
         description: row.item.description,
         icon: row.item.icon,
         svgPath: resolveCosmeticSvg('frame', row.item.metadata),
+        metadata: row.item.metadata,
       }))
   );
 
@@ -142,6 +162,7 @@
         description: row.item.description,
         icon: row.item.icon,
         svgPath: resolveCosmeticSvg('emblem', row.item.metadata),
+        metadata: row.item.metadata,
       }))
   );
 
@@ -167,6 +188,7 @@
     tier: 'hero' | 'minor';
     level_requirement: number;
     price: number;
+    metadata: string | null;
   }
 
   let lockedFrames = $derived<LockedCosmetic[]>(
@@ -181,6 +203,7 @@
         tier: item.tier,
         level_requirement: item.level_requirement,
         price: item.price,
+        metadata: item.metadata,
       }))
   );
 
@@ -196,6 +219,7 @@
         tier: item.tier,
         level_requirement: item.level_requirement,
         price: item.price,
+        metadata: item.metadata,
       }))
   );
 
@@ -358,6 +382,7 @@
     name: string;
     hex: string;
     level_requirement?: number;
+    metadata: string | null;
   }
 
   let ownedColours = $derived<OwnedColour[]>(
@@ -369,7 +394,7 @@
           const meta = JSON.parse(row.item.metadata ?? '{}');
           if (meta.hex) hex = meta.hex;
         } catch {}
-        return { id: row.item.id, name: row.item.name, hex };
+        return { id: row.item.id, name: row.item.name, hex, metadata: row.item.metadata };
       })
   );
 
@@ -385,7 +410,7 @@
           const meta = JSON.parse(item.metadata ?? '{}');
           if (meta.hex) hex = meta.hex;
         } catch {}
-        return { id: item.id, name: item.name, hex, tier: item.tier, level_requirement: item.level_requirement, price: item.price };
+        return { id: item.id, name: item.name, hex, tier: item.tier, level_requirement: item.level_requirement, price: item.price, metadata: item.metadata };
       })
   );
 
@@ -434,6 +459,7 @@
     name: string;
     description: string;
     icon: string;
+    metadata: string | null;
   }
 
   let ownedCardBacks = $derived<OwnedSlotItem[]>(
@@ -444,6 +470,7 @@
         name: row.item.name,
         description: row.item.description,
         icon: row.item.icon,
+        metadata: row.item.metadata,
       }))
   );
 
@@ -455,6 +482,7 @@
         name: row.item.name,
         description: row.item.description,
         icon: row.item.icon,
+        metadata: row.item.metadata,
       }))
   );
 
@@ -609,15 +637,11 @@
                   onclick={() => equipCosmetic('frame', frame)}
                   aria-label="Equip {frame.name}"
                 >
-                  <div class="frame-swatch">
-                    {#if frame.svgPath}
-                      <div
-                        class="frame-swatch-inner"
-                        style:--frame-url="url({frame.svgPath})"
-                      ></div>
-                    {:else}
-                      <span class="picker-icon" aria-hidden="true">{iconChar(frame.icon)}</span>
-                    {/if}
+                  <div class="preview-slot">
+                    <CosmeticPreview
+                      item={toPreviewItem('frame', frame.id, frame.name, frame.icon, frame.metadata)}
+                      size="customize"
+                    />
                   </div>
                   <span class="picker-name">{frame.name}</span>
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
@@ -634,15 +658,11 @@
                   {#if item.tier === 'hero'}
                     <span class="hero-badge" aria-hidden="true">HERO</span>
                   {/if}
-                  <div class="frame-swatch">
-                    {#if item.svgPath}
-                      <div
-                        class="frame-swatch-inner"
-                        style:--frame-url="url({item.svgPath})"
-                      ></div>
-                    {:else}
-                      <span class="picker-icon" aria-hidden="true">{iconChar(item.icon)}</span>
-                    {/if}
+                  <div class="preview-slot">
+                    <CosmeticPreview
+                      item={toPreviewItem('frame', item.id, item.name, item.icon, item.metadata)}
+                      size="customize"
+                    />
                   </div>
                   <span class="picker-name">{item.name}</span>
                   <span class="locked-label">{lockedTooltip(item)}</span>
@@ -690,12 +710,11 @@
                   onclick={() => equipCosmetic('emblem', emblem)}
                   aria-label="Equip {emblem.name}"
                 >
-                  <div class="emblem-swatch">
-                    {#if emblem.svgPath}
-                      <img src={emblem.svgPath} alt="{emblem.name} emblem" />
-                    {:else}
-                      <span class="picker-icon" aria-hidden="true">{iconChar(emblem.icon)}</span>
-                    {/if}
+                  <div class="preview-slot">
+                    <CosmeticPreview
+                      item={toPreviewItem('emblem', emblem.id, emblem.name, emblem.icon, emblem.metadata)}
+                      size="customize"
+                    />
                   </div>
                   <span class="picker-name">{emblem.name}</span>
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
@@ -712,12 +731,11 @@
                   {#if item.tier === 'hero'}
                     <span class="hero-badge" aria-hidden="true">HERO</span>
                   {/if}
-                  <div class="emblem-swatch">
-                    {#if item.svgPath}
-                      <img src={item.svgPath} alt="{item.name} emblem" />
-                    {:else}
-                      <span class="picker-icon" aria-hidden="true">{iconChar(item.icon)}</span>
-                    {/if}
+                  <div class="preview-slot">
+                    <CosmeticPreview
+                      item={toPreviewItem('emblem', item.id, item.name, item.icon, item.metadata)}
+                      size="customize"
+                    />
                   </div>
                   <span class="picker-name">{item.name}</span>
                   <span class="locked-label">{lockedTooltip(item)}</span>
@@ -766,7 +784,12 @@
                   aria-label="Equip {colour.name}"
                 >
                   <span class="colour-swatch" style:background={colour.hex} aria-hidden="true"></span>
-                  <span class="picker-name" style:color={colour.hex}>{colour.name}</span>
+                  <div class="preview-slot preview-slot--colour">
+                    <CosmeticPreview
+                      item={toPreviewItem('name_colour', colour.id, colour.name, '', colour.metadata)}
+                      size="customize"
+                    />
+                  </div>
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
                   {#if pendingId === colour.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
                 </button>
@@ -782,7 +805,12 @@
                     <span class="hero-badge" aria-hidden="true">HERO</span>
                   {/if}
                   <span class="colour-swatch" style:background={item.hex} aria-hidden="true"></span>
-                  <span class="picker-name">{item.name}</span>
+                  <div class="preview-slot preview-slot--colour">
+                    <CosmeticPreview
+                      item={toPreviewItem('name_colour', item.id, item.name, '', item.metadata)}
+                      size="customize"
+                    />
+                  </div>
                   <span class="locked-label">{item.tier === 'hero' ? `Unlocks at Level ${item.level_requirement}` : `Unlocks at Level ${item.level_requirement} or buy for ${item.price} chips`}</span>
                 </div>
               {/each}
@@ -828,7 +856,12 @@
                   onclick={() => equipSlotItem('card_back', cb)}
                   aria-label="Equip {cb.name}"
                 >
-                  <span class="picker-icon" aria-hidden="true">{iconChar(cb.icon)}</span>
+                  <div class="preview-slot">
+                    <CosmeticPreview
+                      item={toPreviewItem('card_back', cb.id, cb.name, cb.icon, cb.metadata)}
+                      size="customize"
+                    />
+                  </div>
                   <span class="picker-name">{cb.name}</span>
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
                   {#if pendingId === cb.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
@@ -876,7 +909,12 @@
                   onclick={() => equipSlotItem('table_felt', tf)}
                   aria-label="Equip {tf.name}"
                 >
-                  <span class="picker-icon" aria-hidden="true">{iconChar(tf.icon)}</span>
+                  <div class="preview-slot">
+                    <CosmeticPreview
+                      item={toPreviewItem('table_felt', tf.id, tf.name, tf.icon, tf.metadata)}
+                      size="customize"
+                    />
+                  </div>
                   <span class="picker-name">{tf.name}</span>
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
                   {#if pendingId === tf.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
@@ -1210,6 +1248,23 @@
   @keyframes loaderSlide {
     0% { transform: translate(-100%, 0); }
     100% { transform: translate(100%, 0); }
+  }
+
+  /* Slot holding the CosmeticPreview component inside picker cards.
+     Gives the preview a consistent height across subcategories so the
+     grid stays uniform regardless of which cosmetic is shown. */
+  .preview-slot {
+    width: 100%;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Colour picker keeps the small round chip swatch above the preview,
+     so its preview slot is shorter and centres the gradient name. */
+  .preview-slot--colour {
+    min-height: 32px;
   }
 
   .frame-swatch {

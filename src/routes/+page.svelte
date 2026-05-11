@@ -114,7 +114,7 @@
     </header>
 
     {#if $isLoggedIn && questSummary}
-      <a class="quests-pill" href="/profile#quests" aria-label="Daily quests">
+      <a class="quests-pill" href="/quests" aria-label="Daily quests">
         <span class="quests-pill-icon" aria-hidden="true">★</span>
         <span class="quests-pill-text">Daily Quests: {questsClaimed}/{questSummary.length} claimed</span>
         {#if questsCompleted > questsClaimed}

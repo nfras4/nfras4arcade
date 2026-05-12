@@ -103,8 +103,8 @@
       {#if POKER_DISABLED}
         <div class="panel-inner fade-in">
           <p style="text-align:center; line-height:1.5;">
-            Poker is temporarily disabled while we investigate a hosting issue.
-            Other games are still available from the lobby.
+            Texas Hold'em has been retired. The other casino games (Blackjack,
+            Roulette, Baccarat, Slots) are still open at <a href="/casino" style="color:var(--accent);">/casino</a>.
           </p>
         </div>
       {:else if mode === 'menu'}

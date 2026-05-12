@@ -164,8 +164,8 @@
         </div>
         <div class="cat-text">
           <h2 class="cat-title geo-title">Casino</h2>
-          <p class="cat-desc">Poker, Blackjack, Roulette & more</p>
-          <p class="cat-count geo-title casino-count">5 Games</p>
+          <p class="cat-desc">Blackjack, Roulette, Baccarat & more</p>
+          <p class="cat-count geo-title casino-count">4 Games</p>
         </div>
         <span class="cat-arrow casino-arrow" aria-hidden="true">→</span>
         <div class="card-shine" aria-hidden="true"></div>

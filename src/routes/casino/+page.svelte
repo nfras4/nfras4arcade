@@ -22,14 +22,6 @@
 
   const casinoGames = [
     {
-      id: 'poker',
-      name: 'Texas Hold\'em',
-      description: 'Bet, bluff, and go all-in',
-      maxPlayers: 8,
-      route: '/poker',
-      disabled: true,
-    },
-    {
       id: 'blackjack',
       name: 'Blackjack',
       description: 'Beat the dealer to 21',

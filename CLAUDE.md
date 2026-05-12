@@ -7,7 +7,7 @@ nfras4arcade is a multi-game party platform with seven games:
 - **Chase the Queen** — Card passing game where players avoid the queen of spades.
 - **Connect 4** — Classic 2-player strategy game on a 7×6 grid with multi-round scoring.
 - **Wavelength** — Team-based party game where players guess where a concept falls on a spectrum.
-- **Texas Hold'em Poker** — Multiplayer poker with betting rounds, hand evaluation, side pots, and persistent chip balances.
+- **Texas Hold'em Poker** — RETIRED 2026-05-12. Server code remains dormant (DO binding kept, /ws/poker returns 503, /poker page shows retired notice). Removed from casino hub. Code lives in `worker/poker/` for archaeology but is unreachable from the UI. See deploy log 2026-05-01 for the original DO usage runaway that prompted the kill switch.
 - **Snap** — Real-time card-matching race where players slap matching cards as fast as possible.
 
 All card games (President, Chase the Queen, Connect 4, Texas Hold'em Poker) extend a shared `CardRoom` base Durable Object class. Snap and Wavelength are standalone Durable Objects.

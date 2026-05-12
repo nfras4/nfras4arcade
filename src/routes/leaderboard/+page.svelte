@@ -683,6 +683,7 @@
     border-top: 1px solid var(--border);
     padding: 0.75rem 1rem 1rem;
     animation: fadeUp 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+    overflow-x: auto;
   }
 
   /* ── Winners table ───────────────────────────────────── */

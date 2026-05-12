@@ -90,8 +90,16 @@ export abstract class CasinoRoom extends DurableObject<Env> {
         }
       }
 
+      // Reconcile connected status against live WebSockets. Hibernation
+      // keeps sockets alive, so blanket-disconnecting everyone on wake makes
+      // other players appear offline until they themselves send a message.
+      const livePlayerIds = new Set<string>();
+      for (const ws of this.ctx.getWebSockets()) {
+        const tags = this.ctx.getTags(ws);
+        if (tags[0]) livePlayerIds.add(tags[0]);
+      }
       for (const p of this.players.values()) {
-        p.connected = false;
+        p.connected = livePlayerIds.has(p.id);
       }
     }
   }
@@ -254,6 +262,13 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       this.roundNumber = 0;
       this.tableState = null;
       this.gameSessionId = null;
+      // Prune disconnected players before promoting spectators so ghosts
+      // don't occupy seats.
+      for (const [id, p] of this.players) {
+        if (!p.connected) {
+          this.players.delete(id);
+        }
+      }
       for (const [specId, specName] of this.spectators) {
         if (this.players.size < this.maxSeats) {
           const chips = await this.ctx.storage.get<number>(`chips:${specId}`) ?? DEFAULT_BUY_IN;

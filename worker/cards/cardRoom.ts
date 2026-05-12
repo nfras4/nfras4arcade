@@ -158,11 +158,17 @@ export abstract class CardRoom extends DurableObject<Env> {
       // Restore bot turn pending flag
       this.botTurnPending = stored.botTurnPending ?? false;
 
-      // Mark all non-bot players disconnected on wake; bots stay connected
+      // Reconcile connected status against live WebSockets. Hibernation
+      // keeps sockets alive, so blanket-disconnecting everyone on wake makes
+      // other players appear offline until they themselves send a message.
+      const livePlayerIds = new Set<string>();
+      for (const ws of this.ctx.getWebSockets()) {
+        const tags = this.ctx.getTags(ws);
+        if (tags[0]) livePlayerIds.add(tags[0]);
+      }
       for (const p of this.players.values()) {
-        if (!p.isBot) {
-          p.connected = false;
-        }
+        if (p.isBot) continue;
+        p.connected = livePlayerIds.has(p.id);
       }
     }
   }
@@ -333,6 +339,14 @@ export abstract class CardRoom extends DurableObject<Env> {
       this.scores = new Map();
       for (const p of this.players.values()) {
         p.hand = [];
+      }
+      // Prune disconnected non-bot players before promoting spectators so
+      // ghosts don't occupy seats. Bots are not socket-backed and always
+      // report connected=true.
+      for (const [id, p] of this.players) {
+        if (!p.isBot && !p.connected) {
+          this.players.delete(id);
+        }
       }
       // Promote spectators to players. WHY hook: PokerRoom overrides
       // canPromoteSpectator to atomically debit the buy-in from D1; failures

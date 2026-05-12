@@ -34,6 +34,7 @@
   let editingName = $state(false);
   let editName = $state('');
   let editAvatar = $state('');
+  let expandedBadge = $state<string | null>(null);
   let saving = $state(false);
   let saveError = $state('');
   let claiming = $state(false);
@@ -92,6 +93,20 @@
       const id = setInterval(tick, 30000);
       return () => clearInterval(id);
     }
+  });
+
+  $effect(() => {
+    if (!expandedBadge) return;
+    const close = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.badge-item')) expandedBadge = null;
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') expandedBadge = null; };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', esc);
+    };
   });
 
   async function claimQuest(slot: number) {
@@ -600,7 +615,14 @@
         <div class="badge-grid">
           {#each visibleBadges as badge}
             {@const earned = isEarned(badge.slug)}
-            <div class="badge-item" class:earned class:secret={badge.secret}>
+            <button
+              type="button"
+              class="badge-item"
+              class:earned
+              class:secret={badge.secret}
+              class:expanded={expandedBadge === badge.slug}
+              onclick={() => expandedBadge = expandedBadge === badge.slug ? null : badge.slug}
+            >
               <div class="badge-emoji" class:earned>{badge.emoji}</div>
               <span class="badge-label">{badge.label}</span>
               {#if badge.secret && earned}
@@ -619,7 +641,7 @@
                   <p class="tooltip-locked">Not yet earned</p>
                 {/if}
               </div>
-            </div>
+            </button>
           {/each}
         </div>
         {#if hasHiddenBadges}
@@ -734,7 +756,7 @@
   }
 
   .edit-input {
-    font-size: 0.875rem;
+    font-size: 1rem;
     padding: 0.5rem 0.75rem;
   }
 
@@ -970,7 +992,11 @@
     opacity: 0.35;
     transition: opacity 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
     position: relative;
-    cursor: default;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    text-align: center;
+    clip-path: none;
   }
 
   .badge-item.earned {
@@ -984,7 +1010,9 @@
     background: rgba(155, 89, 182, 0.08);
   }
 
-  .badge-item:hover {
+  .badge-item:hover,
+  .badge-item:focus-within,
+  .badge-item.expanded {
     transform: translateY(-2px);
     opacity: 1;
   }
@@ -1000,7 +1028,9 @@
     filter: none;
   }
 
-  .badge-item:hover .badge-emoji {
+  .badge-item:hover .badge-emoji,
+  .badge-item:focus-within .badge-emoji,
+  .badge-item.expanded .badge-emoji {
     filter: none;
   }
 
@@ -1055,7 +1085,9 @@
     border-top-color: var(--accent-border);
   }
 
-  .badge-item:hover .badge-tooltip {
+  .badge-item:hover .badge-tooltip,
+  .badge-item:focus-within .badge-tooltip,
+  .badge-item.expanded .badge-tooltip {
     display: block;
   }
 

@@ -297,7 +297,7 @@
 
   .snap-container {
     height: 100dvh;
-    width: 100vw;
+    width: 100%;
     overflow: hidden;
     display: flex;
     flex-direction: column;

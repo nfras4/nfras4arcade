@@ -1022,10 +1022,17 @@ export class SnapRoom extends DurableObject<Env> {
     this.gameSessionId = null;
     this.snapCooldown = false;
     this.consecutiveSnaps = new Map();
+    this.disconnectTimestamps.clear();
 
     for (const [, player] of this.players) {
       player.deck = [];
       player.wonCards = 0;
+    }
+
+    for (const [id, player] of this.players) {
+      if (!player.connected) {
+        this.players.delete(id);
+      }
     }
 
     // Promote spectators to players

@@ -438,7 +438,7 @@
   .game {
     max-width: 560px;
     margin: 0 auto;
-    padding: 4rem 1rem 3rem;
+    padding: 4rem 1rem max(3rem, env(safe-area-inset-bottom, 3rem));
     display: flex;
     flex-direction: column;
     gap: 1.25rem;

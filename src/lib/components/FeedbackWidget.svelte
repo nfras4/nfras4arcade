@@ -159,8 +159,8 @@
 
   @media (max-width: 600px) {
     .feedback-trigger {
-      right: auto;
-      left: 0.75rem;
+      left: auto;
+      right: 0.75rem;
       bottom: 0.75rem;
       padding: 0.4rem;
       opacity: 0.5;
@@ -286,7 +286,7 @@
 
   .feedback-textarea {
     font-family: 'Space Grotesk', system-ui, sans-serif;
-    font-size: 0.9rem;
+    font-size: 1rem;
     padding: 0.7rem 0.85rem;
     background: var(--bg-input);
     color: var(--text);

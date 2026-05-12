@@ -963,10 +963,38 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     this.winnerId = null;
     this.pot = 0;
     this.gameSessionId = null;
+    this.disconnectTimestamps.clear();
     for (const p of this.players.values()) {
       p.dice = [];
       p.eliminated = false;
     }
+
+    // WHY: prune disconnected non-bot players so they don't ghost into the
+    // new lobby. Bots are not socket-backed and stay connected.
+    for (const [id, p] of this.players) {
+      if (!p.isBot && !p.connected) {
+        this.players.delete(id);
+      }
+    }
+
+    // Promote spectators to players
+    for (const [specId, specName] of this.spectators) {
+      if (this.players.size >= MAX_PLAYERS) break;
+      this.players.set(specId, {
+        id: specId,
+        name: specName,
+        connected: true,
+        isHost: false,
+        isGuest: specId.startsWith('guest_'),
+        isBot: false,
+        dice: [],
+        eliminated: false,
+      });
+      if (this.playerChips[specId] === undefined) {
+        this.playerChips[specId] = DEFAULT_BUY_IN;
+      }
+    }
+    this.spectators.clear();
   }
 
   private async recordGameEnd(): Promise<void> {

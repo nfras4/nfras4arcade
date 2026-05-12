@@ -143,7 +143,8 @@
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    padding: 0;
+    padding: 0.5rem;
+    min-height: 44px;
     clip-path: none;
     cursor: pointer;
     transition: color 0.15s ease;

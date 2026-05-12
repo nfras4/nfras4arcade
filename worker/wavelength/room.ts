@@ -1359,9 +1359,19 @@ export class WavelengthRoom extends DurableObject<Env> {
     this.roundResults = [];
     this.deck = [];
     this.gameSessionId = null;
+    this.disconnectTimestamps.clear();
 
     for (const id of this.players.keys()) {
       this.scores.set(id, 0);
+    }
+
+    // WHY: prune disconnected non-bot players so they don't ghost into the
+    // new lobby. Bots are not socket-backed and stay connected.
+    for (const [id, player] of this.players) {
+      if (!player.isBot && !player.connected) {
+        this.players.delete(id);
+        this.scores.delete(id);
+      }
     }
 
     // Promote spectators to players

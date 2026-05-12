@@ -402,7 +402,7 @@
     border-radius: 2px;
     color: var(--text);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 1rem;
   }
 
   .input::placeholder {

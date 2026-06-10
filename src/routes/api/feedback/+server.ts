@@ -1,10 +1,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { peek, record, getClientIp } from '$lib/server/auth/rateLimit';
 
 const VALID_CATEGORIES = ['bug', 'suggestion', 'other'];
+const RATE_LIMIT = 5;
+const RATE_WINDOW = 10 * 60 * 1000;
 
-export const POST: RequestHandler = async ({ request, locals, platform, cookies }) => {
-  const body = (await request.json()) as { category: string; message: string; roomCode?: string; gameType?: string };
+export const POST: RequestHandler = async ({ request, locals, platform }) => {
+  const ip = getClientIp(request);
+  const rl = peek(`feedback:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  if (!rl.ok) {
+    return json({ error: 'Slow down — try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
+  }
+
+  const body = (await request.json().catch(() => null)) as { category?: string; message?: string; roomCode?: string; gameType?: string } | null;
+  if (!body) return json({ error: 'Invalid JSON' }, { status: 400 });
   const { category, message, roomCode, gameType } = body;
 
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -15,7 +25,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, cookies 
     return json({ error: 'Message must be 2000 characters or less' }, { status: 400 });
   }
 
-  if (!VALID_CATEGORIES.includes(category)) {
+  if (!category || !VALID_CATEGORIES.includes(category)) {
     return json({ error: 'Category must be one of: bug, suggestion, other' }, { status: 400 });
   }
 
@@ -26,8 +36,10 @@ export const POST: RequestHandler = async ({ request, locals, platform, cookies 
 
   const user = locals.user;
   const playerId = user?.id ?? null;
-  const playerName = user?.displayName ?? `Guest-${(cookies.get('session') ?? crypto.randomUUID()).slice(0, 8)}`;
-  const sessionId = cookies.get('session')?.split('.').pop() ?? null;
+  // Never derive an identifier from session-cookie material. Use a fresh random
+  // suffix per submission so guest feedback remains usefully labelled without
+  // leaking session token bytes into the admin viewer.
+  const playerName = user?.displayName ?? `Guest-${crypto.randomUUID().slice(0, 8)}`;
 
   try {
     await db
@@ -39,7 +51,7 @@ export const POST: RequestHandler = async ({ request, locals, platform, cookies 
         crypto.randomUUID(),
         playerId,
         playerName,
-        sessionId,
+        null,
         roomCode ?? null,
         gameType ?? null,
         category,
@@ -51,6 +63,8 @@ export const POST: RequestHandler = async ({ request, locals, platform, cookies 
     console.error('Feedback insert failed:', err);
     return json({ error: 'Failed to save feedback — please try again' }, { status: 500 });
   }
+
+  record(`feedback:${ip}`, RATE_WINDOW);
 
   return json({ ok: true });
 };

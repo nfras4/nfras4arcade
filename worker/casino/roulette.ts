@@ -194,6 +194,7 @@ export class RouletteRoom extends CasinoRoom {
 
   private validateBet(bet: RouletteBet): boolean {
     if (!bet.type || !VALID_BET_TYPES.has(bet.type)) return false;
+    if (!Number.isInteger(bet.amount) || bet.amount <= 0) return false;
     if (bet.amount < this.minBet) return false;
     return true;
   }

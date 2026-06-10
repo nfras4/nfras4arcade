@@ -87,11 +87,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
       }
     );
   } catch (err) {
-    // Surface a JSON error instead of letting SvelteKit emit `{message:'Internal Error'}`,
-    // which the client's `data.error` fallback ignored, leaving users with the opaque
-    // generic string and zero diagnostic info.
+    // Log the full error server-side; never echo D1/internal error messages to clients
+    // (they leak schema details that speed up downstream exploitation).
     console.error('register failed', err);
-    const detail = err instanceof Error ? err.message : String(err);
-    return json({ error: 'Registration failed', detail }, { status: 500 });
+    return json({ error: 'Registration failed' }, { status: 500 });
   }
 };

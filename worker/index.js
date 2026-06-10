@@ -155,6 +155,14 @@ worker_default.fetch = async function(req, env, ctx) {
     const room = url.searchParams.get('room');
     if (!room) return new Response('Missing room code', { status: 400 });
 
+    // Cross-Site WebSocket Hijacking guard: cookie-authed WS would otherwise be
+    // accepted from any origin (SameSite=Lax does not cover WebSockets).
+    const origin = req.headers.get('Origin');
+    const ALLOWED_ORIGINS = ['https://arcade.nickwfraser.dev'];
+    if (origin && !ALLOWED_ORIGINS.includes(origin) && !origin.endsWith('.workers.dev')) {
+      return new Response('Forbidden origin', { status: 403 });
+    }
+
     // Validate session cookie (optional — guests allowed)
     const cookie = req.headers.get('Cookie') || '';
     const match = cookie.match(/(?:^|;\s*)session=([^;]+)/);
@@ -181,6 +189,12 @@ worker_default.fetch = async function(req, env, ctx) {
     if (!userId) {
       const guestId = url.searchParams.get('guestId');
       if (!guestId) return new Response('Missing authentication or guest ID', { status: 400 });
+      // Strict format guard: prevents unbounded / control-char / SQL-fragment IDs
+      // from reaching downstream DO storage keys (worker/cards/cardRoom.ts grace:*
+      // alarm iteration in particular).
+      if (!/^[A-Za-z0-9_-]{8,64}$/.test(guestId)) {
+        return new Response('Invalid guest ID format', { status: 400 });
+      }
       userId = 'guest_' + guestId;
       displayName = 'Guest_' + guestId.slice(0, 4);
     }
@@ -190,6 +204,11 @@ worker_default.fetch = async function(req, env, ctx) {
     const id = ns.idFromName(room.toUpperCase());
     const stub = ns.get(id);
     const headers = new Headers(req.headers);
+    // Strip any client-supplied trust headers before adding the server-derived ones.
+    headers.delete('X-User-Id');
+    headers.delete('X-Display-Name');
+    headers.delete('X-Is-Guest');
+    headers.delete('X-Player-Chips');
     headers.set('X-User-Id', userId);
     headers.set('X-Display-Name', displayName);
     headers.set('X-Is-Guest', userId.startsWith('guest_') ? 'true' : 'false');

@@ -20,6 +20,9 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   if (typeof saveData !== 'string' || typeof saveVersion !== 'number') {
     return json({ error: 'Invalid body' }, { status: 400 })
   }
+  if (saveData.length > 32_768) {
+    return json({ error: 'Save data too large' }, { status: 413 })
+  }
 
   // Reject stale writes: server version must not exceed incoming version
   const existing = await db
@@ -45,12 +48,16 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 
   // Progression: feed dungeon_zone quest + seasonal leaderboard. The save blob
   // is JSON containing `currentZone` (see src/lib/dungeon/player.svelte.ts).
+  // Cap to MAX_PLAUSIBLE_ZONE so a tampered client can't seed an unreachable
+  // leaderboard score (recordDungeonProgress is a MAX upsert — once written,
+  // can't be reduced for the season).
   if (user.id && !user.id.startsWith('guest_') && !user.id.startsWith('bot_')) {
     try {
       const parsed = JSON.parse(saveData) as { currentZone?: number; highestZone?: number }
-      const zone = Number(parsed?.highestZone ?? parsed?.currentZone ?? 0)
-      if (Number.isFinite(zone) && zone > 0) {
-        await recordDungeonProgress({ DB: db }, { playerId: user.id, highestZone: zone })
+      const zoneRaw = Number(parsed?.highestZone ?? parsed?.currentZone ?? 0)
+      const MAX_PLAUSIBLE_ZONE = 100
+      if (Number.isInteger(zoneRaw) && zoneRaw > 0 && zoneRaw <= MAX_PLAUSIBLE_ZONE) {
+        await recordDungeonProgress({ DB: db }, { playerId: user.id, highestZone: zoneRaw })
       }
     } catch (err) {
       console.error('[dungeon/save] progression recordDungeonProgress failed', err)

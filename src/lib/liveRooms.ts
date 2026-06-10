@@ -1,4 +1,5 @@
 export interface LiveRoomPlayer {
+  // TODO: consumer of /api/active-rooms used to read player.id — verify removal
   id: string;
   name: string;
   isBot: boolean;

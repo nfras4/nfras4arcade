@@ -31,7 +31,6 @@ interface ActiveRoomRow {
 }
 
 interface PlayerEntry {
-  id: string;
   name: string;
   isBot: boolean;
 }
@@ -86,8 +85,7 @@ export const GET: RequestHandler = async ({ platform, setHeaders }) => {
       if (Array.isArray(parsed)) {
         players = parsed
           .filter((p) => p && typeof p === 'object')
-          .map((p: { id?: unknown; name?: unknown; isBot?: unknown }) => ({
-            id: typeof p.id === 'string' ? p.id : '',
+          .map((p: { name?: unknown; isBot?: unknown }) => ({
             name: typeof p.name === 'string' ? p.name : '',
             isBot: !!p.isBot,
           }));

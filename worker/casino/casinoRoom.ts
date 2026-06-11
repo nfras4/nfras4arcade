@@ -596,6 +596,11 @@ export abstract class CasinoRoom extends DurableObject<Env> {
   // --- Chip management ---
 
   protected placeBet(playerId: string, amount: number): boolean {
+    // Reject NaN / Infinity / non-integer / non-positive bets BEFORE any
+    // numeric comparison — NaN comparisons all return false so an unguarded
+    // amount silently passes every gate and poisons player_profiles.chips
+    // (NaN/Infinity propagated through `player.chips -= amount`).
+    if (!Number.isInteger(amount) || amount <= 0) return false;
     const player = this.players.get(playerId);
     if (!player) return false;
     if (amount < this.minBet || amount > this.maxBet) return false;

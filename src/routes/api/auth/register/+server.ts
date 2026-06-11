@@ -40,6 +40,15 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     return json({ error: 'Display name must be 1-20 characters' }, { status: 400 });
   }
 
+  // Reserved-names guard. Normalise NFKC + casefold + strip whitespace so
+  // visually-confusable variants ('NFRAS4', ' nfras4 ', fullwidth 'ｎfras4')
+  // all collapse to the same canonical form for the reserved check.
+  const RESERVED_NAMES = new Set(['nfras4', 'admin', 'administrator', 'moderator', 'mod', 'owner', 'system', 'staff', 'support', 'root', 'guest', 'bot']);
+  const canonical = name.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  if (RESERVED_NAMES.has(canonical)) {
+    return json({ error: 'That display name is reserved' }, { status: 400 });
+  }
+
   // Rate limit AFTER validation so typos don't burn the bucket. Key by both
   // IP and email so one user on a shared NAT can't lock out everyone else.
   const ipKey = `register:ip:${ip}`;
@@ -80,7 +89,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     const isProd = platform?.env?.ENVIRONMENT === 'production';
 
     return json(
-      { user: { id: userId, email: email.toLowerCase(), displayName: name, avatar: null } },
+      { user: { id: userId, email: email.toLowerCase(), displayName: name, avatar: null, isOwner: false } },
       {
         status: 201,
         headers: { 'Set-Cookie': setSessionCookie(sessionToken, isProd) },

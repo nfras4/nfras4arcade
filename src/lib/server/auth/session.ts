@@ -38,6 +38,7 @@ export interface SessionUser {
   email: string;
   displayName: string;
   avatar: string | null;
+  isOwner: boolean;
 }
 
 export async function createSession(db: D1Database, userId: string): Promise<string> {
@@ -64,21 +65,21 @@ export async function validateSession(db: D1Database, sessionValue: string): Pro
 
   const row = await db
     .prepare(
-      `SELECT u.id, u.email, p.display_name, p.avatar, s.token_hash
+      `SELECT u.id, u.email, p.display_name, p.avatar, p.is_owner, s.token_hash
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        JOIN player_profiles p ON p.id = u.id
        WHERE s.id = ? AND s.expires_at > ?`
     )
     .bind(sessionId, now)
-    .first<{ id: string; email: string; display_name: string; avatar: string | null; token_hash: string }>();
+    .first<{ id: string; email: string; display_name: string; avatar: string | null; is_owner: number; token_hash: string }>();
 
   if (!row) return null;
 
   const expectedHash = await sha256Base64Url(token);
   if (!row.token_hash || !constantTimeEquals(expectedHash, row.token_hash)) return null;
 
-  return { id: row.id, email: row.email, displayName: row.display_name, avatar: row.avatar };
+  return { id: row.id, email: row.email, displayName: row.display_name, avatar: row.avatar, isOwner: row.is_owner === 1 };
 }
 
 export async function deleteSession(db: D1Database, sessionValue: string): Promise<void> {

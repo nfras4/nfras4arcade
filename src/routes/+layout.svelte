@@ -220,7 +220,7 @@
       </a>
       <a href="/profile" class="nav-profile-link" title="Profile">
         <span class="nav-avatar">{$currentUser?.avatar || $currentUser?.displayName[0]?.toUpperCase()}</span>
-        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.displayName === 'nfras4'}<span class="owner-crown" title="Site Owner" aria-hidden="true">
+        <span class="nav-display-name" style:color={$currentUser?.nameColour || undefined}>{$currentUser?.displayName}</span>{#if $currentUser?.isOwner}<span class="owner-crown" title="Site Owner" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M3 8l3 6h12l3-6-5 3-4-6-4 6z"/></svg>
         </span>{/if}
       </a>

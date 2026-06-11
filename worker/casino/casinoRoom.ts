@@ -88,6 +88,10 @@ export abstract class CasinoRoom extends DurableObject<Env> {
         } else {
           p.devices = [synthesiseLegacyDevice(id, now)];
         }
+        // Backfill the delta baseline for state files that predate this field.
+        // Treating the stored mirror as the baseline means the next persist
+        // writes zero delta until actual play moves chips off this value.
+        if (p.chipsAtLoad === undefined) p.chipsAtLoad = p.chips;
       }
 
       // Reconcile connected status against live WebSockets. Hibernation
@@ -169,10 +173,13 @@ export abstract class CasinoRoom extends DurableObject<Env> {
       await this.ctx.storage.put(`chips:${userId}`, chips);
       await this.ctx.storage.put(`guest:${userId}`, isGuest);
     } else if (!isGuest && chipsHeader !== null) {
-      // Reconnecting registered player: update chip balance from D1
+      // Reconnecting registered player: refresh chip balance from D1 (in lobby only,
+      // never mid-hand). Resetting chipsAtLoad together with chips keeps the delta
+      // at zero so the next persist writes nothing until the player actually plays.
       const parsed = parseInt(chipsHeader, 10);
       if (!isNaN(parsed) && parsed > 0 && this.phase === 'lobby') {
         existingPlayer.chips = parsed;
+        existingPlayer.chipsAtLoad = parsed;
       }
     }
 
@@ -328,21 +335,18 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     // Disconnect timeout - remove timed-out players and persist their chips
     if (this.disconnectTimestamps.size > 0) {
       const now = Date.now();
-      const nowSec = Math.floor(now / 1000);
-      const stmts: D1PreparedStatement[] = [];
 
       for (const [pid, ts] of this.disconnectTimestamps) {
         if (now - ts >= DISCONNECT_TIMEOUT_MS) {
           this.disconnectTimestamps.delete(pid);
           const player = this.players.get(pid);
           if (player) {
-            // Persist chips before removing
-            if (!player.isGuest && !pid.startsWith('guest_')) {
-              stmts.push(
-                this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
-                  .bind(player.chips, nowSec, pid)
-              );
-            }
+            // Persist chips atomically before removing. If the conditional
+            // UPDATE fails we still drop the seat — the player has already
+            // walked; the in-memory refund is moot because there's no client
+            // left to notify, and the at-load baseline is the authoritative
+            // value we'd have kept anyway.
+            await this.persistChipDelta(pid);
             this.players.delete(pid);
 
             // Host promotion
@@ -353,10 +357,6 @@ export abstract class CasinoRoom extends DurableObject<Env> {
             }
           }
         }
-      }
-
-      if (stmts.length > 0) {
-        try { await this.env.DB.batch(stmts); } catch {}
       }
 
       if (this.players.size === 0) {
@@ -442,7 +442,9 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     const isGuest = await this.ctx.storage.get<boolean>(`guest:${playerId}`) ?? playerId.startsWith('guest_');
     const isHost = this.players.size === 0 || !this.hostId;
 
-    const player: CasinoPlayer = { id: playerId, name, connected: true, isHost, chips, isGuest };
+    // chipsAtLoad mirrors `chips` at the moment of seat creation so a player
+    // who joins and immediately leaves persists no delta (the baseline matches).
+    const player: CasinoPlayer = { id: playerId, name, connected: true, isHost, chips, chipsAtLoad: chips, isGuest };
     this.players.set(playerId, player);
 
     if (isHost) this.hostId = playerId;
@@ -522,16 +524,10 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     const player = this.players.get(playerId);
     if (!player) return;
 
-    // Persist chips before removing
-    if (!player.isGuest && !playerId.startsWith('guest_')) {
-      try {
-        const now = Math.floor(Date.now() / 1000);
-        await this.env.DB.batch([
-          this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
-            .bind(player.chips, now, playerId),
-        ]);
-      } catch {}
-    }
+    // Persist chips atomically before removing. Same rationale as the alarm
+    // path: if the conditional UPDATE fails we drop the seat anyway; the
+    // player chose to leave.
+    await this.persistChipDelta(playerId);
 
     this.players.delete(playerId);
     this.disconnectTimestamps.delete(playerId);
@@ -616,20 +612,56 @@ export abstract class CasinoRoom extends DurableObject<Env> {
     player.chips += amount;
   }
 
-  protected async persistChips(): Promise<void> {
+  /**
+   * Persist a single player's chip delta atomically. Returns true on success
+   * (or no-op when delta === 0), false when the conditional UPDATE matched zero
+   * rows (the player's true balance went below what the delta would consume —
+   * race with another DO, typically). On false the caller MUST refund in-memory
+   * and notify the player; this helper does NOT touch player.chips on failure.
+   *
+   * No-op for guests; their chips are session-only.
+   */
+  protected async persistChipDelta(playerId: string): Promise<boolean> {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    if (player.isGuest || playerId.startsWith('guest_')) return true;
+    const baseline = player.chipsAtLoad ?? player.chips;
+    const delta = player.chips - baseline;
+    if (delta === 0) return true;
+    const now = Math.floor(Date.now() / 1000);
     try {
-      const stmts: D1PreparedStatement[] = [];
-      const now = Math.floor(Date.now() / 1000);
-      for (const [id, player] of this.players) {
-        if (!player.isGuest && !id.startsWith('guest_')) {
-          stmts.push(
-            this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
-              .bind(player.chips, now, id)
-          );
-        }
+      const result = await this.env.DB.prepare(
+        'UPDATE player_profiles SET chips = chips + ?, updated_at = ? WHERE id = ? AND chips + ? >= 0'
+      ).bind(delta, now, playerId, delta).run();
+      const meta = (result as { meta?: { changes?: number; rows_written?: number } })?.meta;
+      const changes = meta?.changes ?? meta?.rows_written ?? 0;
+      if (changes > 0) {
+        player.chipsAtLoad = player.chips;
+        return true;
       }
-      if (stmts.length > 0) await this.env.DB.batch(stmts);
-    } catch {}
+      return false;
+    } catch (err) {
+      console.error('persistChipDelta failed', { playerId, delta, err });
+      return false;
+    }
+  }
+
+  /**
+   * Persist all seated players' chip deltas. Iterates per-player rather than
+   * batching because each row's success/failure is independent and a bust on
+   * one player must not roll back another's settlement.
+   */
+  protected async persistChips(): Promise<void> {
+    for (const [id, player] of this.players) {
+      if (player.isGuest || id.startsWith('guest_')) continue;
+      const ok = await this.persistChipDelta(id);
+      if (!ok) {
+        // Refund in memory + notify the player. The next round seeds from the
+        // restored baseline so play continues correctly at the true balance.
+        player.chips = player.chipsAtLoad ?? player.chips;
+        this.sendTo(id, { type: 'error', message: 'Chip persistence failed — settled at previous balance' });
+      }
+    }
   }
 
   protected async recordCasinoRound(profitedPlayerIds: string[]): Promise<void> {

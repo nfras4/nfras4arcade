@@ -8,6 +8,14 @@ export interface CasinoPlayer {
   connected: boolean;
   isHost: boolean;
   chips: number;
+  /**
+   * The value of `chips` at the moment we last successfully persisted to D1
+   * (or freshly seeded from D1 / X-Player-Chips). Used to compute the delta
+   * we write at the next persist so two simultaneous DOs (e.g. blackjack + roulette
+   * at the same player) cannot double-spend or wipe winnings. Optional because
+   * legacy stored state predates this field; loadState() backfills it to `chips`.
+   */
+  chipsAtLoad?: number;
   isGuest: boolean;
   devices?: Device[];
   frameSvg?: string | null;

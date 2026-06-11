@@ -513,20 +513,14 @@ export class BlackjackRoom extends CasinoRoom {
 
     // Disconnect timeout handling
     if (this.disconnectTimestamps.size > 0) {
-      const nowSec = Math.floor(now / 1000);
-      const stmts: D1PreparedStatement[] = [];
-
       for (const [pid, dcTime] of this.disconnectTimestamps) {
         if (now - dcTime >= DISCONNECT_TIMEOUT_MS) {
           this.disconnectTimestamps.delete(pid);
           const player = this.players.get(pid);
           if (player) {
-            if (!player.isGuest && !pid.startsWith('guest_')) {
-              stmts.push(
-                this.env.DB.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?')
-                  .bind(player.chips, nowSec, pid)
-              );
-            }
+            // Atomic delta persist — see CasinoRoom.persistChipDelta. We don't
+            // refund in-memory on failure here because the player has walked.
+            await this.persistChipDelta(pid);
             this.players.delete(pid);
             if (pid === this.hostId && this.players.size > 0) {
               const newHost = this.players.values().next().value!;
@@ -535,10 +529,6 @@ export class BlackjackRoom extends CasinoRoom {
             }
           }
         }
-      }
-
-      if (stmts.length > 0) {
-        try { await this.env.DB.batch(stmts); } catch {}
       }
 
       if (this.players.size === 0) {

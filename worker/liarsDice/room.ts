@@ -75,6 +75,14 @@ interface StoredState {
   ante: number;
   onesWild: boolean;
   playerChips: Record<string, number>;
+  /**
+   * Baseline = playerChips at the moment we last persisted to D1 (or seeded
+   * from D1 / X-Player-Chips). Used to compute the delta at recordGameEnd so
+   * two simultaneous LiarsDice rooms with the same player can't double-spend.
+   * Optional because legacy state files predate this field; loadState
+   * backfills from `playerChips` (treating the stored mirror as the baseline).
+   */
+  playerChipsAtLoad?: Record<string, number>;
   lastRoundResult: RoundResult | null;
   winnerId: string | null;
   gameSessionId: string | null;
@@ -164,6 +172,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private onesWild = false;
   private botTurnPending = false;
   private playerChips: Record<string, number> = {};
+  private playerChipsAtLoad: Record<string, number> = {};
   private lastRoundResult: RoundResult | null = null;
   private winnerId: string | null = null;
   private gameSessionId: string | null = null;
@@ -193,6 +202,11 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       this.onesWild = stored.onesWild ?? false;
       this.botTurnPending = stored.botTurnPending ?? false;
       this.playerChips = stored.playerChips;
+      // Hydrate baseline from stored state; backfill from current chips for
+      // legacy state files that predate this field. The backfill treats the
+      // stored mirror as the last-known-good baseline, so the next persist
+      // writes zero delta unless actual play moves chips off this value.
+      this.playerChipsAtLoad = stored.playerChipsAtLoad ?? { ...stored.playerChips };
       this.lastRoundResult = stored.lastRoundResult;
       this.winnerId = stored.winnerId;
       this.gameSessionId = stored.gameSessionId;
@@ -240,6 +254,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       onesWild: this.onesWild,
       botTurnPending: this.botTurnPending,
       playerChips: this.playerChips,
+      playerChipsAtLoad: this.playerChipsAtLoad,
       lastRoundResult: this.lastRoundResult,
       winnerId: this.winnerId,
       gameSessionId: this.gameSessionId,
@@ -289,8 +304,10 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       } else {
         this.playerChips[userId] = this.gameMode === 'competitive' ? 0 : DEFAULT_REBUY;
       }
+      this.playerChipsAtLoad[userId] = this.playerChips[userId];
     } else if (this.playerChips[userId] === undefined) {
       this.playerChips[userId] = DEFAULT_BUY_IN;
+      this.playerChipsAtLoad[userId] = DEFAULT_BUY_IN;
     }
 
     try {
@@ -508,6 +525,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     if (isHost) this.hostId = playerId;
     if (this.playerChips[playerId] === undefined) {
       this.playerChips[playerId] = DEFAULT_BUY_IN;
+      this.playerChipsAtLoad[playerId] = DEFAULT_BUY_IN;
     }
 
     await this.resolveCosmeticsForPlayer(playerId);
@@ -556,6 +574,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     if (this.phase === 'lobby') {
       this.players.delete(playerId);
       delete this.playerChips[playerId];
+      delete this.playerChipsAtLoad[playerId];
       if (playerId === this.hostId && this.players.size > 0) {
         this.promoteNewHost(playerId);
       }
@@ -581,6 +600,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         if (p.isBot) {
           this.players.delete(id);
           delete this.playerChips[id];
+          delete this.playerChipsAtLoad[id];
         }
       }
     }
@@ -664,6 +684,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
           eliminated: false,
         });
         this.playerChips[botId] = BOT_CHIP_FLOOR;
+        this.playerChipsAtLoad[botId] = BOT_CHIP_FLOOR;
         this.broadcastState();
         break;
       }
@@ -674,6 +695,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
           if (p.isBot) {
             this.players.delete(id);
             delete this.playerChips[id];
+            delete this.playerChipsAtLoad[id];
           }
         }
         this.broadcastState();
@@ -697,6 +719,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         if (!target) break;
         this.players.delete(targetId);
         delete this.playerChips[targetId];
+        delete this.playerChipsAtLoad[targetId];
         // Close their sockets
         for (const ws of this.ctx.getWebSockets(targetId)) {
           this.sendToWs(ws, { type: 'error', message: 'You were kicked from the room' });
@@ -992,6 +1015,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       });
       if (this.playerChips[specId] === undefined) {
         this.playerChips[specId] = DEFAULT_BUY_IN;
+        this.playerChipsAtLoad[specId] = DEFAULT_BUY_IN;
       }
     }
     this.spectators.clear();
@@ -1028,10 +1052,36 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         stmts.push(
           db.prepare('UPDATE player_profiles SET xp = xp + ?, updated_at = ? WHERE id = ?').bind(xpGain, now, id),
         );
-        const chips = Math.max(0, this.playerChips[id] ?? 0);
-        stmts.push(
-          db.prepare('UPDATE player_profiles SET chips = ?, updated_at = ? WHERE id = ?').bind(chips, now, id),
-        );
+        // Atomic chip delta: avoid the double-spend race where two simultaneous
+        // LiarsDice rooms for the same player both seed at 1000 and both write
+        // absolute at game end. The conditional UPDATE refuses to drive chips
+        // below zero; on bust we refund in-memory and notify the player.
+        const baseline = this.playerChipsAtLoad[id] ?? this.playerChips[id] ?? 0;
+        const current = Math.max(0, this.playerChips[id] ?? 0);
+        const delta = current - baseline;
+        if (delta !== 0) {
+          try {
+            const chipResult = await db.prepare(
+              'UPDATE player_profiles SET chips = chips + ?, updated_at = ? WHERE id = ? AND chips + ? >= 0'
+            ).bind(delta, now, id, delta).run();
+            const chipMeta = (chipResult as { meta?: { changes?: number; rows_written?: number } })?.meta;
+            const chipChanges = chipMeta?.changes ?? chipMeta?.rows_written ?? 0;
+            if (chipChanges > 0) {
+              this.playerChipsAtLoad[id] = current;
+            } else {
+              // Bust race — true balance dropped below what the delta would consume.
+              // Refund in-memory + notify so the player sees the restored balance.
+              this.playerChips[id] = baseline;
+              this.sendTo(id, { type: 'error', message: 'Chip persistence failed — settled at previous balance' });
+            }
+          } catch (err) {
+            console.error('liarsDice chip delta persist failed', { id, delta, err });
+          }
+        } else {
+          // No-op: still advance the baseline (it's a free assignment) so any
+          // mid-game error and resume doesn't compute against a stale baseline.
+          this.playerChipsAtLoad[id] = current;
+        }
         if (id === this.winnerId) {
           const winAmount = this.pot - this.ante;
           stmts.push(

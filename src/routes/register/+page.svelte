@@ -105,6 +105,9 @@
     <p class="security-note">
       Your password is hashed using PBKDF2-SHA256 (industry standard) and stored securely in a Cloudflare D1 database. We never store plaintext passwords.
     </p>
+    <p class="security-note">
+      See our <a href="/privacy">Privacy notice</a> for what we collect and how it is handled.
+    </p>
     <p class="auth-link">
       Already have an account? <a href="/login">Login</a>
     </p>

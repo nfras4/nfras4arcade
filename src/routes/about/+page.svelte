@@ -244,6 +244,7 @@
         <a class="btn" href={githubUrl} target="_blank" rel="noopener">
           GitHub <span aria-hidden="true">↗</span>
         </a>
+        <a class="btn btn-ghost" href="/privacy">Privacy</a>
       </div>
     </section>
 

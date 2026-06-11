@@ -19,6 +19,22 @@ code = doImport + code;
 const wsPatch = `
 // --- nfras4arcade: WebSocket upgrade + DO export patch ---
 const _svelteKitFetch = worker_default.fetch;
+
+// Mirror src/lib/server/auth/session.ts — base64url SHA-256 + constant-time compare
+// so the WS auth path verifies sessions.token_hash the same way validateSession does.
+async function _sha256B64Url(input) {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
+    .replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
+}
+function _constantTimeEquals(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 worker_default.fetch = async function(req, env, ctx) {
   const url = new URL(req.url);
 
@@ -57,14 +73,22 @@ worker_default.fetch = async function(req, env, ctx) {
       const sessionValue = match[1];
       const dotIndex = sessionValue.indexOf('.');
       if (dotIndex !== -1) {
+        const token = sessionValue.slice(0, dotIndex);
         const sessionId = sessionValue.slice(dotIndex + 1);
         const now = Math.floor(Date.now() / 1000);
         const row = await env.DB.prepare(
-          'SELECT u.id, p.display_name FROM sessions s JOIN users u ON u.id = s.user_id JOIN player_profiles p ON p.id = u.id WHERE s.id = ? AND s.expires_at > ?'
+          'SELECT u.id, p.display_name, s.token_hash FROM sessions s JOIN users u ON u.id = s.user_id JOIN player_profiles p ON p.id = u.id WHERE s.id = ? AND s.expires_at > ?'
         ).bind(sessionId, now).first();
-        if (row) {
-          userId = row.id;
-          displayName = row.display_name;
+        // Verify the cookie token half matches sessions.token_hash. Without this,
+        // anyone who knows a sessions.id could spoof the session by appending a
+        // fake token half. SK-side validateSession already does this; the WS shim
+        // forked off this code path and was missed.
+        if (row && row.token_hash) {
+          const expectedHash = await _sha256B64Url(token);
+          if (_constantTimeEquals(expectedHash, row.token_hash)) {
+            userId = row.id;
+            displayName = row.display_name;
+          }
         }
       }
     }

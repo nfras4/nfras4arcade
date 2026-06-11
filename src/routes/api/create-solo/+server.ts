@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { peek, record, getClientIp } from '$lib/server/auth/rateLimit';
 
 const GAME_CONFIG: Record<string, { binding: string; minPlayers: number }> = {
   president: { binding: 'PRESIDENT_ROOM', minPlayers: 3 },
@@ -12,17 +13,22 @@ const GAME_CONFIG: Record<string, { binding: string; minPlayers: number }> = {
   coup: { binding: 'COUP_ROOM', minPlayers: 2 },
 };
 
+const CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const RATE_LIMIT = 10;
+const RATE_WINDOW = 60_000;
+
 function generateCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  let code = '';
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  return Array.from(bytes, (b) => CHARSET[b % CHARSET.length]).join('');
 }
 
-export const POST: RequestHandler = async ({ url, locals, platform }) => {
-  // Allow both authenticated and guest users to create solo games
+export const POST: RequestHandler = async ({ request, url, platform }) => {
+  const ip = getClientIp(request);
+  const rl = peek(`create-solo:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  if (!rl.ok) {
+    return json({ error: 'Too many solo games, slow down' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
+  }
+
   const game = url.searchParams.get('game');
   if (!game || !GAME_CONFIG[game]) {
     return json({ error: 'Invalid game type' }, { status: 400 });
@@ -50,5 +56,6 @@ export const POST: RequestHandler = async ({ url, locals, platform }) => {
     await stub.fetch(new Request(botUrl, { method: 'POST' }));
   }
 
+  record(`create-solo:${ip}`, RATE_WINDOW);
   return json({ code, game });
 };

@@ -5,6 +5,7 @@ export interface AuthUser {
   email: string;
   displayName: string;
   avatar: string | null;
+  isOwner: boolean;
   nameColour: string | null;
   cardBack: { style: string } | { svg: string } | null;
   tableFelt: { hex: string } | null;

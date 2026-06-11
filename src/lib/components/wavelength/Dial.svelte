@@ -183,6 +183,19 @@
 
   // Score for my needle (playerId = 'me' sentinel — parent passes matching entry)
   let myRevealScore = $derived(revealScores.find(s => s.playerId === 'me'));
+
+  // ─── Shimmer reveal: one-shot when showTarget flips true ─────────────────
+  let shimmerKey = $state(0);
+  let prevShowTarget = false;
+  $effect(() => {
+    const st = showTarget;
+    if (st && !prevShowTarget) {
+      prevShowTarget = st;
+      shimmerKey++;
+    } else if (!st) {
+      prevShowTarget = false;
+    }
+  });
 </script>
 
 <!-- ─── Markup ────────────────────────────────────────────────────────── -->
@@ -308,6 +321,16 @@
         stroke-linecap="round"
         class="target-center-line"
       />
+
+      <!-- Shimmer sweep: one-shot radial highlight when target first reveals -->
+      {#key shimmerKey}
+        <path
+          d={fullArcPath(R_INNER + 8, R_OUTER - 4)}
+          fill="rgba(255, 230, 100, 0.22)"
+          class="target-shimmer"
+          aria-hidden="true"
+        />
+      {/key}
     {/if}
 
     <!-- ── Other players' needles ── -->
@@ -571,6 +594,19 @@
       opacity: 1;
       transform: scale(1);
     }
+  }
+
+  /* ── Target shimmer sweep (one-shot on reveal) ───────────────────── */
+  .target-shimmer {
+    animation: targetShimmer 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    transform-origin: 200px 200px;
+    pointer-events: none;
+  }
+
+  @keyframes targetShimmer {
+    0%   { opacity: 0.85; transform: scale(0.92); filter: blur(0px); }
+    55%  { opacity: 0.55; transform: scale(1.04); filter: blur(1px); }
+    100% { opacity: 0;    transform: scale(1.1);  filter: blur(3px); }
   }
 
   /* ── Score badge pop-in ───────────────────────────────────────────── */

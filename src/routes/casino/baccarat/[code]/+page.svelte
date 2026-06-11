@@ -8,6 +8,9 @@
   import { isLoggedIn, userStats, currentUser } from '$lib/auth';
   import Card from '$lib/components/cards/Card.svelte';
   import NameFrame from '$lib/components/NameFrame.svelte';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
+  import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/baccarat');
@@ -174,6 +177,140 @@
     if (w === 'tie') return 'green';
     return 'neutral';
   }
+
+  // -------------------------------------------------------------------------
+  // VFX state
+  // -------------------------------------------------------------------------
+
+  // Bet placed: felt ripple under bet-confirmed panel
+  let betShockwave = $state(0);
+  let prevMyBetType: typeof myBetType = null;
+  $effect(() => {
+    const cur = myBetType;
+    if (cur !== null && cur !== prevMyBetType) {
+      betShockwave++;
+    }
+    prevMyBetType = cur;
+  });
+
+  // Deal phase: shockwave under each hand-area when cards arrive
+  let playerShockwave = $state(0);
+  let bankerShockwave = $state(0);
+  let prevPlayerLen = 0;
+  let prevBankerLen = 0;
+  $effect(() => {
+    const pl = playerHand.length;
+    const bl = bankerHand.length;
+    if (pl > prevPlayerLen) { playerShockwave++; }
+    if (bl > prevBankerLen) { bankerShockwave++; }
+    prevPlayerLen = pl;
+    prevBankerLen = bl;
+  });
+
+  // Third-card drama: brief spotlight dim when a 3rd card arrives on either side
+  let thirdCardSide = $state<'player' | 'banker' | null>(null);
+  let prevPlayerLen3 = 0;
+  let prevBankerLen3 = 0;
+  $effect(() => {
+    const pl = playerHand.length;
+    const bl = bankerHand.length;
+    if (pl === 3 && prevPlayerLen3 < 3) {
+      thirdCardSide = 'player';
+      const id = setTimeout(() => { thirdCardSide = null; }, 900);
+      prevPlayerLen3 = pl;
+      prevBankerLen3 = bl;
+      return () => clearTimeout(id);
+    }
+    if (bl === 3 && prevBankerLen3 < 3) {
+      thirdCardSide = 'banker';
+      const id = setTimeout(() => { thirdCardSide = null; }, 900);
+      prevPlayerLen3 = pl;
+      prevBankerLen3 = bl;
+      return () => clearTimeout(id);
+    }
+    prevPlayerLen3 = pl;
+    prevBankerLen3 = bl;
+  });
+
+  // Winner reveal: glow wall + slam-in banner key
+  let winnerRevealKey = $state(0);
+  let glowWallActive = $state(false);
+  let prevWinner: string | null = null;
+  $effect(() => {
+    const w = winner;
+    if (w !== null && w !== prevWinner) {
+      winnerRevealKey++;
+      glowWallActive = true;
+      const id = setTimeout(() => { glowWallActive = false; }, 1100);
+      prevWinner = w;
+      return () => clearTimeout(id);
+    }
+    prevWinner = w;
+  });
+
+  // Natural 8/9: gold shimmer on score chip + NATURAL pop
+  let playerNaturalKey = $state(0);
+  let bankerNaturalKey = $state(0);
+  let showPlayerNatural = $state(false);
+  let showBankerNatural = $state(false);
+  let prevPlayerTotal = -1;
+  let prevBankerTotal = -1;
+  $effect(() => {
+    const pt = handTotal(playerHand);
+    const bt = handTotal(bankerHand);
+    const ptCards = playerHand.length;
+    const btCards = bankerHand.length;
+    if (ptCards === 2 && (pt === 8 || pt === 9) && prevPlayerTotal !== pt) {
+      playerNaturalKey++;
+      showPlayerNatural = true;
+      const id = setTimeout(() => { showPlayerNatural = false; }, 1100);
+      prevPlayerTotal = pt;
+      return () => clearTimeout(id);
+    }
+    if (btCards === 2 && (bt === 8 || bt === 9) && prevBankerTotal !== bt) {
+      bankerNaturalKey++;
+      showBankerNatural = true;
+      const id = setTimeout(() => { showBankerNatural = false; }, 1100);
+      prevBankerTotal = bt;
+      return () => clearTimeout(id);
+    }
+    prevPlayerTotal = pt;
+    prevBankerTotal = bt;
+  });
+
+  // Payouts: FloatUp entries + fireGoldBurst for own win
+  interface FloatEntry { id: number; text: string; color: string; }
+  let floatEntries = $state<Record<string, FloatEntry[]>>({});
+  let prevPayouts: Record<string, number> | null = null;
+  $effect(() => {
+    const p = payouts;
+    if (p && p !== prevPayouts) {
+      const next: Record<string, FloatEntry[]> = {};
+      for (const [playerId, amount] of Object.entries(p)) {
+        if (amount === 0) continue;
+        const entryId = Date.now() + Math.random();
+        next[playerId] = [
+          ...(floatEntries[playerId] ?? []),
+          {
+            id: entryId,
+            text: amount > 0 ? `+${amount}` : `${amount}`,
+            color: amount > 0 ? 'var(--bet-tie-green)' : 'var(--bet-banker-red)',
+          }
+        ];
+        if (playerId === pid && amount > 0) {
+          fireGoldBurst();
+        } else if (playerId === pid && amount < 0) {
+          fireLoss();
+        }
+      }
+      floatEntries = { ...floatEntries, ...next };
+      prevPayouts = p;
+      // Self-cleanup: clear entries after FloatUp has faded (~1s)
+      const id = setTimeout(() => { floatEntries = {}; }, 1100);
+      return () => clearTimeout(id);
+    }
+    prevPayouts = p;
+  });
 </script>
 
 {#if $error}
@@ -255,7 +392,8 @@
         {/if}
 
         {#if myBetInfo || myBetType}
-          <div class="bet-confirmed">
+          <div class="bet-confirmed" style="position:relative;">
+            <Shockwave trigger={betShockwave} color="var(--shop-gold)" size={160} />
             <span class="bet-confirmed-label geo-title">Bet placed on</span>
             <span class="bet-confirmed-type bet-type-{myBetInfo?.type ?? myBetType}">{(myBetInfo?.type ?? myBetType ?? '').toUpperCase()}</span>
             <span class="bet-confirmed-amount">{myBetInfo?.amount ?? betInput} chips</span>
@@ -350,16 +488,25 @@
         </div>
 
         <div class="hands-container">
-          <div class="hand-area">
+          <!-- Player hand -->
+          <div class="hand-area" class:third-card-dim={thirdCardSide === 'banker'}>
             <div class="hand-header">
               <span class="area-label geo-title">Player</span>
               {#if playerHand.length > 0}
-                <span class="hand-value">{handTotal(playerHand)}</span>
+                {#key playerNaturalKey}
+                  <span class="hand-value" class:natural-chip={showPlayerNatural}>{handTotal(playerHand)}</span>
+                {/key}
               {/if}
             </div>
-            <div class="card-row">
+            {#if showPlayerNatural}
+              <span class="natural-pop vfx-slam-in" aria-hidden="true">NATURAL</span>
+            {/if}
+            <div class="card-row" style="position:relative;">
+              <Shockwave trigger={playerShockwave} color="var(--bet-player-blue)" size={110} />
               {#each playerHand as card, i}
-                <Card {card} faceUp={true} dealDelay={i * 150} />
+                <div class:third-card-delay={i === 2}>
+                  <Card {card} faceUp={true} dealDelay={i * 150} />
+                </div>
               {/each}
               {#if playerHand.length === 0}
                 <span class="no-cards">Dealing...</span>
@@ -369,16 +516,25 @@
 
           <div class="hand-divider"></div>
 
-          <div class="hand-area">
+          <!-- Banker hand -->
+          <div class="hand-area" class:third-card-dim={thirdCardSide === 'player'}>
             <div class="hand-header">
               <span class="area-label geo-title">Banker</span>
               {#if bankerHand.length > 0}
-                <span class="hand-value">{handTotal(bankerHand)}</span>
+                {#key bankerNaturalKey}
+                  <span class="hand-value" class:natural-chip={showBankerNatural}>{handTotal(bankerHand)}</span>
+                {/key}
               {/if}
             </div>
-            <div class="card-row">
+            {#if showBankerNatural}
+              <span class="natural-pop vfx-slam-in" aria-hidden="true">NATURAL</span>
+            {/if}
+            <div class="card-row" style="position:relative;">
+              <Shockwave trigger={bankerShockwave} color="var(--bet-banker-red)" size={110} />
               {#each bankerHand as card, i}
-                <Card {card} faceUp={true} dealDelay={i * 150} />
+                <div class:third-card-delay={i === 2}>
+                  <Card {card} faceUp={true} dealDelay={i * 150} />
+                </div>
               {/each}
               {#if bankerHand.length === 0}
                 <span class="no-cards">Dealing...</span>
@@ -398,17 +554,33 @@
         </div>
 
         {#if winner}
-          <div class="winner-banner winner-{winnerColor(winner)}">
-            <span class="winner-label geo-title">{winnerLabel(winner)}</span>
-          </div>
+          <!-- Glow wall washing in from winning side -->
+          {#if glowWallActive}
+            <div class="glow-wall glow-wall-{winnerColor(winner)}" aria-hidden="true"></div>
+          {/if}
+          {#key winnerRevealKey}
+            <div class="winner-banner winner-{winnerColor(winner)} vfx-slam-in winner-banner-{winnerColor(winner)}-sweep">
+              {#if winner === 'tie'}
+                <span class="winner-label geo-title vfx-sparkle-text">{winnerLabel(winner)}</span>
+                <span class="tie-payout-label vfx-sparkle-text">8:1</span>
+              {:else}
+                <span class="winner-label geo-title winner-side-label winner-side-{winnerColor(winner)}">{winnerLabel(winner)}</span>
+              {/if}
+            </div>
+          {/key}
         {/if}
 
         <div class="hands-container">
           <div class="hand-area">
             <div class="hand-header">
               <span class="area-label geo-title">Player</span>
-              <span class="hand-value" class:winner-hand={winner === 'player'}>{handTotal(playerHand)}</span>
+              {#key playerNaturalKey}
+                <span class="hand-value" class:winner-hand={winner === 'player'} class:natural-chip={showPlayerNatural}>{handTotal(playerHand)}</span>
+              {/key}
             </div>
+            {#if showPlayerNatural}
+              <span class="natural-pop vfx-slam-in" aria-hidden="true">NATURAL</span>
+            {/if}
             <div class="card-row">
               {#each playerHand as card, i}
                 <Card {card} faceUp={true} dealDelay={i * 80} />
@@ -421,8 +593,13 @@
           <div class="hand-area">
             <div class="hand-header">
               <span class="area-label geo-title">Banker</span>
-              <span class="hand-value" class:winner-hand={winner === 'banker'}>{handTotal(bankerHand)}</span>
+              {#key bankerNaturalKey}
+                <span class="hand-value" class:winner-hand={winner === 'banker'} class:natural-chip={showBankerNatural}>{handTotal(bankerHand)}</span>
+              {/key}
             </div>
+            {#if showBankerNatural}
+              <span class="natural-pop vfx-slam-in" aria-hidden="true">NATURAL</span>
+            {/if}
             <div class="card-row">
               {#each bankerHand as card, i}
                 <Card {card} faceUp={true} dealDelay={i * 80} />
@@ -435,7 +612,10 @@
           {#each state.players as player}
             {@const playerPayout = payouts?.[player.id] ?? 0}
             {@const playerBet = betsPlaced[player.id]}
-            <div class="result-player-block" class:is-me={player.id === pid}>
+            <div class="result-player-block" class:is-me={player.id === pid} style="position:relative;">
+              {#each (floatEntries[player.id] ?? []) as entry (entry.id)}
+                <FloatUp text={entry.text} color={entry.color} />
+              {/each}
               <div class="result-player-header">
                 <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} />
                 {#if playerBet}
@@ -1114,5 +1294,118 @@
     font-size: 0.875rem;
     font-weight: 700;
     color: var(--shop-gold);
+  }
+
+  /* -------------------------------------------------------------------------
+     VFX additions
+     ------------------------------------------------------------------------- */
+
+  /* Third-card drama: dim opposing side while spotlight is on arriving card */
+  .third-card-dim {
+    opacity: 0.45;
+    filter: brightness(0.6);
+    transition: opacity 0.25s ease, filter 0.25s ease;
+  }
+
+  /* Third-card: staggered entrance for card index 2 */
+  .third-card-delay {
+    animation: bac-third-card-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.18s;
+  }
+
+  @keyframes bac-third-card-enter {
+    0%   { transform: scale(0.7) rotate(-6deg); opacity: 0; filter: brightness(1.6); }
+    60%  { transform: scale(1.08) rotate(1deg); opacity: 1; filter: brightness(1.2); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; filter: brightness(1); }
+  }
+
+  /* Natural 8/9: gold shimmer on the score chip */
+  @keyframes bac-natural-shimmer {
+    0%   { box-shadow: 0 0 0px var(--shop-gold); color: var(--shop-gold); }
+    30%  { box-shadow: 0 0 14px var(--shop-gold-50), 0 0 28px var(--shop-gold-30); color: #ffe680; }
+    70%  { box-shadow: 0 0 10px var(--shop-gold-50); color: var(--shop-gold); }
+    100% { box-shadow: none; color: var(--shop-gold); }
+  }
+
+  .natural-chip {
+    animation: bac-natural-shimmer 1.0s ease-out forwards;
+  }
+
+  /* "NATURAL" pop label */
+  .natural-pop {
+    display: block;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.65rem;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--shop-gold);
+    text-align: center;
+    pointer-events: none;
+    line-height: 1;
+  }
+
+  /* Winner banner: slam-in already on element; add side-colored glow */
+  .winner-side-label {
+    font-size: 1.1rem;
+    letter-spacing: 0.14em;
+  }
+
+  .winner-side-blue {
+    color: var(--bet-player-blue);
+    text-shadow: 0 0 12px var(--bet-player-blue-40);
+  }
+
+  .winner-side-red {
+    color: var(--bet-banker-red);
+    text-shadow: 0 0 12px var(--bet-banker-red-40);
+  }
+
+  /* TIE: vfx-sparkle-text already handles shimmer; extra purple tint on banner */
+  .winner-banner.winner-green .winner-label.vfx-sparkle-text,
+  .winner-banner.winner-green .tie-payout-label {
+    background: linear-gradient(90deg, #bf5af2 0%, #e0aaff 30%, #bf5af2 50%, #f8d4ff 65%, #bf5af2 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: vfx-sparkle-sweep 1.4s linear infinite;
+  }
+
+  .tie-payout-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    margin-left: 0.5rem;
+  }
+
+  /* Glow wall: full-width overlay that sweeps across the table from the winning side */
+  .glow-wall {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+    animation: bac-glow-wall-sweep 1.1s ease-out forwards;
+  }
+
+  .glow-wall-blue {
+    background: linear-gradient(90deg, rgba(74, 158, 255, 0.22) 0%, rgba(74, 158, 255, 0.08) 55%, transparent 100%);
+  }
+
+  .glow-wall-red {
+    background: linear-gradient(270deg, rgba(231, 76, 60, 0.22) 0%, rgba(231, 76, 60, 0.08) 55%, transparent 100%);
+  }
+
+  .glow-wall-green {
+    background: radial-gradient(ellipse at center, rgba(191, 90, 242, 0.22) 0%, rgba(191, 90, 242, 0.06) 60%, transparent 100%);
+  }
+
+  @keyframes bac-glow-wall-sweep {
+    0%   { opacity: 0; }
+    18%  { opacity: 1; }
+    70%  { opacity: 0.7; }
+    100% { opacity: 0; }
   }
 </style>

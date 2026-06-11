@@ -10,6 +10,8 @@
   import NameFrame from '$lib/components/NameFrame.svelte';
   import TablePile from '$lib/components/cards/TablePile.svelte';
   import { fireWinConfetti } from '$lib/vfx';
+  import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { currentUser } from '$lib/auth';
 
   const code = $page.params.code!;
@@ -74,31 +76,71 @@
   $effect(() => {
     if (state?.phase === 'round_over' && !vfxFired) {
       vfxFired = true;
-      if (finishOrder[0] === pid) fireWinConfetti();
+      if (finishOrder[0] === pid) {
+        fireWinConfetti();
+        fireGoldBurst();
+      } else if (finishOrder.length > 0 && finishOrder[finishOrder.length - 1] === pid) {
+        fireLoss();
+      }
     }
     if (state?.phase !== 'round_over') vfxFired = false;
+  });
+
+  // VFX: pile shockwave trigger
+  let pileShockwave = $state(0);
+  let prevPileLenShock = pile.length;
+  $effect(() => {
+    const pLen = pile.length;
+    if (pLen > prevPileLenShock) {
+      pileShockwave++;
+    }
+    prevPileLenShock = pLen;
   });
 
   // VFX: combo callout for pairs/triples/quads
   let comboText = $state('');
   let comboClass = $state('');
   let prevPileLen = $state(0);
+  // VFX: combo ring trigger (pair/triple/quad ring burst)
+  let comboRingKey = $state(0);
+  // VFX: quad shake toggle (re-triggers vfx-shake-hard)
+  let quadShakeKey = $state(0);
   $effect(() => {
     const pLen = pile.length;
     if (pLen > prevPileLen && pilePlayCount > 1 && state?.phase === 'playing') {
       if (pilePlayCount === 2) {
         comboText = 'Pair!';
         comboClass = 'combo-pair';
+        comboRingKey++;
       } else if (pilePlayCount === 3) {
         comboText = 'Triple!';
         comboClass = 'combo-triple';
+        comboRingKey++;
       } else if (pilePlayCount >= 4) {
         comboText = 'QUAD!';
         comboClass = 'combo-quad';
+        comboRingKey++;
+        quadShakeKey++;
       }
       setTimeout(() => { comboText = ''; comboClass = ''; }, pilePlayCount >= 4 ? 1500 : pilePlayCount === 3 ? 1200 : 800);
     }
     prevPileLen = pLen;
+  });
+
+  // VFX: finishing player seat gold flash - track which pids have flashed
+  let finishedFlashSet = $state<Set<string>>(new Set());
+  let finishFlashKey = $state(0);
+  let prevFinishLen = finishOrder.length;
+  $effect(() => {
+    const order = finishOrder;
+    if (order.length > prevFinishLen) {
+      const newlyFinished = order[order.length - 1];
+      if (newlyFinished && !finishedFlashSet.has(newlyFinished)) {
+        finishedFlashSet = new Set([...finishedFlashSet, newlyFinished]);
+        finishFlashKey++;
+      }
+    }
+    prevFinishLen = order.length;
   });
 
   const PRESIDENT_ORDER: Record<string, number> = {
@@ -253,44 +295,60 @@
         <!-- Player bar -->
         <div class="player-bar">
           {#each state.players as player}
-            <PlayerSeat
-              name={player.name}
-              cardCount={player.cardCount}
-              active={state.currentTurn === player.id}
-              connected={player.connected}
-              title={titles[player.id]}
-              finished={finishOrder.includes(player.id)}
-              finishPosition={finishOrder.includes(player.id) ? finishOrder.indexOf(player.id) : undefined}
-              passed={passedPlayers.has(player.id)}
-              frameSvg={player.frameSvg}
-              emblemSvg={player.emblemSvg}
-              nameColour={player.nameColour}
-              titleText={null}
-              isHost={player.isHost}
-              isBot={player.isBot}
-              cardBackStyle={myCardBackStyle}
-            />
+            {#key finishedFlashSet.has(player.id) ? player.id + '-flashed' : player.id}
+              <div class="seat-wrap" class:vfx-flash-gold={finishedFlashSet.has(player.id)}>
+                <PlayerSeat
+                  name={player.name}
+                  cardCount={player.cardCount}
+                  active={state.currentTurn === player.id}
+                  connected={player.connected}
+                  title={titles[player.id]}
+                  finished={finishOrder.includes(player.id)}
+                  finishPosition={finishOrder.includes(player.id) ? finishOrder.indexOf(player.id) : undefined}
+                  passed={passedPlayers.has(player.id)}
+                  frameSvg={player.frameSvg}
+                  emblemSvg={player.emblemSvg}
+                  nameColour={player.nameColour}
+                  titleText={null}
+                  isHost={player.isHost}
+                  isBot={player.isBot}
+                  cardBackStyle={myCardBackStyle}
+                />
+              </div>
+            {/key}
           {/each}
         </div>
 
         <!-- Pile -->
-        <TablePile
-          cards={pile}
-          mode="stack"
-          label="Table"
-          emptyText="Empty - play anything"
-        />
+        {#key quadShakeKey}
+          <div class="pile-wrap" class:vfx-shake-hard={quadShakeKey > 0}>
+            <div class="pile-shockwave-anchor">
+              <Shockwave trigger={pileShockwave} color="var(--accent)" size={90} />
+              <TablePile
+                cards={pile}
+                mode="stack"
+                label="Table"
+                emptyText="Empty - play anything"
+              />
+            </div>
+          </div>
+        {/key}
         {#if pilePlayCount > 0}
           <div class="pile-info">Play {pilePlayCount} card{pilePlayCount > 1 ? 's' : ''}</div>
         {/if}
 
-        <!-- Combo VFX callout -->
+        <!-- Combo VFX callout + ring -->
         {#if comboText}
-          <div class="combo-callout {comboClass}">{comboText}</div>
+          <div class="combo-callout {comboClass}">
+            {comboText}
+            {#key comboRingKey}
+              <span class="combo-ring" class:combo-ring-quad={comboClass === 'combo-quad'}></span>
+            {/key}
+          </div>
         {/if}
 
         <!-- My hand -->
-        <div class="hand-area">
+        <div class="hand-area" class:vfx-breathe={isMyTurn}>
           <div class="hand-label geo-title">Your Hand ({myHand.length})</div>
           <Hand
             cards={myHand}
@@ -322,10 +380,11 @@
             {@const role = titles[fpid]?.toUpperCase?.() ?? ''}
             {@const roleClass = role === 'PRESIDENT' ? 'role-president' : role === 'SCUM' ? 'role-scum' : 'role-neutral'}
             {@const isWinner = i === 0}
+            {@const isLast = i === finishOrder.length - 1 && finishOrder.length > 1}
             {@const isMe = fpid === pid}
-            <div class="result-row {roleClass}" class:result-winner={isWinner}>
+            <div class="result-row {roleClass}" class:result-winner={isWinner} class:result-loser={isLast}>
               <span class="result-position">#{i + 1}</span>
-              <span class="result-name">{playerName(fpid)}</span>
+              <span class="result-name" class:vfx-sparkle-text={isWinner}>{playerName(fpid)}</span>
               <div class="result-right">
                 <span class="result-title {roleClass}">{titles[fpid]}</span>
                 {#if isMe}
@@ -782,4 +841,79 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* VFX: pile shockwave anchor */
+  .pile-wrap {
+    position: relative;
+  }
+
+  .pile-shockwave-anchor {
+    position: relative;
+  }
+
+  /* VFX: seat wrap for gold flash */
+  .seat-wrap {
+    border-radius: 4px;
+  }
+
+  /* VFX: combo ring burst */
+  .combo-callout {
+    position: relative;
+  }
+
+  .combo-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60px;
+    height: 60px;
+    margin-top: -30px;
+    margin-left: -30px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    pointer-events: none;
+    animation: vfx-ring 600ms ease-out forwards;
+  }
+
+  .combo-ring-quad {
+    width: 100px;
+    height: 100px;
+    margin-top: -50px;
+    margin-left: -50px;
+    border: 3px solid var(--victor-gold);
+    box-shadow: 0 0 12px var(--victor-gold-glow);
+    animation: vfx-ring 800ms ease-out forwards, pres-quad-ring-glow 800ms ease-out forwards;
+  }
+
+  @keyframes pres-quad-ring-glow {
+    0%   { opacity: 1; box-shadow: 0 0 20px var(--victor-gold-glow); }
+    100% { opacity: 0; box-shadow: 0 0 0px transparent; }
+  }
+
+  /* VFX: QUAD gold flash overlay on combo callout */
+  .combo-quad {
+    position: relative;
+  }
+
+  .combo-quad::after {
+    content: '';
+    position: absolute;
+    inset: -8px -12px;
+    border-radius: 4px;
+    pointer-events: none;
+    animation: vfx-flash-gold-kf 600ms ease-out forwards;
+  }
+
+  /* VFX: result-loser subtle grey puff indicator */
+  .result-loser {
+    opacity: 0.75;
+  }
+
+  /* VFX: hand-area breathe border */
+  .hand-area.vfx-breathe {
+    border-radius: 4px;
+    outline: 1px solid var(--accent);
+    outline-offset: 3px;
+    animation: vfx-breathe 2s ease-in-out infinite;
+  }
 </style>

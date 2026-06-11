@@ -8,6 +8,8 @@
   import { fireWinConfetti } from '$lib/vfx';
   import { currentUser } from '$lib/auth';
   import NameFrame from '$lib/components/NameFrame.svelte';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/connect-four');
@@ -74,6 +76,73 @@
       fireWinConfetti();
     }
     if (state?.phase !== 'round_over') vfxFired = false;
+  });
+
+  // VFX: piece drop — detect newly placed cell by diffing board
+  // landedCell: [row, col] of the just-dropped piece, or null
+  let landedCell = $state<[number, number] | null>(null);
+  let shockwaveTrigger = $state(0);
+  let prevBoard = $state<number[][]>([]);
+
+  $effect(() => {
+    const b = board;
+    const prev = prevBoard;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    if (b.length && prev.length) {
+      let found = false;
+      for (let r = 0; r < b.length && !found; r++) {
+        for (let c = 0; c < b[r].length && !found; c++) {
+          if (b[r][c] !== 0 && (prev[r]?.[c] ?? 0) === 0) {
+            landedCell = [r, c];
+            shockwaveTrigger++;
+            timerId = setTimeout(() => { landedCell = null; }, 500);
+            found = true;
+          }
+        }
+      }
+    }
+    prevBoard = b.map(row => [...row]);
+    return () => { if (timerId !== null) clearTimeout(timerId); };
+  });
+
+  // VFX: win cascade — key per winCells identity so cells re-animate each round
+  let winCascadeKey = $state(0);
+  let prevWinCells = $state<string>('');
+  $effect(() => {
+    const key = JSON.stringify(winCells);
+    if (key !== prevWinCells) {
+      prevWinCells = key;
+      if (winCells && winCells.length > 0) winCascadeKey++;
+    }
+  });
+
+  // VFX: draw — grey pulse trigger
+  let drawPulseKey = $state(0);
+  let prevIsDraw = $state(false);
+  $effect(() => {
+    const d = isDraw;
+    if (d && !prevIsDraw) drawPulseKey++;
+    prevIsDraw = d;
+  });
+
+  // VFX: score FloatUp — track per-player previous scores
+  let scoreFloats = $state<{ id: number; playerId: string }[]>([]);
+  let prevScores = $state<Record<string, number>>({});
+  let scoreFloatTimers: ReturnType<typeof setTimeout>[] = [];
+  $effect(() => {
+    const s = scores;
+    for (const pid2 of Object.keys(s)) {
+      if ((prevScores[pid2] ?? 0) < s[pid2]) {
+        const id = Date.now() + Math.random();
+        scoreFloats = [...scoreFloats, { id, playerId: pid2 }];
+        const tid = setTimeout(() => {
+          scoreFloats = scoreFloats.filter(f => f.id !== id);
+        }, 950);
+        scoreFloatTimers.push(tid);
+      }
+    }
+    prevScores = { ...s };
+    return () => { scoreFloatTimers.forEach(t => clearTimeout(t)); scoreFloatTimers = []; };
   });
 
   // Hover column for preview
@@ -199,7 +268,7 @@
             <span class="waiting-turn">{playerName(state.currentTurn)}'s turn</span>
           {:else if isMyTurn}
             <span class="your-turn">Your turn!</span>
-            <span class="piece-indicator piece-{myPiece}"></span>
+            <span class="piece-indicator piece-{myPiece} vfx-breathe"></span>
           {:else}
             <span class="waiting-turn">Waiting for {playerName(state.currentTurn)}...</span>
           {/if}
@@ -209,10 +278,13 @@
         <div class="score-bar">
           {#each state.players as player}
             {@const piece = state.tableState.pieces[player.id]}
-            <div class="score-item" class:active={state.currentTurn === player.id} aria-current={(state.currentTurn === player.id) ? 'true' : 'false'}>
+            <div class="score-item" class:active={state.currentTurn === player.id} aria-current={(state.currentTurn === player.id) ? 'true' : 'false'} style="position:relative;">
               <span class="piece-dot piece-{piece}"></span>
               <NameFrame name={player.name + (player.id === pid ? ' (you)' : '')} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} titleText={null} isHost={player.isHost} isBot={player.isBot} />
               <span class="score-value">{scores[player.id] ?? 0}</span>
+              {#each scoreFloats.filter(f => f.playerId === player.id) as float (float.id)}
+                <FloatUp text="+1" color="var(--felt-green-glow-60)" />
+              {/each}
             </div>
           {/each}
         </div>
@@ -225,6 +297,8 @@
             {#each board as row, rowIdx}
               {#each row as cell, colIdx}
                 {@const preview = isMyTurn && hoverCol === colIdx && cell === 0 && getPreviewRow(colIdx) === rowIdx}
+                {@const isLanded = landedCell?.[0] === rowIdx && landedCell?.[1] === colIdx}
+                {@const isHoverCol = isMyTurn && hoverCol === colIdx}
                 <button
                   class="cell"
                   class:cell-1={cell === 1}
@@ -235,11 +309,15 @@
                   class:preview-1={preview && myPiece === 1}
                   class:preview-2={preview && myPiece === 2}
                   class:clickable={isMyTurn && cell === 0}
+                  class:hover-col={isHoverCol}
                   onclick={() => dropPiece(colIdx)}
                   onmouseenter={() => { if (isMyTurn) hoverCol = colIdx; }}
                   aria-label="Column {colIdx + 1}, Row {rowIdx + 1}"
                 >
-                  <span class="piece"></span>
+                  <span class="piece" class:piece-land={isLanded}></span>
+                  {#if isLanded}
+                    <Shockwave trigger={shockwaveTrigger} color="var(--highlight-white-50)" size={48} />
+                  {/if}
                 </button>
               {/each}
             {/each}
@@ -261,20 +339,27 @@
 
         <!-- Show final board -->
         <div class="board-wrapper">
-          <div class="board">
-            {#each board as row, rowIdx}
-              {#each row as cell, colIdx}
-                <div
-                  class="cell"
-                  class:cell-1={cell === 1}
-                  class:cell-2={cell === 2}
-                  class:win-cell={isWinCell(rowIdx, colIdx)}
-                >
-                  <span class="piece"></span>
-                </div>
-              {/each}
-            {/each}
-          </div>
+          {#key drawPulseKey}
+            <div class="board" class:board-draw-pulse={isDraw}>
+              {#key winCascadeKey}
+                {#each board as row, rowIdx}
+                  {#each row as cell, colIdx}
+                    {@const winIdx = winCells ? winCells.findIndex(([r, c]) => r === rowIdx && c === colIdx) : -1}
+                    <div
+                      class="cell"
+                      class:cell-1={cell === 1}
+                      class:cell-2={cell === 2}
+                      class:win-cell={winIdx !== -1}
+                      class:win-cascade={winIdx !== -1}
+                      style={winIdx !== -1 ? `--win-delay:${winIdx * 120}ms` : ''}
+                    >
+                      <span class="piece"></span>
+                    </div>
+                  {/each}
+                {/each}
+              {/key}
+            </div>
+          {/key}
         </div>
 
         <!-- Score bar -->
@@ -751,4 +836,62 @@
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
+
+  /* ---- VFX: piece drop squash-and-stretch ---- */
+  @keyframes piece-land {
+    0%   { transform: scaleX(1.22) scaleY(0.7); }
+    35%  { transform: scaleX(0.88) scaleY(1.14); }
+    60%  { transform: scaleX(1.05) scaleY(0.96); }
+    80%  { transform: scaleX(0.98) scaleY(1.02); }
+    100% { transform: scaleX(1) scaleY(1); }
+  }
+
+  .piece.piece-land {
+    animation: piece-land 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* ---- VFX: hover column beam ---- */
+  .cell.hover-col {
+    background: var(--board-blue-mid);
+  }
+
+  .cell.hover-col::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at 50% 30%, rgba(255,255,255,0.13) 0%, transparent 70%);
+    pointer-events: none;
+    animation: col-beam-pulse 1s ease-in-out infinite alternate;
+  }
+
+  @keyframes col-beam-pulse {
+    0%   { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+
+  /* ---- VFX: win cascade ---- */
+  /* Fires on the cell wrapper so it does not fight winPulse on .piece */
+  .cell.win-cascade {
+    animation: win-cascade-ignite 380ms ease-out both;
+    animation-delay: var(--win-delay, 0ms);
+  }
+
+  @keyframes win-cascade-ignite {
+    0%   { filter: brightness(1); }
+    40%  { filter: brightness(1.7) drop-shadow(0 0 10px var(--felt-green-glow-60)); }
+    70%  { filter: brightness(1.25) drop-shadow(0 0 5px var(--felt-green-glow-30)); }
+    100% { filter: brightness(1); }
+  }
+
+  /* ---- VFX: draw board desaturate pulse ---- */
+  @keyframes draw-pulse {
+    0%   { filter: saturate(1); }
+    40%  { filter: saturate(0.08) brightness(0.85); }
+    100% { filter: saturate(1); }
+  }
+
+  .board-draw-pulse {
+    animation: draw-pulse 900ms ease-in-out both;
+  }
 </style>

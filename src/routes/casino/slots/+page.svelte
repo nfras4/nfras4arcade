@@ -3,6 +3,8 @@
   import { isLoggedIn, userStats, currentUser } from '$lib/auth';
   import { SYMBOLS, WILD_ID } from '$lib/slots/symbols';
   import { PAYLINES, NUM_REELS, NUM_ROWS } from '$lib/slots/paylines';
+  import { fireGoldBurst } from '$lib/vfx/burst';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
 
   // Randomized initial grid (each reel independent)
   function randomGrid(): number[][] {
@@ -81,6 +83,20 @@
   // Track which reels just settled (for bounce animation)
   let reelSettling = $state([false, false, false, false, false]);
 
+  // VFX: tiered win celebration (0=none, 1=small, 2=big, 3=massive)
+  let winTier = $state(0);
+  let winBannerKey = $state(0);
+  let cabinetShakeKey = $state(0);
+  // VFX: payline draw-in re-trigger
+  let paylineDrawKey = $state(0);
+  // VFX: respin pop
+  let respinPopVisible = $state(false);
+  let respinPopKey = $state(0);
+  // VFX: reel shockwave triggers (increment to fire)
+  let reelShockwaveTriggers = $state([0, 0, 0, 0, 0]);
+  // VFX: wild beam sweep reel indices
+  let wildBeamReels = $state<Set<number>>(new Set());
+
   // Rapidly cycle random symbols during spin
   function startSpinDisplay() {
     if (spinInterval) clearInterval(spinInterval);
@@ -134,6 +150,9 @@
     expandGlow = new Set();
     showWinBanner = false;
     activePaylines = [];
+    winTier = 0;
+    wildBeamReels = new Set();
+    respinPopVisible = false;
 
     // Optimistic deduct
     chips -= totalBet;
@@ -171,6 +190,7 @@
       grid[r] = baseGrid[r];
       reelSpinning[r] = false;
       reelSettling[r] = true;
+      reelShockwaveTriggers[r]++;
       playReelStop();
       // Clear settle after animation completes
       setTimeout(() => { reelSettling[r] = false; }, 300);
@@ -183,12 +203,22 @@
     if (data.expandedReels.length > 0) {
       for (const reelIdx of data.expandedReels) {
         expandGlow = new Set([...expandGlow, reelIdx]);
+        // VFX: vertical golden beam on this reel
+        wildBeamReels = new Set([...wildBeamReels, reelIdx]);
+        setTimeout(() => {
+          wildBeamReels = new Set([...wildBeamReels].filter(i => i !== reelIdx));
+        }, 700);
         playWildExpand();
         grid[reelIdx] = [WILD_ID, WILD_ID, WILD_ID];
         await sleep(500);
       }
 
       for (const step of data.respinHistory) {
+        // VFX: AGAIN! amber pop before respin starts
+        respinPopKey++;
+        respinPopVisible = true;
+        setTimeout(() => { respinPopVisible = false; }, 800);
+
         // Spin non-locked reels
         for (let r = 1; r <= 3; r++) {
           if (!expandGlow.has(r)) {
@@ -202,6 +232,7 @@
           if (reelSpinning[r]) {
             grid[r] = stepGrid[r];
             reelSpinning[r] = false;
+            reelShockwaveTriggers[r]++;
             playReelStop();
             await sleep(150);
           }
@@ -211,6 +242,11 @@
         for (const reelIdx of newExpanded) {
           if (!expandGlow.has(reelIdx)) {
             expandGlow = new Set([...expandGlow, reelIdx]);
+            // VFX: vertical golden beam on newly expanded reel
+            wildBeamReels = new Set([...wildBeamReels, reelIdx]);
+            setTimeout(() => {
+              wildBeamReels = new Set([...wildBeamReels].filter(i => i !== reelIdx));
+            }, 700);
             playWildExpand();
             grid[reelIdx] = [WILD_ID, WILD_ID, WILD_ID];
             await sleep(500);
@@ -234,7 +270,25 @@
     if (wins.length > 0) {
       playWin();
       showWinBanner = true;
+      winBannerKey++;
       countUpWin(totalWin);
+
+      // VFX: tiered win celebration based on win-to-bet ratio
+      const ratio = totalBet > 0 ? totalWin / totalBet : 0;
+      if (ratio >= 15) {
+        winTier = 3;
+        cabinetShakeKey++;
+        fireGoldBurst({ x: 0.3, y: 0.45 });
+        setTimeout(() => fireGoldBurst({ x: 0.7, y: 0.45 }), 220);
+      } else if (ratio >= 5) {
+        winTier = 2;
+        fireGoldBurst({ x: 0.5, y: 0.45 });
+      } else {
+        winTier = 1;
+      }
+
+      // VFX: payline draw-in re-trigger key
+      paylineDrawKey++;
 
       // Highlight winning cells
       const highlighted = new Set<string>();
@@ -251,6 +305,7 @@
         winHighlight = new Set();
         showWinBanner = false;
         activePaylines = [];
+        winTier = 0;
       }, 4000);
     }
 
@@ -302,10 +357,18 @@
     {:else}
 
       <!-- Win Display -->
-      <div class="win-display" class:win-active={showWinBanner}>
+      <div class="win-display" class:win-active={showWinBanner} class:vfx-flash-gold={winTier === 1 && showWinBanner}>
         {#if showWinBanner}
-          <span class="win-text">WIN</span>
-          <span class="win-amount">{displayedWin}</span>
+          {#if winTier === 3}
+            {#key winBannerKey}
+              <span class="win-text win-text-jackpot vfx-slam-in">JACKPOT</span>
+            {/key}
+          {:else}
+            <span class="win-text">WIN</span>
+          {/if}
+          {#key winBannerKey}
+            <span class="win-amount" class:vfx-sparkle-text={winCountUp}>{displayedWin}</span>
+          {/key}
           <span class="win-chips">chips</span>
         {:else if hasSpun && lastWin === 0}
           <span class="win-text no-win">No win</span>
@@ -315,14 +378,28 @@
       </div>
 
       <!-- Reel Grid -->
-      <div class="reel-frame">
+      {#key cabinetShakeKey}
+        <div class="reel-frame" class:vfx-shake-hard={winTier === 3}>
         <!-- Reel depth fades -->
         <div class="reel-fade reel-fade-top"></div>
         <div class="reel-fade reel-fade-bottom"></div>
 
+        <!-- Respin AGAIN! pop -->
+        {#key respinPopKey}
+          {#if respinPopVisible}
+            <div class="respin-pop vfx-slam-in" aria-live="polite">AGAIN!</div>
+          {/if}
+        {/key}
+
         <div class="reel-grid">
           {#each { length: NUM_REELS } as _, reel}
             <div class="reel-col" class:expanding={expandGlow.has(reel)} class:reel-spinning={reelSpinning[reel]} class:reel-settling={reelSettling[reel]}>
+              <!-- Wild beam sweep overlay -->
+              {#if wildBeamReels.has(reel)}
+                <div class="wild-beam" aria-hidden="true"></div>
+              {/if}
+              <!-- Reel settle shockwave -->
+              <Shockwave trigger={reelShockwaveTriggers[reel]} color="rgba(200,180,120,0.6)" size={80} />
               {#each { length: NUM_ROWS } as _, row}
                 {@const symId = getDisplaySymbol(reel, row)}
                 {@const sym = SYMBOLS[symId]}
@@ -411,35 +488,42 @@
 
         <!-- Payline overlay for winning lines -->
         {#if activePaylines.length > 0}
-          <svg class="payline-overlay" viewBox="0 0 500 300" preserveAspectRatio="none">
-            {#each activePaylines as pIdx}
-              {@const payline = PAYLINES[pIdx]}
-              {@const color = PAYLINE_COLORS[pIdx]}
-              <polyline
-                points={payline.map((row, reel) => `${reel * 100 + 50},${row * 100 + 50}`).join(' ')}
-                stroke={color}
-                stroke-width="6"
-                fill="none"
-                opacity="0.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              <polyline
-                points={payline.map((row, reel) => `${reel * 100 + 50},${row * 100 + 50}`).join(' ')}
-                stroke="white"
-                stroke-width="2"
-                fill="none"
-                opacity="0.3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-              {#each payline as row, reel}
-                <circle cx={reel * 100 + 50} cy={row * 100 + 50} r="10" fill={color} opacity="0.7"/>
+          {#key paylineDrawKey}
+            <svg class="payline-overlay" viewBox="0 0 500 300" preserveAspectRatio="none">
+              {#each activePaylines as pIdx, lineIdx}
+                {@const payline = PAYLINES[pIdx]}
+                {@const color = PAYLINE_COLORS[pIdx]}
+                <polyline
+                  class="payline-stroke"
+                  style="--payline-delay: {lineIdx * 80}ms"
+                  points={payline.map((row, reel) => `${reel * 100 + 50},${row * 100 + 50}`).join(' ')}
+                  stroke={color}
+                  stroke-width="6"
+                  fill="none"
+                  opacity="0.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <polyline
+                  class="payline-stroke"
+                  style="--payline-delay: {lineIdx * 80}ms"
+                  points={payline.map((row, reel) => `${reel * 100 + 50},${row * 100 + 50}`).join(' ')}
+                  stroke="white"
+                  stroke-width="2"
+                  fill="none"
+                  opacity="0.3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                {#each payline as row, reel}
+                  <circle cx={reel * 100 + 50} cy={row * 100 + 50} r="10" fill={color} opacity="0.7"/>
+                {/each}
               {/each}
-            {/each}
-          </svg>
+            </svg>
+          {/key}
         {/if}
       </div>
+      {/key}
 
       <!-- Payline labels -->
       {#if activePaylines.length > 0}
@@ -1167,5 +1251,99 @@
     .sym-svg { width: 60%; height: 60%; }
     .reel-frame { padding: 0.35rem; }
     .win-amount { font-size: 1.4rem; }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* VFX additions                                                        */
+  /* ------------------------------------------------------------------ */
+
+  /* Jackpot text in win display */
+  .win-text-jackpot {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #f0c030;
+    text-shadow: 0 0 16px rgba(240, 192, 48, 0.7);
+  }
+
+  /* Win count-up sparkle: vfx-sparkle-text from vfx.css overrides text-fill,
+     so we keep font styles on the wrapper and let the class handle shimmer.
+     Only active while winCountUp=true (class toggled in markup). */
+  .win-amount.vfx-sparkle-text {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  /* Respin AGAIN! amber pop */
+  .respin-pop {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    pointer-events: none;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f5ad3a;
+    text-shadow: 0 0 20px rgba(245, 173, 58, 0.8), 0 0 40px rgba(245, 173, 58, 0.4);
+    white-space: nowrap;
+  }
+
+  /* Wild golden beam sweep */
+  .wild-beam {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .wild-beam::before {
+    content: '';
+    position: absolute;
+    top: -10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40%;
+    height: 120%;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(240, 192, 48, 0.55) 20%,
+      rgba(255, 240, 160, 0.75) 50%,
+      rgba(240, 192, 48, 0.55) 80%,
+      transparent 100%
+    );
+    filter: blur(6px);
+    animation: wildBeamSweep 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes wildBeamSweep {
+    0%   { opacity: 0; transform: translateX(-50%) scaleY(0.2); }
+    25%  { opacity: 1; transform: translateX(-50%) scaleY(1); }
+    80%  { opacity: 0.9; transform: translateX(-50%) scaleY(1); }
+    100% { opacity: 0; transform: translateX(-50%) scaleY(1); }
+  }
+
+  /* Payline stroke draw-in via stroke-dasharray */
+  .payline-stroke {
+    stroke-dasharray: 600;
+    stroke-dashoffset: 600;
+    animation: paylineDraw 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--payline-delay, 0ms);
+  }
+
+  @keyframes paylineDraw {
+    from { stroke-dashoffset: 600; }
+    to   { stroke-dashoffset: 0; }
   }
 </style>

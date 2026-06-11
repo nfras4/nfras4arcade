@@ -10,6 +10,9 @@
   import NameFrame from '$lib/components/NameFrame.svelte';
   import TablePile from '$lib/components/cards/TablePile.svelte';
   import { fireWinConfetti } from '$lib/vfx';
+  import { fireGoldBurst } from '$lib/vfx/burst';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
+  import Spotlight from '$lib/vfx/Spotlight.svelte';
   import { currentUser } from '$lib/auth';
 
   const code = $page.params.code!;
@@ -164,6 +167,73 @@
     state?.turnOrder?.some((id: string) => (scores[id] ?? 0) >= 500)
   );
 
+  // VFX: queen-in-trick vignette key (re-triggers CSS animation on change)
+  let queenVignetteKey = $state(0);
+  let prevQueenInTrick = false;
+  $effect(() => {
+    const q = queenInTrick;
+    if (q && !prevQueenInTrick) queenVignetteKey++;
+    prevQueenInTrick = q;
+  });
+
+  // VFX: trick winner banner — detect queen in completed trick
+  let trickHadQueen = $derived(
+    displayTrick.some((tc: any) => tc.card.suit === 'spades' && tc.card.rank === 'Q')
+  );
+
+  // VFX: banner slam key — re-triggers animation each time a new trick winner appears
+  let bannerSlamKey = $state(0);
+  let prevDisplayTrickWinner: string | null = null;
+  $effect(() => {
+    const w = displayTrickWinner;
+    if (w && w !== prevDisplayTrickWinner) bannerSlamKey++;
+    prevDisplayTrickWinner = w;
+  });
+
+  // VFX: shoot the moon — fire gold burst + show spotlight once per moon event
+  let moonVfxFired = $state(false);
+  let prevAwaitingMoonChoice: string | null = null;
+  $effect(() => {
+    const m = awaitingMoonChoice;
+    if (m && !prevAwaitingMoonChoice) {
+      moonVfxFired = true;
+      fireGoldBurst({ x: 0.5, y: 0.4 });
+      const t = setTimeout(() => { moonVfxFired = false; }, 1200);
+      prevAwaitingMoonChoice = m;
+      return () => clearTimeout(t);
+    }
+    if (!m) { prevAwaitingMoonChoice = null; moonVfxFired = false; }
+    prevAwaitingMoonChoice = m;
+  });
+
+  // VFX: round_over — FloatUp score deltas. Map playerId -> FloatUp instances.
+  let floatUpItems: Array<{ id: number; text: string; color: string; pid: string }> = $state([]);
+  let floatUpCounter = 0;
+  let prevRoundScores: Record<string, number> = {};
+  $effect(() => {
+    const phase = displayPhase;
+    const rs = roundScores;
+    if (phase === 'round_over') {
+      const ids = Object.keys(rs);
+      if (ids.length > 0 && JSON.stringify(rs) !== JSON.stringify(prevRoundScores)) {
+        prevRoundScores = { ...rs };
+        ids.forEach((id) => {
+          const delta = rs[id] ?? 0;
+          const text = delta === 0 ? '+0' : `+${delta}`;
+          const color = delta === 0 ? 'var(--green, #3dd68c)' : 'var(--danger-red, #e74c3c)';
+          const item = { id: floatUpCounter++, text, color, pid: id };
+          floatUpItems = [...floatUpItems, item];
+          const t = setTimeout(() => {
+            floatUpItems = floatUpItems.filter((f) => f.id !== item.id);
+          }, 950);
+          return () => clearTimeout(t);
+        });
+      }
+    } else {
+      prevRoundScores = {};
+    }
+  });
+
   // VFX: confetti when you win (lowest score at game over)
   let vfxFired = $state(false);
   $effect(() => {
@@ -269,6 +339,11 @@
 
         <!-- Shoot the Moon Decision -->
         {#if awaitingMoonChoice}
+          <Spotlight active={moonVfxFired}>
+            {#key moonVfxFired}
+              <div class="moon-shot-slam vfx-slam-in">MOON SHOT</div>
+            {/key}
+          </Spotlight>
           {#if isMoonChooser}
             <div class="moon-panel">
               <h2 class="geo-title phase-title">You shot the moon!</h2>
@@ -323,26 +398,38 @@
 
           <!-- Current trick (or completed trick during transition) -->
           {#if showingCompletedTrick && displayTrick.length > 0}
-            <div class="trick-result-banner">Won by {playerName(displayTrickWinner!)}</div>
-            <TablePile
-              mode="trick"
-              label="Trick Complete"
-              warning={displayTrick.some((tc: any) => tc.card.suit === 'spades' && tc.card.rank === 'Q')}
-              warningText="Queen of Spades in play!"
-              trickCards={displayTrick}
-              {playerName}
-              emptyText=""
-            />
+            {#key bannerSlamKey}
+              <div
+                class="trick-result-banner vfx-slam-in"
+                class:trick-banner-queen={trickHadQueen}
+                class:vfx-shake-hard={trickHadQueen}
+              >Won by {playerName(displayTrickWinner!)}</div>
+            {/key}
+            <div class="trick-area-wrap" class:queen-aura={trickHadQueen}>
+              <TablePile
+                mode="trick"
+                label="Trick Complete"
+                warning={displayTrick.some((tc: any) => tc.card.suit === 'spades' && tc.card.rank === 'Q')}
+                warningText="Queen of Spades in play!"
+                trickCards={displayTrick}
+                {playerName}
+                emptyText=""
+              />
+            </div>
           {:else}
-            <TablePile
-              mode="trick"
-              label="Current Trick"
-              warning={queenInTrick}
-              warningText="Queen of Spades in play!"
-              trickCards={currentTrick}
-              {playerName}
-              emptyText={isMyTurn ? 'Lead any card' : 'Waiting for lead...'}
-            />
+            {#key queenVignetteKey}
+              <div class="trick-area-wrap" class:queen-vignette={queenInTrick}>
+                <TablePile
+                  mode="trick"
+                  label="Current Trick"
+                  warning={queenInTrick}
+                  warningText="Queen of Spades in play!"
+                  trickCards={currentTrick}
+                  {playerName}
+                  emptyText={isMyTurn ? 'Lead any card' : 'Waiting for lead...'}
+                />
+              </div>
+            {/key}
           {/if}
 
           <!-- My hand -->
@@ -376,7 +463,7 @@
 
         <div class="round-summary">
           {#each state.turnOrder as id}
-            <div class="summary-row">
+            <div class="summary-row" style="position:relative">
               <span class="summary-name">{playerName(id)}</span>
               <div class="summary-penalties">
                 {#each penaltyCardsForPlayer(id) as card}
@@ -387,6 +474,9 @@
               </div>
               <span class="summary-round-score">+{roundScores[id] ?? 0}</span>
               <span class="summary-total">Total: {scores[id] ?? 0}</span>
+              {#each floatUpItems.filter((f) => f.pid === id) as fi (fi.id)}
+                <FloatUp text={fi.text} color={fi.color} />
+              {/each}
             </div>
           {/each}
         </div>
@@ -394,6 +484,7 @@
         {#if gameEnding}
           <div class="game-ending-notice">
             <p class="ending-text">A player has reached 500 points!</p>
+            <div class="final-round-banner vfx-sparkle-text">FINAL ROUND</div>
           </div>
         {/if}
 
@@ -876,4 +967,62 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* ---- VFX: queen vignette pulse ---- */
+  @keyframes queen-vignette-pulse {
+    0%   { box-shadow: inset 0 0 0px rgba(139, 0, 0, 0); }
+    30%  { box-shadow: inset 0 0 48px rgba(139, 0, 0, 0.55); }
+    60%  { box-shadow: inset 0 0 28px rgba(139, 0, 0, 0.35); }
+    100% { box-shadow: inset 0 0 36px rgba(139, 0, 0, 0.45); }
+  }
+
+  .trick-area-wrap {
+    border-radius: 4px;
+    position: relative;
+  }
+
+  .trick-area-wrap.queen-vignette {
+    animation: queen-vignette-pulse 1.8s ease-in-out infinite;
+    border-radius: 4px;
+  }
+
+  /* ---- VFX: queen-ate banner flash + aura ---- */
+  .trick-result-banner.trick-banner-queen {
+    background: rgba(139, 0, 0, 0.18);
+    border-color: rgba(233, 69, 96, 0.6);
+    color: var(--danger-red, #e74c3c);
+  }
+
+  .trick-area-wrap.queen-aura {
+    box-shadow: inset 0 0 32px rgba(139, 0, 0, 0.4), 0 0 16px rgba(139, 0, 0, 0.3);
+    border-radius: 4px;
+  }
+
+  /* ---- VFX: MOON SHOT slam text ---- */
+  .moon-shot-slam {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: clamp(2.2rem, 8vw, 3.5rem);
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--yellow, #eab308);
+    text-shadow:
+      0 0 18px rgba(240, 192, 48, 0.9),
+      0 0 40px rgba(240, 192, 48, 0.5);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* ---- VFX: FINAL ROUND sparkle banner ---- */
+  .final-round-banner {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    text-align: center;
+    margin-top: 0.5rem;
+    pointer-events: none;
+    user-select: none;
+  }
 </style>

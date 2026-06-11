@@ -7,6 +7,9 @@
   import { writable } from 'svelte/store';
   import { isLoggedIn, userStats } from '$lib/auth';
   import { fireWinConfetti } from '$lib/vfx';
+  import { fireGoldBurst } from '$lib/vfx/burst';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/roulette');
@@ -25,6 +28,19 @@
   let showResult = $state(false);
   let displayedChips = $state(0);
   let chipAnimating = $state(false);
+
+  // VFX state
+  let resultStrobeKey = $state(0);
+  let resultShockwave = $state(0);
+  let greenMegaKey = $state(0);
+  let greenShockwave = $state(0);
+  let chipPlinkKey = $state(0);
+  let floatUps = $state<{ id: number; text: string; color: string }[]>([]);
+  let historyPopKey = $state(0);
+  let prevHistoryLen = 0;
+  let prevBetTotal = 0;
+  let prevShowResult = false;
+  let prevMyChipsVfx = 0;
 
   // Countdown timers
   let timeLeft = $state(0);
@@ -82,6 +98,85 @@
     }
     frame();
   }
+
+  // VFX: result strobe + shockwave + green mega-moment + float-up payout
+  $effect(() => {
+    const show = showResult;
+    const res = result;
+    const payout = myPayout();
+    const betTotal = myBetTotal;
+
+    if (show && !prevShowResult) {
+      prevShowResult = true;
+      // (2) Strobe winning cell 3x then lock with shockwave
+      resultStrobeKey++;
+      const t1 = setTimeout(() => { resultShockwave++; }, 400);
+
+      // (3) GREEN mega-moment
+      if (res === 'green') {
+        greenMegaKey++;
+        const t2 = setTimeout(() => { greenShockwave++; }, 200);
+        // Emerald gold burst layered on top of win confetti
+        const t3 = setTimeout(() => { fireGoldBurst({ x: 0.5, y: 0.5 }); }, 300);
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      }
+
+      return () => { clearTimeout(t1); };
+    }
+
+    prevShowResult = show;
+  });
+
+  // VFX: float-up payout label over chip counter
+  $effect(() => {
+    const show = showResult;
+    const chips = myChips;
+
+    if (show && chips !== prevMyChipsVfx && prevMyChipsVfx !== 0) {
+      const diff = chips - prevMyChipsVfx;
+      if (diff > 0) {
+        const id = Date.now();
+        floatUps = [...floatUps, { id, text: `+${diff}`, color: '#2ecc71' }];
+        const t = setTimeout(() => { floatUps = floatUps.filter(f => f.id !== id); }, 950);
+        prevMyChipsVfx = chips;
+        return () => clearTimeout(t);
+      } else if (diff < 0) {
+        const id = Date.now();
+        floatUps = [...floatUps, { id, text: `${diff}`, color: '#e74c3c' }];
+        const t = setTimeout(() => { floatUps = floatUps.filter(f => f.id !== id); }, 950);
+        prevMyChipsVfx = chips;
+        return () => clearTimeout(t);
+      }
+    } else if (!show && chips !== prevMyChipsVfx) {
+      // sync on betting phase reset
+      prevMyChipsVfx = chips;
+    }
+  });
+
+  // VFX: initialize prevMyChipsVfx when first connected
+  $effect(() => {
+    if (myChips > 0 && prevMyChipsVfx === 0) {
+      prevMyChipsVfx = myChips;
+    }
+  });
+
+  // VFX: chip plink on bet placement (myBetTotal increases)
+  $effect(() => {
+    const total = myBetTotal;
+    if (total > prevBetTotal) {
+      chipPlinkKey++;
+    }
+    prevBetTotal = total;
+  });
+
+  // VFX: history pop-in when a new entry appears
+  $effect(() => {
+    const len = visibleHistory.length;
+    if (len > prevHistoryLen) {
+      historyPopKey++;
+    }
+    prevHistoryLen = len;
+  });
 
   const STRIP_PATTERN = ['red','black','red','black','red','black','red','black','red','black','red','black','red','green','black'];
   const SEGMENT_WIDTH = 56;
@@ -326,8 +421,15 @@
             <span class="stat-dot stat-black"></span><span class="stat-count">{historyStats.black}</span>
           </div>
           <div class="history-strip">
-            {#each visibleHistory.slice(-20) as h}
-              <span class="history-tile" class:ht-red={h==='red'} class:ht-black={h==='black'} class:ht-green={h==='green'}></span>
+            {#each visibleHistory.slice(-20) as h, i}
+              <!-- (6) pop-in for the last 3 newest entries -->
+              {#if i >= visibleHistory.slice(-20).length - 3}
+                {#key historyPopKey}
+                  <span class="history-tile vfx-pop-in" class:ht-red={h==='red'} class:ht-black={h==='black'} class:ht-green={h==='green'}></span>
+                {/key}
+              {:else}
+                <span class="history-tile" class:ht-red={h==='red'} class:ht-black={h==='black'} class:ht-green={h==='green'}></span>
+              {/if}
             {/each}
           </div>
         </div>
@@ -349,9 +451,14 @@
       <!-- Sliding strip -->
       <div class="strip-container">
         <div class="strip-marker"></div>
+        {#if sliding}
+          <div class="strip-speed-left" aria-hidden="true"></div>
+          <div class="strip-speed-right" aria-hidden="true"></div>
+        {/if}
         <div class="strip-viewport">
           <div
             class="strip-track"
+            class:strip-sliding={sliding}
             style="transform: translateX(-{stripOffset}px); transition: {sliding ? 'transform 3.2s cubic-bezier(0.17, 0.67, 0.12, 1.0)' : 'none'};"
           >
             {#each Array(TOTAL_SEGMENTS) as _, i}
@@ -366,10 +473,39 @@
 
       <!-- Result / status display -->
       {#if showResult && result}
-        <div class="result-display" class:res-red={result==='red'} class:res-black={result==='black'} class:res-green={result==='green'} class:win-glow={myPayout() > 0}>
-          <span class="result-color-text">{result.toUpperCase()}</span>
-          {#if result === 'green'}<span class="result-multiplier">14x</span>{/if}
-        </div>
+        <!-- (3) GREEN mega-moment: full-table flash overlay -->
+        {#if result === 'green'}
+          {#key greenMegaKey}
+            <div class="green-mega-flash" aria-hidden="true"></div>
+          {/key}
+        {/if}
+        <!-- (2) Result strobe + shockwave wrapper -->
+        {#key resultStrobeKey}
+          <div
+            class="result-display"
+            class:res-red={result==='red'}
+            class:res-black={result==='black'}
+            class:res-green={result==='green'}
+            class:win-glow={myPayout() > 0}
+            class:result-strobe={myPayout() > 0}
+            style="position:relative"
+          >
+            <Shockwave
+              trigger={resultShockwave}
+              color={result === 'green' ? '#2ecc71' : result === 'red' ? '#c0392b' : '#888'}
+              size={myPayout() > 0 ? 160 : 100}
+            />
+            <span class="result-color-text">{result.toUpperCase()}</span>
+            {#if result === 'green'}
+              <!-- (3) 14x slam-in sparkle text -->
+              {#key greenMegaKey}
+                <span class="result-multiplier vfx-slam-in vfx-sparkle-text green-14x">14x</span>
+              {/key}
+              <!-- (3) bigger shockwave for green -->
+              <Shockwave trigger={greenShockwave} color="#2ecc71" size={240} />
+            {/if}
+          </div>
+        {/key}
       {:else if state.phase === 'betting'}
         <div class="phase-status">
           <span class="phase-status-text">Place your bets</span>
@@ -405,7 +541,13 @@
 
       <!-- Color bet cards -->
       <div class="color-bets">
-        <div class="color-card card-red">
+        <div class="color-card card-red" style="position:relative">
+          <!-- (4) chip plink ring on bet placement -->
+          {#if betOnColor('red') > 0}
+            {#key chipPlinkKey}
+              <span class="chip-plink chip-plink-red" aria-hidden="true"></span>
+            {/key}
+          {/if}
           <div class="color-card-top">
             <span class="color-card-name">RED</span>
             <span class="color-card-multi">2x</span>
@@ -418,7 +560,12 @@
             Play
           </button>
         </div>
-        <div class="color-card card-green">
+        <div class="color-card card-green" style="position:relative">
+          {#if betOnColor('green') > 0}
+            {#key chipPlinkKey}
+              <span class="chip-plink chip-plink-green" aria-hidden="true"></span>
+            {/key}
+          {/if}
           <div class="color-card-top">
             <span class="color-card-name">GREEN</span>
             <span class="color-card-multi">14x</span>
@@ -431,7 +578,12 @@
             Play
           </button>
         </div>
-        <div class="color-card card-black">
+        <div class="color-card card-black" style="position:relative">
+          {#if betOnColor('black') > 0}
+            {#key chipPlinkKey}
+              <span class="chip-plink chip-plink-black" aria-hidden="true"></span>
+            {/key}
+          {/if}
           <div class="color-card-top">
             <span class="color-card-name">BLACK</span>
             <span class="color-card-multi">2x</span>
@@ -468,7 +620,13 @@
           <span class="bet-summary-label">Total bet:</span>
           <span class="bet-summary-val">{myBetTotal}</span>
           <span class="bet-summary-label">Chips:</span>
-          <span class="bet-summary-val" class:chip-counting={chipAnimating}>{displayedChips}</span>
+          <span class="bet-summary-val" class:chip-counting={chipAnimating} style="position:relative">
+            {displayedChips}
+            <!-- (5) FloatUp payout label -->
+            {#each floatUps as f (f.id)}
+              <FloatUp text={f.text} color={f.color} />
+            {/each}
+          </span>
         </div>
       </div>
 
@@ -1140,4 +1298,109 @@
   button:focus-visible { outline: 2px solid #f39c12; outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
   .owner-crown { font-size: 0.85rem; margin-left: -0.25rem; }
+
+  /* ---- VFX: strip motion-blur during slide ---- */
+  .strip-sliding {
+    filter: blur(1.5px);
+    animation: strip-blur-ramp 3.2s cubic-bezier(0.17, 0.67, 0.12, 1.0) forwards;
+  }
+
+  @keyframes strip-blur-ramp {
+    0%   { filter: blur(0px); }
+    8%   { filter: blur(3px); }
+    60%  { filter: blur(2px); }
+    88%  { filter: blur(0.5px); }
+    100% { filter: blur(0px); }
+  }
+
+  /* Edge speed-line gradients during slide */
+  .strip-speed-left,
+  .strip-speed-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 56px;
+    z-index: 10;
+    pointer-events: none;
+    animation: speed-lines-fade 3.2s cubic-bezier(0.17, 0.67, 0.12, 1.0) forwards;
+  }
+
+  .strip-speed-left {
+    left: 0;
+    background: linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 60%, transparent 100%);
+  }
+
+  .strip-speed-right {
+    right: 0;
+    background: linear-gradient(270deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 60%, transparent 100%);
+  }
+
+  @keyframes speed-lines-fade {
+    0%   { opacity: 0; }
+    10%  { opacity: 1; }
+    75%  { opacity: 0.8; }
+    100% { opacity: 0; }
+  }
+
+  /* ---- VFX: result strobe on win ---- */
+  .result-strobe {
+    animation: result-strobe-kf 0.9s ease forwards, winPulse 0.6s ease 2;
+  }
+
+  @keyframes result-strobe-kf {
+    0%   { opacity: 1; }
+    12%  { opacity: 0.1; }
+    24%  { opacity: 1; }
+    36%  { opacity: 0.1; }
+    48%  { opacity: 1; }
+    60%  { opacity: 0.1; }
+    72%  { opacity: 1; }
+    100% { opacity: 1; }
+  }
+
+  /* ---- VFX: green mega-moment flash overlay ---- */
+  .green-mega-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 500;
+    background: rgba(30, 126, 52, 0.28);
+    animation: green-flash-kf 700ms ease-out forwards;
+  }
+
+  @keyframes green-flash-kf {
+    0%   { opacity: 1; }
+    40%  { opacity: 0.7; }
+    100% { opacity: 0; }
+  }
+
+  /* ---- VFX: 14x sparkle slam-in override ---- */
+  .green-14x {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    display: block;
+    /* vfx-sparkle-text sets text fill to transparent; preserve that */
+  }
+
+  /* ---- VFX: chip plink ring ---- */
+  .chip-plink {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    animation: chip-plink-kf 500ms ease-out forwards;
+  }
+
+  .chip-plink-red  { border-color: #c0392b; }
+  .chip-plink-green { border-color: #2ecc71; }
+  .chip-plink-black { border-color: #888; }
+
+  @keyframes chip-plink-kf {
+    0%   { transform: scale(0.85); opacity: 0.9; }
+    50%  { transform: scale(1.08); opacity: 0.5; }
+    100% { transform: scale(1.2);  opacity: 0; }
+  }
 </style>

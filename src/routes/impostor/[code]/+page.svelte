@@ -12,6 +12,7 @@
   import type { GameMode, Player, Difficulty } from '$lib/types';
   import { fireWinConfetti, fireImpostorVfx } from '$lib/vfx';
   import NameFrame from '$lib/components/NameFrame.svelte';
+  import Spotlight from '$lib/vfx/Spotlight.svelte';
 
   const code = $page.params.code!;
 
@@ -175,6 +176,48 @@
       }
     }
     if ($gameState?.phase !== 'game_over') vfxFired = false;
+  });
+
+  // VFX: role reveal flip key — increments whenever we enter hints phase
+  let roleRevealKey = $state(0);
+  let prevRolePhase = '';
+  $effect(() => {
+    const phase = $gameState?.phase ?? '';
+    if (phase === 'hints' && prevRolePhase !== 'hints') {
+      roleRevealKey++;
+    }
+    prevRolePhase = phase;
+  });
+
+  // VFX: vote stamp pop key — increments when hasVoted transitions false→true
+  let voteStampKey = $state(0);
+  let prevHasVoted = false;
+  $effect(() => {
+    const hv = $gameState?.hasVoted ?? false;
+    if (hv && !prevHasVoted) {
+      voteStampKey++;
+    }
+    prevHasVoted = hv;
+  });
+
+  // VFX: reveal spotlight + staged sequence
+  let revealSpotlightActive = $state(false);
+  let revealSuspenseDone = $state(false);
+  let prevRevealPhase = '';
+  $effect(() => {
+    const phase = $gameState?.phase ?? '';
+    if (phase === 'reveal' && prevRevealPhase !== 'reveal') {
+      prevRevealPhase = phase;
+      revealSpotlightActive = true;
+      revealSuspenseDone = false;
+      const t = setTimeout(() => { revealSuspenseDone = true; }, 520);
+      return () => clearTimeout(t);
+    }
+    if (phase !== 'reveal') {
+      revealSpotlightActive = false;
+      revealSuspenseDone = false;
+    }
+    prevRevealPhase = phase;
   });
 
   // Level-up notifications: the 'level_up' WebSocket message is handled in $lib/stores.ts
@@ -463,21 +506,23 @@
             </div>
           {/if}
           <!-- Role card -->
-          <div class="role-card role-reveal" class:impostor={$gameState.role === 'impostor'}>
-            {#if $gameState.role === 'impostor'}
-              <div class="role-label">You are the IMPOSTOR</div>
-              <div class="role-detail">
-                Your hint: <strong>{$gameState.impostorHint}</strong>
-              </div>
-              <div class="role-tip">Blend in! Don't reveal you don't know the word.</div>
-            {:else}
-              <div class="role-label">You know the word</div>
-              <div class="role-detail">
-                The word is: <strong>{$gameState.word}</strong>
-              </div>
-              <div class="role-tip">Be vague enough that the impostor can't guess it!</div>
-            {/if}
-          </div>
+          {#key roleRevealKey}
+            <div class="role-card role-flip-in" class:impostor={$gameState.role === 'impostor'} class:role-aura-red={$gameState.role === 'impostor'} class:role-aura-green={$gameState.role !== 'impostor'}>
+              {#if $gameState.role === 'impostor'}
+                <div class="role-label">You are the IMPOSTOR</div>
+                <div class="role-detail">
+                  Your hint: <strong>{$gameState.impostorHint}</strong>
+                </div>
+                <div class="role-tip">Blend in! Don't reveal you don't know the word.</div>
+              {:else}
+                <div class="role-label">You know the word</div>
+                <div class="role-detail">
+                  The word is: <strong>{$gameState.word}</strong>
+                </div>
+                <div class="role-tip">Be vague enough that the impostor can't guess it!</div>
+              {/if}
+            </div>
+          {/key}
 
           <!-- Round indicator -->
           <div class="round-indicator">
@@ -527,7 +572,7 @@
           <!-- Hint input (text mode) or done button (voice mode) -->
           {#if $myTurn}
             {#if $gameState.mode === 'text'}
-              <div class="hint-input">
+              <div class="hint-input vfx-breathe">
                 <input
                   aria-label="Your hint"
                   value={hintInput} oninput={(e) => hintInput = e.currentTarget.value}
@@ -643,9 +688,10 @@
             </div>
             <p class="vote-instruction">Tap a name to lock in your vote</p>
           {:else}
-            <div class="voted-confirmation fade-in">
-              <div class="vote-check">&#10003;</div>
-              <p>Voted for <NameFrame name={votedForName} frameSvg={votedForCosmetics.frameSvg} emblemSvg={votedForCosmetics.emblemSvg} nameColour={votedForCosmetics.nameColour} /></p>
+            {#key voteStampKey}
+              <div class="voted-confirmation fade-in">
+                <div class="vote-check vfx-slam-in">&#10003;</div>
+                <p>Voted for <NameFrame name={votedForName} frameSvg={votedForCosmetics.frameSvg} emblemSvg={votedForCosmetics.emblemSvg} nameColour={votedForCosmetics.nameColour} /></p>
               <div class="vote-progress">
                 <div class="vote-progress-bar">
                   <div
@@ -667,11 +713,25 @@
                 {/each}
               </div>
             </div>
+            {/key}
           {/if}
         </div>
 
       {:else if $gameState?.phase === 'reveal'}
         <!-- REVEAL -->
+        <Spotlight active={revealSpotlightActive}>
+          {#snippet children()}
+            <div class="reveal-spotlight-inner" aria-hidden="true">
+              {#if revealSuspenseDone && $gameState?.roundResult}
+                {#if $gameState.roundResult.impostorCaught}
+                  <span class="reveal-caught-stamp vfx-slam-in">CAUGHT</span>
+                {:else}
+                  <span class="reveal-escaped-stamp impostor-wins-text reveal-glitch">ESCAPED</span>
+                {/if}
+              {/if}
+            </div>
+          {/snippet}
+        </Spotlight>
         <div class="phase-content phase-enter">
           {#if $gameState.roundResult}
             {@const result = $gameState.roundResult}
@@ -702,7 +762,7 @@
                 </div>
                 <div class="reveal-detail-card">
                   <span class="reveal-detail-label">Secret Word</span>
-                  <span class="reveal-detail-value word-value">{result.word}</span>
+                  <span class="reveal-detail-value word-value word-cascade">{#each result.word.split('') as ch, ci}<span class="word-letter" style="animation-delay:{ci * 0.055}s">{ch}</span>{/each}</span>
                 </div>
                 <div class="reveal-detail-card">
                   <span class="reveal-detail-label">Impostor's Hint</span>
@@ -2177,5 +2237,103 @@
   @media (max-width: 360px) {
     .difficulty-pills { gap: 0.25rem; }
     .difficulty-pill { padding: 0.25rem 0.55rem; font-size: 0.75rem; }
+  }
+
+  /* ─── VFX: Role card 3-D flip-in ────────────────────── */
+
+  @keyframes roleFlipIn {
+    0%   { opacity: 0; transform: perspective(600px) rotateY(-90deg) scale(0.9); filter: blur(4px); }
+    55%  { opacity: 1; transform: perspective(600px) rotateY(8deg) scale(1.03); filter: blur(0); }
+    75%  { transform: perspective(600px) rotateY(-3deg) scale(0.99); }
+    100% { transform: perspective(600px) rotateY(0deg) scale(1); }
+  }
+
+  @keyframes roleAuraPulseRed {
+    0%, 100% { box-shadow: inset 0 0 0 2px var(--red), 0 0 0px var(--accused-red); }
+    50%       { box-shadow: inset 0 0 0 2px var(--red), 0 0 18px var(--accused-red-glow-60), 0 0 36px var(--accused-red-glow-30); }
+  }
+
+  @keyframes roleAuraPulseGreen {
+    0%, 100% { box-shadow: inset 0 0 0 2px var(--green), 0 0 0px var(--green); }
+    50%       { box-shadow: inset 0 0 0 2px var(--green), 0 0 14px rgba(61, 214, 140, 0.55), 0 0 28px rgba(61, 214, 140, 0.25); }
+  }
+
+  .role-flip-in {
+    animation: roleFlipIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .role-aura-red {
+    animation: roleFlipIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both,
+               roleAuraPulseRed 2s ease-in-out 0.55s infinite;
+  }
+
+  .role-aura-green {
+    animation: roleFlipIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both,
+               roleAuraPulseGreen 2.4s ease-in-out 0.55s infinite;
+  }
+
+  /* ─── VFX: Spotlight reveal stamp ───────────────────── */
+
+  .reveal-spotlight-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .reveal-caught-stamp {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: clamp(3rem, 14vw, 6rem);
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--green);
+    text-shadow: 0 0 24px rgba(61, 214, 140, 0.7), 0 0 48px rgba(61, 214, 140, 0.35);
+    display: block;
+  }
+
+  .reveal-escaped-stamp {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: clamp(3rem, 14vw, 6rem);
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: block;
+  }
+
+  /* CSS-only glitchy double-exposure flicker for escaped stamp */
+  @keyframes revealGlitch {
+    0%   { text-shadow: 0 0 20px var(--accused-red-glow-60), 0 0 40px var(--accused-red-glow-30); }
+    10%  { text-shadow: -3px 0 0 rgba(0,255,200,0.6), 3px 0 0 rgba(255,0,80,0.6), 0 0 20px var(--accused-red-glow-60); }
+    20%  { text-shadow: 0 0 20px var(--accused-red-glow-60), 0 0 40px var(--accused-red-glow-30); }
+    35%  { text-shadow: 4px 1px 0 rgba(0,220,255,0.5), -4px -1px 0 rgba(255,30,80,0.5), 0 0 18px var(--accused-red-glow-60); }
+    45%  { text-shadow: 0 0 20px var(--accused-red-glow-60); }
+    60%  { text-shadow: -2px 2px 0 rgba(0,255,200,0.4), 2px -2px 0 rgba(255,0,60,0.4), 0 0 28px var(--accused-red-glow-60); }
+    70%  { text-shadow: 0 0 20px var(--accused-red-glow-60), 0 0 40px var(--accused-red-glow-30); }
+    100% { text-shadow: 0 0 20px var(--accused-red-glow-60), 0 0 40px var(--accused-red-glow-30); }
+  }
+
+  .reveal-glitch {
+    animation: impostorReveal 0.6s ease-out both,
+               revealGlitch 1.1s ease-in-out 0.65s forwards;
+  }
+
+  /* ─── VFX: Word letter cascade ──────────────────────── */
+
+  @keyframes letterDrop {
+    0%   { opacity: 0; transform: translateY(-8px) scale(0.7); }
+    65%  { opacity: 1; transform: translateY(2px) scale(1.06); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .word-cascade {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+
+  .word-letter {
+    display: inline-block;
+    animation: letterDrop 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 </style>

@@ -76,7 +76,7 @@
     };
   });
 
-  const EXPRESSIONS: ExpressionName[] = ['neutral', 'grin', 'shock', 'sweat'];
+  const EXPRESSIONS: ExpressionName[] = ['neutral', 'grin', 'shock', 'sweat', 'laugh', 'asleep', 'smug'];
   const HATS: HatId[] = ['none', 'party', 'crown'];
 </script>
 

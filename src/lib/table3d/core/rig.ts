@@ -47,6 +47,15 @@ export interface ExpressionPose {
   headPullBack: number;
   /** Whether the sweat tremor is active for this expression. */
   sweating: boolean;
+  /**
+   * Mouth-line curvature: positive = smile (corners up), negative = frown.
+   * Roughly -1..1; drives the parabolic bend of the mouth tube.
+   */
+  mouthCurve: number;
+  /** Mouth-line wiggle 0..1: the cute worried squiggle (w-shaped mouth). */
+  mouthWave: number;
+  /** Mouth-line skew -1..1: one corner up, the other down (smirk). */
+  mouthSkew: number;
 }
 
 export interface MonkeyConfig {
@@ -69,6 +78,9 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  0,
     headPullBack:  0,
     sweating:      false,
+    mouthCurve:    0.30,  // gentle resting smile
+    mouthWave:     0.55,  // cute squiggle (reference art's wavy mouth)
+    mouthSkew:     0,
   },
   grin: {
     jawRad:        0.12,
@@ -79,6 +91,9 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  0,
     headPullBack:  0,
     sweating:      false,
+    mouthCurve:    0.85,  // big clean smile
+    mouthWave:     0,
+    mouthSkew:     0,
   },
   shock: {
     jawRad:        0.40,
@@ -89,6 +104,9 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  0,
     headPullBack:  6,     // pulls back (6 degrees-worth of units)
     sweating:      false,
+    mouthCurve:   -0.15,  // slack; the open jaw carries the read
+    mouthWave:     0,
+    mouthSkew:     0,
   },
   sweat: {
     jawRad:        0,
@@ -99,6 +117,9 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  0,
     headPullBack:  0,
     sweating:      true,
+    mouthCurve:   -0.35,  // anxious downturn
+    mouthWave:     1.0,   // maximum wobble
+    mouthSkew:     0,
   },
   /**
    * laugh: vindicated player's triumphant reaction during the Liar's Ritual VERDICT cue.
@@ -113,6 +134,9 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  0,
     headPullBack:  0,
     sweating:      false,
+    mouthCurve:    1.0,   // widest smile
+    mouthWave:     0,
+    mouthSkew:     0,
   },
   /**
    * asleep: used for eliminated players still seated at the table.
@@ -128,6 +152,9 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  28,    // chin toward chest -- reads as "passed out" at distance
     headPullBack:  0,
     sweating:      false,
+    mouthCurve:   -0.10,  // slack, faintly down
+    mouthWave:     0.15,
+    mouthSkew:     0,
   },
 
   /**
@@ -143,13 +170,16 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg: -2,     // chin ever so slightly up (confident)
     headPullBack:  0,
     sweating:      false,
+    mouthCurve:    0.30,
+    mouthWave:     0,
+    mouthSkew:     0.8,   // one corner up: the smirk itself
   },
 };
 
 // ─── Jaw-flap constants (art bible § "Jaw flap") ─────────────────────────────
 
 /** Maximum jaw rotation from talk amplitude at full amplitude. */
-export const JAW_MAX_TALK_RAD = 0.35;
+export const JAW_MAX_TALK_RAD = 0.42;
 
 /** Hard upper clamp on jaw rotation (art bible: 0 to 0.45). */
 export const JAW_CLAMP_MAX_RAD = 0.45;
@@ -198,35 +228,41 @@ export const FUR_COLOURS: readonly string[] = [
   '#7A7A8A',  // slate grey          (neutral complement)
 ] as const;
 
-// ─── Geometry constants ───────────────────────────────────────────────────────
+// ─── Geometry constants (cartoony v2) ────────────────────────────────────────
 // Used by PlaceholderMonkey to keep geometry consistent and swappable.
+// Overall head bounding height stays ~1.1 units so seat/camera framing from
+// Phase 0 (head centre at seat Y + ~0.5) still holds.
 
-/** Head dimensions [width, height, depth] in Three.js units. Wider than tall (1.2:1). */
-export const HEAD_SIZE: [number, number, number] = [1.2, 1.0, 1.0];
+/** Cranium: low-poly sphere radius, before squash. */
+export const HEAD_RADIUS = 0.55;
 
-/**
- * Muzzle box dimensions [width, height, depth].
- * Combined upper+jaw height is ~0.34; protrudes ~0.18 past the head face.
- */
-export const MUZZLE_SIZE: [number, number, number] = [0.62, 0.22, 0.32];
+/** Cranium squash [x, y, z]: slightly wider than tall, slightly shallow. */
+export const HEAD_SQUASH: [number, number, number] = [1.12, 1.0, 0.92];
 
-/** Jaw mesh dimensions [width, height, depth]. Thin slab, same width as muzzle. */
-export const JAW_SIZE: [number, number, number] = [0.60, 0.12, 0.30];
+/** Cream face plate: flattened sphere radius hugging the front of the head. */
+export const FACE_PLATE_RADIUS = 0.40;
+
+/** Muzzle sphere radius before squash. */
+export const MUZZLE_RADIUS = 0.30;
 
 /**
  * Ear disc dimensions [radiusTop, radiusBottom, height, segments].
  * Cylinder axis along Z so the disc face points at the camera (Mickey-style).
+ * Bigger than Phase 0: the oversized ears are the marketable silhouette.
  */
-export const EAR_PARAMS: [number, number, number, number] = [0.34, 0.34, 0.06, 10];
+export const EAR_PARAMS: [number, number, number, number] = [0.40, 0.40, 0.08, 12];
 
 /** Inner ear disc dimensions (cream inset, slightly in front of outer ear). */
-export const INNER_EAR_PARAMS: [number, number, number, number] = [0.22, 0.22, 0.04, 10];
+export const INNER_EAR_PARAMS: [number, number, number, number] = [0.28, 0.28, 0.05, 12];
 
-/** Eye sphere dimensions [radius, widthSegs, heightSegs]. Bumped to 10x7 for less lumpiness. */
-export const EYE_SPHERE_PARAMS: [number, number, number] = [0.14, 10, 7];
+/** Eye sphere radius. Solid glossy black ovals, no separate pupil. */
+export const EYE_RADIUS = 0.115;
 
-/** Pupil disc dimensions: [radius, height, segments]. */
-export const PUPIL_PARAMS: [number, number, number] = [0.08, 0.01, 7];
+/** Mouth line: half-width of the deformable tube across the muzzle. */
+export const MOUTH_HALF_WIDTH = 0.17;
+
+/** Mouth line tube radius. */
+export const MOUTH_TUBE_RADIUS = 0.021;
 
 // ─── Muzzle cream colour ─────────────────────────────────────────────────────
 /** Art bible: muzzle and inner ears are cream #F2E3C9. */

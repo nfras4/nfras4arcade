@@ -217,7 +217,7 @@
 
   const SEGMENT_GAP = 6;
   const SEGMENT_STEP = SEGMENT_WIDTH + SEGMENT_GAP;
-  let prevPhase: string | null = $state(null);
+  let prevPhase: string | null = null;
 
   // Trigger strip slide animation when result arrives
   $effect(() => {

@@ -82,7 +82,7 @@
   let showingCompletedTrick = $state(false);
   let displayTrick: any[] = $state([]);
   let displayTrickWinner: string | null = $state(null);
-  let prevTrickNumber = $state(0);
+  let prevTrickNumber = 0;
   let delayedPhase: string | null = $state(null);
 
   // Delay phase transitions when a trick just completed (so players can see the result)

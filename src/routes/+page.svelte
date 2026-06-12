@@ -197,6 +197,36 @@
 
     </nav>
 
+    <!-- Store strip: links to /store, casino-gold accent -->
+    <a
+      class="store-strip"
+      href="/store"
+      aria-label="Arcade Store: buy game bundles"
+    >
+      <!-- Glyph: price-tag icon, casino-tinted -->
+      <div class="store-strip-glyph" aria-hidden="true">
+        <svg viewBox="0 0 40 40" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 4H13a2 2 0 0 0-1.42.59L4.59 11.6A2 2 0 0 0 4 13v.01a2 2 0 0 0 .59 1.41l14 14A2 2 0 0 0 20 29a2 2 0 0 0 1.41-.59l7.01-7a2 2 0 0 0 0-2.83l-4-4"/>
+          <circle cx="28" cy="10" r="3"/>
+        </svg>
+      </div>
+
+      <!-- Text block -->
+      <div class="store-strip-text">
+        <span class="store-strip-title geo-title">Arcade Store</span>
+        <span class="store-strip-sub">Own every party game. The Full Party Pack is $12.99.</span>
+      </div>
+
+      <!-- Spacer -->
+      <span class="store-strip-spacer" aria-hidden="true"></span>
+
+      <!-- Save chip -->
+      <span class="store-strip-chip geo-title" aria-label="Save 59 percent">SAVE 59%</span>
+
+      <!-- Arrow -->
+      <span class="store-strip-arrow" aria-hidden="true">→</span>
+    </a>
+
     <!-- Live Now: cross-game active rooms feed -->
     {#if liveRooms !== null && liveRooms.length > 0}
       {void liveTick}
@@ -862,5 +892,130 @@
     color: var(--accent);
     font-size: 0.95rem;
     opacity: 0.7;
+  }
+
+  /* ── Store strip ─────────────────────────────────────── */
+  .store-strip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0 1.5rem;
+    min-height: 64px;
+    width: 100%;
+    text-decoration: none;
+    background: var(--bg-card);
+    clip-path: var(--clip-card);
+    overflow: hidden;
+    animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+    transition: background 0.15s ease, transform 0.15s ease, filter 0.15s ease;
+  }
+
+  /* Gradient border via ::before inset, casino accent */
+  .store-strip::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    clip-path: var(--clip-card);
+    background: linear-gradient(135deg, var(--casino-border), var(--border));
+    z-index: -1;
+  }
+
+  /* Top casino accent stripe */
+  .store-strip::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--casino) 0%, transparent 70%);
+    opacity: 0.6;
+  }
+
+  .store-strip:hover {
+    background: var(--bg-hover);
+    transform: translateY(-2px);
+    filter: drop-shadow(0 0 12px var(--casino-glow));
+  }
+
+  /* Glyph box, mirrors .cat-glyph / .casino-glyph */
+  .store-strip-glyph {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--casino);
+    background: var(--casino-faint);
+    border: 1px solid var(--casino-border-soft);
+  }
+
+  /* Text block */
+  .store-strip-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  .store-strip-title {
+    font-size: 0.95rem;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .store-strip-sub {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Spacer pushes chip + arrow to the right */
+  .store-strip-spacer {
+    flex: 1;
+  }
+
+  /* SAVE 59% chip: casino accent, clip-btn shape */
+  .store-strip-chip {
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    color: var(--casino);
+    background: var(--casino-faint);
+    border: 1px solid var(--casino-border);
+    clip-path: var(--clip-btn);
+    padding: 0.2rem 0.55rem;
+    line-height: 1.4;
+  }
+
+  /* Arrow, mirrors .cat-arrow / .casino-arrow */
+  .store-strip-arrow {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    color: var(--casino);
+    opacity: 0.65;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .store-strip:hover .store-strip-arrow {
+    opacity: 1;
+    transform: translateX(4px);
+  }
+
+  /* Mobile: hide the SAVE chip at <=560px */
+  @media (max-width: 560px) {
+    .store-strip-chip {
+      display: none;
+    }
   }
 </style>

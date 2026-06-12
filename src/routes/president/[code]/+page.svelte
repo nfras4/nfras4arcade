@@ -100,7 +100,7 @@
   // VFX: combo callout for pairs/triples/quads
   let comboText = $state('');
   let comboClass = $state('');
-  let prevPileLen = $state(0);
+  let prevPileLen = 0;
   // VFX: combo ring trigger (pair/triple/quad ring burst)
   let comboRingKey = $state(0);
   // VFX: quad shake toggle (re-triggers vfx-shake-hard)

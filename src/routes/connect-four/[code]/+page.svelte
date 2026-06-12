@@ -82,7 +82,7 @@
   // landedCell: [row, col] of the just-dropped piece, or null
   let landedCell = $state<[number, number] | null>(null);
   let shockwaveTrigger = $state(0);
-  let prevBoard = $state<number[][]>([]);
+  let prevBoard: number[][] = [];
 
   $effect(() => {
     const b = board;
@@ -107,7 +107,7 @@
 
   // VFX: win cascade: key per winCells identity so cells re-animate each round
   let winCascadeKey = $state(0);
-  let prevWinCells = $state<string>('');
+  let prevWinCells = '';
   $effect(() => {
     const key = JSON.stringify(winCells);
     if (key !== prevWinCells) {
@@ -118,7 +118,7 @@
 
   // VFX: draw: grey pulse trigger
   let drawPulseKey = $state(0);
-  let prevIsDraw = $state(false);
+  let prevIsDraw = false;
   $effect(() => {
     const d = isDraw;
     if (d && !prevIsDraw) drawPulseKey++;
@@ -127,7 +127,7 @@
 
   // VFX: score FloatUp: track per-player previous scores
   let scoreFloats = $state<{ id: number; playerId: string }[]>([]);
-  let prevScores = $state<Record<string, number>>({});
+  let prevScores: Record<string, number> = {};
   let scoreFloatTimers: ReturnType<typeof setTimeout>[] = [];
   $effect(() => {
     const s = scores;

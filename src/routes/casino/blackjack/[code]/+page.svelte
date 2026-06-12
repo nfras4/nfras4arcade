@@ -55,7 +55,7 @@
   }
 
   // Track phase transitions for deal SFX
-  let prevPhase: string | null = $state(null);
+  let prevPhase: string | null = null;
 
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {

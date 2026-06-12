@@ -95,7 +95,7 @@
 
   // eliminated tile dissolve keys: map playerId -> dissolve epoch
   let dissolveKeys = $state<Record<string, number>>({});
-  let prevEliminated = $state<Record<string, boolean>>({});
+  let prevEliminated: Record<string, boolean> = {};
 
   // cleanup handles
   let liarStampTimer: ReturnType<typeof setTimeout>;

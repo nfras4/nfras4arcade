@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import BarrelTable from './BarrelTable.svelte';
+  import CameraRig from './CameraRig.svelte';
   import PlaceholderMonkey from './PlaceholderMonkey.svelte';
   import TableProjector from './TableProjector.svelte';
   import TableDirectorTick from './TableDirectorTick.svelte';
@@ -88,12 +89,16 @@
   }
 
   // ── Spotlight position helpers ────────────────────────────────────────────────
-  // spotPos: above the seat (light source position), off-scene default when no target.
+  // spotPos: FRONT-ABOVE the seat, pulled toward the camera side. A source
+  // directly overhead lights the scalp and a felt patch, not the face; the
+  // cone must arrive at roughly 45 degrees from the front for the face to
+  // catch it (stage-lighting basics).
   function spotPos(targetId: string | null): [number, number, number] {
     if (!targetId) return [0, 20, 0]; // far above scene, invisible
     const seat = seatMap.get(targetId);
     if (!seat) return [0, 20, 0];
-    return [seat.transform.position[0], 4.0, seat.transform.position[2]];
+    const [sx, , sz] = seat.transform.position;
+    return [sx * 0.5, 3.0, sz * 0.5 + 2.2];
   }
 
   // spotTargetPos: the point on the monkey the spotlight aims at (head level).
@@ -104,6 +109,31 @@
     // Head centre is at seat Y + ~0.5 (HEAD_SIZE[1]=1.0, root at SEAT_Y=0.35)
     return [seat.transform.position[0], 0.85, seat.transform.position[2]];
   }
+
+  // ── Parallax pointer tracking ────────────────────────────────────────────────
+  // Only tracks when the OS reports a fine pointer (mouse). Touch/TV: static.
+  const hasFinePointer =
+    typeof window !== 'undefined'
+      ? window.matchMedia('(pointer: fine)').matches
+      : false;
+
+  // The stage container element; CameraRig binds pointermove here.
+  let stageEl = $state<HTMLElement | null>(null);
+
+  // Reduced-motion state for CameraRig (mirrors the director's own detection).
+  let parallaxReducedMotion = $state(reducedMotionOverride ?? false);
+
+  $effect(() => {
+    if (reducedMotionOverride !== undefined) {
+      parallaxReducedMotion = reducedMotionOverride;
+      return;
+    }
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    parallaxReducedMotion = mq.matches;
+    const handler = (e: MediaQueryListEvent) => { parallaxReducedMotion = e.matches; };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  });
 
   // ── Baseline light values ─────────────────────────────────────────────────────
   const AMBIENT_BASELINE   = 0.4;
@@ -117,16 +147,13 @@
   Nameplates are CSS overlays projected from 3D head positions via TableProjector.
   Camera: 42 deg FOV, slightly above table level, authored framing.
 -->
-<div class="stage-container">
+<div class="stage-container" bind:this={stageEl}>
   <Canvas>
-    <!-- Camera: authored film-set framing, no player control -->
-    <T.PerspectiveCamera
-      makeDefault
-      fov={42}
-      near={0.1}
-      far={50}
-      position={[0, 1.5, 3.6]}
-      oncreate={(camera) => { camera.lookAt(0, 0.2, -0.6); }}
+    <!-- Camera: owned by CameraRig which adds seated-parallax lean. -->
+    <CameraRig
+      {stageEl}
+      reducedMotion={parallaxReducedMotion || !hasFinePointer}
+      ritualActive={director.ritualInProgress}
     />
 
     <!-- Ambient fill: warm, intensity driven by director during ritual -->

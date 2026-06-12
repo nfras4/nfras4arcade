@@ -1,6 +1,7 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
   import * as THREE from 'three';
+  import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
   import {
     NODE_ROOT, NODE_HEAD, NODE_JAW,
     NODE_EYE_L, NODE_EYE_R,
@@ -65,7 +66,7 @@
   // Initialised with placeholder colour; $effect sets furColor reactively.
   const headMat = mat(0xffffff);
   const headMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(HEAD_SIZE[0], HEAD_SIZE[1], HEAD_SIZE[2], 1, 1, 1),
+    new RoundedBoxGeometry(HEAD_SIZE[0], HEAD_SIZE[1], HEAD_SIZE[2], 3, 0.10),
     headMat
   );
   headMesh.name = 'HeadMesh';
@@ -125,7 +126,7 @@
 
   const muzzleUpperMat = mat(CREAM_COLOUR);
   const muzzleUpper = new THREE.Mesh(
-    new THREE.BoxGeometry(MUZZLE_SIZE[0], MUZZLE_SIZE[1], MUZZLE_SIZE[2], 1, 1, 1),
+    new RoundedBoxGeometry(MUZZLE_SIZE[0], MUZZLE_SIZE[1], MUZZLE_SIZE[2], 2, 0.06),
     muzzleUpperMat
   );
   muzzleUpper.name = 'MuzzleUpper';
@@ -162,7 +163,7 @@
   headGroup.add(jawGroup);
 
   // Geometry offset so the back-top edge sits at the hinge origin.
-  const jawGeo = new THREE.BoxGeometry(JAW_SIZE[0], JAW_SIZE[1], JAW_SIZE[2], 1, 1, 1);
+  const jawGeo = new RoundedBoxGeometry(JAW_SIZE[0], JAW_SIZE[1], JAW_SIZE[2], 2, 0.04);
   jawGeo.translate(0, -JAW_SIZE[1] / 2, JAW_SIZE[2] / 2);
   const jawMat  = mat(CREAM_COLOUR);
   const jawMesh = new THREE.Mesh(jawGeo, jawMat);
@@ -212,7 +213,7 @@
   headGroup.add(eyeRGroup);
 
   // ── Brows (item 6): lowered to +0.16 from eye centre. ────────────────────────
-  const browGeo = new THREE.BoxGeometry(0.22, 0.06, 0.06, 1, 1, 1);
+  const browGeo = new RoundedBoxGeometry(0.22, 0.06, 0.06, 2, 0.02);
   const browMat = mat(0x3a2510);
 
   const browLGroup = new THREE.Group();

@@ -75,6 +75,15 @@ export class TableDirector {
    */
   ritualTimescale = $state(1);
 
+  /**
+   * True while a ritual is actively playing.
+   * The CameraRig reads this to ease parallax back to centre so
+   * the authored ritual framing wins during the ceremony.
+   */
+  get ritualInProgress(): boolean {
+    return this.#ritualActive;
+  }
+
   // Internal tracking
   #prev: LDStateLike | null = null;
   #reducedMotion = false;
@@ -271,16 +280,16 @@ export class TableDirector {
       case 'FREEZE':
         this.lights = {
           ...this.lights,
-          ambientFactor: 0.25,
-          keyFactor: 0.25,
+          ambientFactor: 0.12,
+          keyFactor: 0.12,
         };
         break;
 
       case 'SPOTLIGHT':
         this.lights = {
           ...this.lights,
-          callerSpotIntensity: 60,
-          accusedSpotIntensity: 60,
+          callerSpotIntensity: 90,
+          accusedSpotIntensity: 90,
           callerSpotTarget: c.callerId,
           accusedSpotTarget: c.accusedId,
         };

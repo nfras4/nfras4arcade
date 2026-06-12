@@ -6,6 +6,9 @@
   import { writable } from 'svelte/store';
   import { currentUser } from '$lib/auth';
   import NameFrame from '$lib/components/NameFrame.svelte';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
+  import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/liars-dice');
@@ -61,6 +64,150 @@
 
   const ANTE_OPTIONS = [25, 50, 100, 250];
 
+  // ── VFX state ──────────────────────────────────────────────────────────────
+  // bid pop re-trigger
+  let bidKey = $state(0);
+  let prevBidSig = '';
+
+  // pot float-up
+  let potFloats = $state<number[]>([]);
+  let prevPot = 0;
+
+  // round_over orchestration
+  let roundOverKey = $state(0);          // re-keys the entire round_over section to replay tumble
+  let showLiarStamp = $state(false);     // LIAR! overlay
+  let liarStampKey = $state(0);          // re-trigger slam-in
+  let panelShakeKey = $state(0);         // shake the result panel
+  let matchIgniteKey = $state(0);        // re-trigger match gold pop sequence
+  let matchIgniteDelay = $state(false);  // true after tumble settles (~820ms)
+  let loserFlashKey = $state(0);         // flash loser tile red
+  let callerWrongFlashKey = $state(0);   // flash caller tile green (if caller was wrong)
+  let prevLoserId = '';
+  let prevCallerId = '';
+
+  // pot ring
+  let potRingTrigger = $state(0);
+
+  // game_over
+  let gameOverKey = $state(0);
+  let prevPhase = '';
+  let prevWinnerId = '';
+
+  // eliminated tile dissolve keys: map playerId -> dissolve epoch
+  let dissolveKeys = $state<Record<string, number>>({});
+  let prevEliminated = $state<Record<string, boolean>>({});
+
+  // cleanup handles
+  let liarStampTimer: ReturnType<typeof setTimeout>;
+  let matchIgniteTimer: ReturnType<typeof setTimeout>;
+  let gameOverBurstTimer: ReturnType<typeof setTimeout>;
+
+  // ── VFX effects ────────────────────────────────────────────────────────────
+
+  // Bid change: pop-in the bid chip + ring on pot if pot grew
+  $effect(() => {
+    const s = $gameState;
+    if (!s) return;
+    const sig = s.currentBid ? `${s.currentBid.count}:${s.currentBid.face}` : '';
+    if (sig !== prevBidSig) {
+      prevBidSig = sig;
+      if (sig) bidKey++;
+    }
+    // Pot growth
+    const newPot = s.pot;
+    if (newPot > prevPot && prevPot !== 0) {
+      const diff = newPot - prevPot;
+      potFloats = [...potFloats, Date.now()];
+      potRingTrigger++;
+      // FloatUp text injected via derived below
+      potFloatText = `+${diff.toLocaleString()}`;
+    }
+    prevPot = newPot;
+  });
+
+  let potFloatText = $state('+0');
+
+  // Round over: LIAR stamp + shake + tumble key + match ignite sequence
+  $effect(() => {
+    const s = $gameState;
+    if (!s) return;
+    const phase = s.phase;
+    const loserId = s.lastRoundResult?.loserId ?? '';
+    const callerId = s.lastRoundResult?.callerId ?? '';
+
+    if (phase === 'round_over' && prevPhase !== 'round_over') {
+      // 1. LIAR stamp
+      liarStampKey++;
+      showLiarStamp = true;
+      clearTimeout(liarStampTimer);
+      liarStampTimer = setTimeout(() => { showLiarStamp = false; }, 1100);
+
+      // 2. Shake panel
+      panelShakeKey++;
+
+      // 3. Re-key the reveal grid so dice re-tumble
+      roundOverKey++;
+
+      // 4. After tumble settles, ignite matching dice
+      clearTimeout(matchIgniteTimer);
+      matchIgniteDelay = false;
+      matchIgniteTimer = setTimeout(() => {
+        matchIgniteDelay = true;
+        matchIgniteKey++;
+      }, 820);
+
+      // 5. Flash loser tile
+      if (loserId) {
+        prevLoserId = loserId;
+        loserFlashKey++;
+        // fireLoss puff near center
+        fireLoss({ x: 0.5, y: 0.55 });
+      }
+
+      // 6. Did caller guess wrong? The caller loses a die when they were wrong (loserId === callerId)
+      //    Honest bid: loserId === callerId (caller was wrong, their die is lost)
+      //    Caught bluffing: loserId === bidderId (bidder was the liar)
+      if (callerId && loserId === callerId) {
+        // caller guessed wrong - flash caller tile green? No: caller is the loser here.
+        // Actually: loserId === callerId means the bid WAS covered, caller was wrong. Caller loses die.
+        // The "green" goes to the bidder (honest bidder vindicated).
+        callerWrongFlashKey++;
+      }
+    }
+
+    prevPhase = phase;
+  });
+
+  // Game over: fire gold burst + sparkle
+  $effect(() => {
+    const s = $gameState;
+    if (!s) return;
+    if (s.phase === 'game_over' && s.winnerId && s.winnerId !== prevWinnerId) {
+      prevWinnerId = s.winnerId;
+      gameOverKey++;
+      fireGoldBurst({ x: 0.5, y: 0.4 });
+      clearTimeout(gameOverBurstTimer);
+      gameOverBurstTimer = setTimeout(() => fireGoldBurst({ x: 0.5, y: 0.6 }), 350);
+    }
+    return () => { clearTimeout(gameOverBurstTimer); };
+  });
+
+  // Eliminated: detect newly eliminated players and trigger dissolve
+  $effect(() => {
+    const s = $gameState;
+    if (!s) return;
+    const next: Record<string, boolean> = {};
+    for (const p of s.players) {
+      next[p.id] = p.eliminated;
+      if (p.eliminated && !prevEliminated[p.id]) {
+        dissolveKeys = { ...dissolveKeys, [p.id]: Date.now() };
+      }
+    }
+    prevEliminated = next;
+  });
+
+  // ── Game logic ─────────────────────────────────────────────────────────────
+
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
       if (msg.type === 'joined') {
@@ -112,6 +259,14 @@
     }
   });
 
+  // Cleanup timers on destroy
+  $effect(() => {
+    return () => {
+      clearTimeout(liarStampTimer);
+      clearTimeout(matchIgniteTimer);
+    };
+  });
+
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
   let me = $derived(state?.players.find((p) => p.id === pid) ?? null);
@@ -145,6 +300,15 @@
     state?.lastRoundResult
       ? state.players.find((p) => p.id === state.lastRoundResult!.bid.bidderId)?.name ?? ''
       : ''
+  );
+
+  // VFX derived: which player tile gets which flash
+  let loserPlayerId = $derived(state?.lastRoundResult?.loserId ?? '');
+  let callerPlayerId = $derived(state?.lastRoundResult?.callerId ?? '');
+  // caller-was-wrong means loserId === callerId
+  let callerWasWrong = $derived(
+    state?.lastRoundResult != null &&
+    state.lastRoundResult.loserId === state.lastRoundResult.callerId
   );
 
   function canPlaceBid(): boolean {
@@ -207,40 +371,62 @@
           <span class="wild-badge" title="Ones count as wild faces">WILDS</span>
         {/if}
       </div>
-      <div class="pot-chip">
-        <span class="pot-label">Pot</span>
-        <span class="pot-value">{state.pot.toLocaleString()} chips</span>
+      <div class="pot-chip" style="position:relative">
+        {#each potFloats as id (id)}
+          <FloatUp text={potFloatText} color="var(--accent)" />
+        {/each}
+        <Shockwave trigger={potRingTrigger} color="var(--accent)" size={80} />
+        {#key potRingTrigger}
+          {#if potRingTrigger > 0}
+            <span class="pot-value-wrap vfx-flash-gold">
+              <span class="pot-label">Pot</span>
+              <span class="pot-value">{state.pot.toLocaleString()} chips</span>
+            </span>
+          {:else}
+            <span class="pot-value-wrap">
+              <span class="pot-label">Pot</span>
+              <span class="pot-value">{state.pot.toLocaleString()} chips</span>
+            </span>
+          {/if}
+        {/key}
       </div>
     </header>
 
     <!-- Player table -->
     <section class="players">
       {#each state.players as p (p.id)}
-        <div
-          class="player-tile"
-          class:active={state.currentTurnId === p.id && state.phase === 'playing'}
-          aria-current={(state.currentTurnId === p.id && state.phase === 'playing') ? 'true' : 'false'}
-          class:eliminated={p.eliminated}
-          class:disconnected={!p.connected}
-        >
-          <div class="player-head">
-            <NameFrame name={p.name} frameSvg={p.frameSvg} emblemSvg={p.emblemSvg} nameColour={p.nameColour} titleText={null} isHost={p.isHost} isBot={p.isBot} />
-            <span class="player-chips">{p.chips.toLocaleString()}</span>
-          </div>
-          <div class="player-dice-count">
-            {#if p.eliminated}
-              <span class="out-tag">OUT</span>
-            {:else}
-              {#each Array(p.diceCount) as _, i (i)}
-                <!-- TODO: card back on hidden cups -- deferred, see deep-interview-nameframe-rollout.md ADR-3 -->
-                <span class="small-die">⚂</span>
-              {/each}
-              {#if p.diceCount === 0 && state.phase === 'lobby'}
-                <span class="ready-tag">ready</span>
+        {#key loserFlashKey}
+          <div
+            class="player-tile"
+            class:active={state.currentTurnId === p.id && state.phase === 'playing'}
+            aria-current={(state.currentTurnId === p.id && state.phase === 'playing') ? 'true' : 'false'}
+            class:eliminated={p.eliminated}
+            class:disconnected={!p.connected}
+            class:vfx-flash-red={state.phase === 'round_over' && p.id === loserPlayerId}
+            class:vfx-flash-green={state.phase === 'round_over' && callerWasWrong && p.id === state.lastRoundResult?.bid.bidderId}
+            class:vfx-shake={state.phase === 'round_over' && p.id === loserPlayerId}
+          >
+            <div class="player-head">
+              <NameFrame name={p.name} frameSvg={p.frameSvg} emblemSvg={p.emblemSvg} nameColour={p.nameColour} titleText={null} isHost={p.isHost} isBot={p.isBot} />
+              <span class="player-chips">{p.chips.toLocaleString()}</span>
+            </div>
+            <div class="player-dice-count">
+              {#if p.eliminated}
+                {#key dissolveKeys[p.id]}
+                  <span class="out-tag" class:vfx-dissolve-out={!!dissolveKeys[p.id]}>OUT</span>
+                {/key}
+              {:else}
+                {#each Array(p.diceCount) as _, i (i)}
+                  <!-- TODO: card back on hidden cups -- deferred, see deep-interview-nameframe-rollout.md ADR-3 -->
+                  <span class="small-die">⚂</span>
+                {/each}
+                {#if p.diceCount === 0 && state.phase === 'lobby'}
+                  <span class="ready-tag">ready</span>
+                {/if}
               {/if}
-            {/if}
+            </div>
           </div>
-        </div>
+        {/key}
       {/each}
     </section>
 
@@ -302,11 +488,14 @@
       <section class="panel">
         <div class="bid-display">
           {#if state.currentBid}
-            <div class="bid-value">
-              <span class="bid-count">{state.currentBid.count}</span>
-              <span class="bid-x">×</span>
-              <span class="bid-face">{dieFace(state.currentBid.face)}</span>
-            </div>
+            {#key bidKey}
+              <div class="bid-value vfx-pop-in" style="position:relative">
+                <Shockwave trigger={bidKey} color="var(--accent)" size={90} />
+                <span class="bid-count">{state.currentBid.count}</span>
+                <span class="bid-x">×</span>
+                <span class="bid-face">{dieFace(state.currentBid.face)}</span>
+              </div>
+            {/key}
             <div class="bid-by">bid by {bidderName}</div>
           {:else}
             <div class="bid-empty">No bid yet. {currentTurnName} opens.</div>
@@ -328,7 +517,7 @@
         </div>
 
         {#if isMyTurn && !me?.eliminated}
-          <div class="bid-controls">
+          <div class="bid-controls vfx-breathe">
             <div class="control-row">
               <span class="control-label">Count</span>
               <div class="stepper">
@@ -369,55 +558,75 @@
 
     <!-- Phase: round_over -->
     {#if state.phase === 'round_over' && state.lastRoundResult}
-      <section class="panel">
-        <h2 class="panel-title">Round Result</h2>
-        <p class="result-line">
-          <strong>{callerName}</strong> called liar on <strong>{prevBidderName}</strong>'s bid
-          of <strong>{state.lastRoundResult.bid.count} {dieFace(state.lastRoundResult.bid.face)}</strong>
-        </p>
-        <p class="result-line">
-          Actual count: <strong>{state.lastRoundResult.actualCount}</strong> / <strong>{loserName}</strong> loses a die
-        </p>
-        <div class="reveal-grid">
-          {#each state.players as p (p.id)}
-            {#if state.lastRoundResult && state.lastRoundResult.revealedDice[p.id]}
-              <div class="reveal-row">
-                <NameFrame name={p.name} frameSvg={p.frameSvg} emblemSvg={p.emblemSvg} nameColour={p.nameColour} titleText={null} isHost={p.isHost} isBot={p.isBot} />
-                <span class="reveal-dice">
-                  {#each state.lastRoundResult.revealedDice[p.id] as d, i (i)}
-                    <span
-                      class="reveal-die"
-                      class:match={d === state.lastRoundResult.bid.face}
-                    >{dieFace(d)}</span>
-                  {/each}
-                </span>
-              </div>
+      {#key panelShakeKey}
+        <section class="panel" class:vfx-shake-hard={panelShakeKey > 0}>
+          <div class="round-over-header">
+            <h2 class="panel-title">Round Result</h2>
+            {#if showLiarStamp}
+              {#key liarStampKey}
+                <span class="liar-stamp vfx-slam-in">LIAR!</span>
+              {/key}
             {/if}
-          {/each}
-        </div>
-        {#if isHost}
-          <button class="btn-primary btn-full" onclick={nextRound}>Next Round</button>
-        {:else}
-          <p class="panel-hint">Waiting for host to start next round.</p>
-        {/if}
-      </section>
+          </div>
+          <p class="result-line">
+            <strong>{callerName}</strong> called liar on <strong>{prevBidderName}</strong>'s bid
+            of <strong>{state.lastRoundResult.bid.count} {dieFace(state.lastRoundResult.bid.face)}</strong>
+          </p>
+          <p class="result-line">
+            Actual count: <strong>{state.lastRoundResult.actualCount}</strong> / <strong>{loserName}</strong> loses a die
+          </p>
+          {#key roundOverKey}
+            <div class="reveal-grid">
+              {#each state.players as p, pi (p.id)}
+                {#if state.lastRoundResult && state.lastRoundResult.revealedDice[p.id]}
+                  <div class="reveal-row">
+                    <NameFrame name={p.name} frameSvg={p.frameSvg} emblemSvg={p.emblemSvg} nameColour={p.nameColour} titleText={null} isHost={p.isHost} isBot={p.isBot} />
+                    <span class="reveal-dice">
+                      {#each state.lastRoundResult.revealedDice[p.id] as d, i (i)}
+                        {#key matchIgniteKey}
+                          <span
+                            class="reveal-die"
+                            class:match={d === state.lastRoundResult.bid.face}
+                            class:match-ignite={matchIgniteDelay && d === state.lastRoundResult.bid.face}
+                            style="animation-delay: {pi * 120 + i * 80}ms"
+                          >{dieFace(d)}</span>
+                        {/key}
+                      {/each}
+                    </span>
+                  </div>
+                {/if}
+              {/each}
+            </div>
+          {/key}
+          {#if isHost}
+            <button class="btn-primary btn-full" onclick={nextRound}>Next Round</button>
+          {:else}
+            <p class="panel-hint">Waiting for host to start next round.</p>
+          {/if}
+        </section>
+      {/key}
     {/if}
 
     <!-- Phase: game_over -->
     {#if state.phase === 'game_over'}
-      <section class="panel">
-        <h2 class="panel-title">Game Over</h2>
-        {#if state.winnerId}
-          <p class="result-line"><strong>{winnerName}</strong> wins <strong>{state.pot.toLocaleString()} chips</strong>!</p>
-        {:else}
-          <p class="result-line">No winner.</p>
-        {/if}
-        {#if isHost}
-          <button class="btn-primary btn-full" onclick={newGame}>Play Again</button>
-        {:else}
-          <p class="panel-hint">Waiting for host to start a new game.</p>
-        {/if}
-      </section>
+      {#key gameOverKey}
+        <section class="panel game-over-panel">
+          <h2 class="panel-title">Game Over</h2>
+          {#if state.winnerId}
+            <p class="result-line">
+              <strong class="winner-name vfx-sparkle-text">{winnerName}</strong>
+              wins <strong>{state.pot.toLocaleString()} chips</strong>!
+            </p>
+          {:else}
+            <p class="result-line">No winner.</p>
+          {/if}
+          {#if isHost}
+            <button class="btn-primary btn-full" onclick={newGame}>Play Again</button>
+          {:else}
+            <p class="panel-hint">Waiting for host to start a new game.</p>
+          {/if}
+        </section>
+      {/key}
     {/if}
 
     <div class="footer">
@@ -486,6 +695,12 @@
     font-family: 'Rajdhani', system-ui, sans-serif;
   }
 
+  .pot-value-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
   .pot-label {
     font-size: 0.65rem;
     letter-spacing: 0.14em;
@@ -521,7 +736,11 @@
     background: var(--accent-faint);
   }
 
-  .player-tile.eliminated { opacity: 0.45; }
+  .player-tile.eliminated {
+    opacity: 0.45;
+    filter: saturate(0.2);
+  }
+
   .player-tile.disconnected { opacity: 0.6; }
 
   .player-head {
@@ -853,9 +1072,62 @@
     font-size: 1.3rem;
     line-height: 1;
     color: var(--text-muted);
+    /* tumble into view on round_over reveal */
+    animation: vfx-tumble 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
   .reveal-die.match { color: var(--accent); }
+
+  /* gold ignite on matching dice after tumble settles */
+  .reveal-die.match-ignite {
+    animation:
+      vfx-tumble 800ms cubic-bezier(0.22, 1, 0.36, 1) both,
+      ld-match-pop 400ms 820ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes ld-match-pop {
+    0%   { transform: scale(1); filter: drop-shadow(0 0 0px var(--accent)); }
+    40%  { transform: scale(1.45); filter: drop-shadow(0 0 8px var(--accent)); }
+    70%  { transform: scale(0.95); filter: drop-shadow(0 0 4px var(--accent)); }
+    100% { transform: scale(1); filter: drop-shadow(0 0 3px var(--accent)); }
+  }
+
+  /* ring pulse on matching dice */
+  .reveal-die.match-ignite::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: vfx-ring 600ms 840ms ease-out both;
+  }
+
+  .reveal-die { position: relative; }
+
+  /* LIAR stamp */
+  .round-over-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .liar-stamp {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #e94560;
+    text-shadow: 0 0 12px rgba(233, 69, 96, 0.6);
+    pointer-events: none;
+  }
+
+  /* winner sparkle text override so it stays readable */
+  .winner-name {
+    font-size: 1.1rem;
+  }
 
   .footer {
     display: flex;

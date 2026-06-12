@@ -178,7 +178,7 @@
     if ($gameState?.phase !== 'game_over') vfxFired = false;
   });
 
-  // VFX: role reveal flip key — increments whenever we enter hints phase
+  // VFX: role reveal flip key: increments whenever we enter hints phase
   let roleRevealKey = $state(0);
   let prevRolePhase = '';
   $effect(() => {
@@ -189,7 +189,7 @@
     prevRolePhase = phase;
   });
 
-  // VFX: vote stamp pop key — increments when hasVoted transitions false→true
+  // VFX: vote stamp pop key: increments when hasVoted transitions falsetotrue
   let voteStampKey = $state(0);
   let prevHasVoted = false;
   $effect(() => {

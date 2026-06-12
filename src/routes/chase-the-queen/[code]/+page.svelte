@@ -176,12 +176,12 @@
     prevQueenInTrick = q;
   });
 
-  // VFX: trick winner banner — detect queen in completed trick
+  // VFX: trick winner banner: detect queen in completed trick
   let trickHadQueen = $derived(
     displayTrick.some((tc: any) => tc.card.suit === 'spades' && tc.card.rank === 'Q')
   );
 
-  // VFX: banner slam key — re-triggers animation each time a new trick winner appears
+  // VFX: banner slam key: re-triggers animation each time a new trick winner appears
   let bannerSlamKey = $state(0);
   let prevDisplayTrickWinner: string | null = null;
   $effect(() => {
@@ -190,7 +190,7 @@
     prevDisplayTrickWinner = w;
   });
 
-  // VFX: shoot the moon — fire gold burst + show spotlight once per moon event
+  // VFX: shoot the moon: fire gold burst + show spotlight once per moon event
   let moonVfxFired = $state(false);
   let prevAwaitingMoonChoice: string | null = null;
   $effect(() => {
@@ -206,7 +206,7 @@
     prevAwaitingMoonChoice = m;
   });
 
-  // VFX: round_over — FloatUp score deltas. Map playerId -> FloatUp instances.
+  // VFX: round_over: FloatUp score deltas. Map playerId -> FloatUp instances.
   let floatUpItems: Array<{ id: number; text: string; color: string; pid: string }> = $state([]);
   let floatUpCounter = 0;
   let prevRoundScores: Record<string, number> = {};
@@ -217,20 +217,22 @@
       const ids = Object.keys(rs);
       if (ids.length > 0 && JSON.stringify(rs) !== JSON.stringify(prevRoundScores)) {
         prevRoundScores = { ...rs };
+        const timers: ReturnType<typeof setTimeout>[] = [];
         ids.forEach((id) => {
           const delta = rs[id] ?? 0;
           const text = delta === 0 ? '+0' : `+${delta}`;
-          const color = delta === 0 ? 'var(--green, #3dd68c)' : 'var(--danger-red, #e74c3c)';
+          const color = delta === 0 ? 'var(--green, #3dd68c)' : 'var(--red, #e74c3c)';
           const item = { id: floatUpCounter++, text, color, pid: id };
           floatUpItems = [...floatUpItems, item];
-          const t = setTimeout(() => {
+          timers.push(setTimeout(() => {
             floatUpItems = floatUpItems.filter((f) => f.id !== item.id);
-          }, 950);
-          return () => clearTimeout(t);
+          }, 950));
         });
+        return () => timers.forEach((t) => clearTimeout(t));
       }
     } else {
       prevRoundScores = {};
+      floatUpItems = [];
     }
   });
 

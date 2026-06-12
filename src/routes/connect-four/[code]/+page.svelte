@@ -78,7 +78,7 @@
     if (state?.phase !== 'round_over') vfxFired = false;
   });
 
-  // VFX: piece drop — detect newly placed cell by diffing board
+  // VFX: piece drop: detect newly placed cell by diffing board
   // landedCell: [row, col] of the just-dropped piece, or null
   let landedCell = $state<[number, number] | null>(null);
   let shockwaveTrigger = $state(0);
@@ -105,7 +105,7 @@
     return () => { if (timerId !== null) clearTimeout(timerId); };
   });
 
-  // VFX: win cascade — key per winCells identity so cells re-animate each round
+  // VFX: win cascade: key per winCells identity so cells re-animate each round
   let winCascadeKey = $state(0);
   let prevWinCells = $state<string>('');
   $effect(() => {
@@ -116,7 +116,7 @@
     }
   });
 
-  // VFX: draw — grey pulse trigger
+  // VFX: draw: grey pulse trigger
   let drawPulseKey = $state(0);
   let prevIsDraw = $state(false);
   $effect(() => {
@@ -125,7 +125,7 @@
     prevIsDraw = d;
   });
 
-  // VFX: score FloatUp — track per-player previous scores
+  // VFX: score FloatUp: track per-player previous scores
   let scoreFloats = $state<{ id: number; playerId: string }[]>([]);
   let prevScores = $state<Record<string, number>>({});
   let scoreFloatTimers: ReturnType<typeof setTimeout>[] = [];

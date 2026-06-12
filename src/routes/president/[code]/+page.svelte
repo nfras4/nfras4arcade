@@ -122,9 +122,17 @@
         comboRingKey++;
         quadShakeKey++;
       }
-      setTimeout(() => { comboText = ''; comboClass = ''; }, pilePlayCount >= 4 ? 1500 : pilePlayCount === 3 ? 1200 : 800);
     }
     prevPileLen = pLen;
+  });
+
+  // VFX: combo auto-hide. Keyed on comboText so each new combo restarts the
+  // timer and the pending hide is cleaned up on re-run or unmount.
+  $effect(() => {
+    if (!comboText) return;
+    const dur = comboClass === 'combo-quad' ? 1500 : comboClass === 'combo-triple' ? 1200 : 800;
+    const t = setTimeout(() => { comboText = ''; comboClass = ''; }, dur);
+    return () => clearTimeout(t);
   });
 
   // VFX: finishing player seat gold flash - track which pids have flashed

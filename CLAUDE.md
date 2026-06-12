@@ -29,7 +29,7 @@ src/                        # SvelteKit frontend
     cardSocket.ts           # WebSocket client for card games (supports guest mode)
     stores.ts               # Svelte stores + message handlers
     auth.ts                 # Auth client (login, register, fetchUser)
-    guest.ts                # Guest identity (sessionStorage-based guest IDs)
+    guest.ts                # Guest identity (localStorage 'arcade-guest-id', shared across tabs; same-browser multi-tab multiplayer is NOT possible)
     server/auth/
       password.ts           # PBKDF2-SHA256 password hashing (Web Crypto)
       session.ts            # Session management (D1 + cookies)

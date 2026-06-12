@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
-
   interface Props {
     /** Viewport X pixel. Omit to render in-place (position: absolute on parent). */
     x?: number;
@@ -23,18 +21,17 @@
   }: Props = $props();
 
   let visible = $state(false);
-  let prevTrigger = $state(0);
+  let prevTrigger = 0;
 
   $effect(() => {
     const t = trigger;
-    untrack(() => {
-      if (t !== prevTrigger) {
-        prevTrigger = t;
-        visible = true;
-        const id = setTimeout(() => { visible = false; }, 700);
-        return () => clearTimeout(id);
-      }
-    });
+    if (t === prevTrigger) return;
+    prevTrigger = t;
+    visible = true;
+    const id = setTimeout(() => { visible = false; }, 700);
+    // returned from the $effect itself so the timer is actually cleaned up
+    // (previously this return was swallowed inside untrack and did nothing)
+    return () => clearTimeout(id);
   });
 
   const fixedStyle = $derived(

@@ -214,7 +214,8 @@
       <!-- Text block -->
       <div class="store-strip-text">
         <span class="store-strip-title geo-title">Arcade Store</span>
-        <span class="store-strip-sub">Own every party game. The Full Party Pack is $12.99.</span>
+        <span class="store-strip-sub store-strip-sub-full">Own every party game. The Full Party Pack is $12.99.</span>
+        <span class="store-strip-sub store-strip-sub-short">Every party game. $12.99.</span>
       </div>
 
       <!-- Spacer -->
@@ -1012,10 +1013,21 @@
     transform: translateX(4px);
   }
 
-  /* Mobile: hide the SAVE chip at <=560px */
+  /* Short subtitle only shows on mobile */
+  .store-strip-sub-short {
+    display: none;
+  }
+
+  /* Mobile: hide the SAVE chip, swap to the short subtitle so nothing truncates */
   @media (max-width: 560px) {
     .store-strip-chip {
       display: none;
+    }
+    .store-strip-sub-full {
+      display: none;
+    }
+    .store-strip-sub-short {
+      display: block;
     }
   }
 </style>

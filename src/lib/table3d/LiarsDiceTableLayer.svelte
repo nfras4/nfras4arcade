@@ -3,36 +3,68 @@
   import BarrelTable from './BarrelTable.svelte';
   import PlaceholderMonkey from './PlaceholderMonkey.svelte';
   import TableProjector from './TableProjector.svelte';
+  import TableDirectorTick from './TableDirectorTick.svelte';
+  import RitualSpotlight from './RitualSpotlight.svelte';
+  import KeySpotlight from './KeySpotlight.svelte';
+  import { TableDirector } from './TableDirector.svelte.js';
   import { assignSeats } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
   import type { LDStateLike } from './core/types.js';
-  import type { ExpressionName } from './core/rig.js';
 
   // ── Props ────────────────────────────────────────────────────────────────────
   let {
     state: ldState,
     /**
-     * Per-player expression overrides keyed by playerId.
-     * Wave B feeds this; Wave A leaves it empty so all monkeys default to 'neutral'.
+     * Override reduced-motion preference for harness testing.
+     * When undefined the director reads window.matchMedia at mount time.
      */
-    expressions = {} as Record<string, ExpressionName>,
+    reducedMotionOverride = undefined as boolean | undefined,
     /**
-     * Per-player talk amplitude overrides (0..1) keyed by playerId.
-     * Wave B feeds this from the jaw-chatter pulse on bid events.
+     * Ritual playback speed multiplier. 1 = real-time, 0.2 = 5x slow-mo.
+     * Harness-only: production should not pass this prop.
      */
-    talkAmplitudes = {} as Record<string, number>,
+    ritualTimescale = 1,
   }: {
     state: LDStateLike;
-    expressions?: Record<string, ExpressionName>;
-    talkAmplitudes?: Record<string, number>;
+    reducedMotionOverride?: boolean;
+    ritualTimescale?: number;
   } = $props();
 
+  // ── Director ─────────────────────────────────────────────────────────────────
+  // Instantiate once; update on every ldState change via $effect.
+  const director = new TableDirector();
+
+  $effect(() => {
+    // Sync reducedMotionOverride into the director whenever it changes.
+    if (reducedMotionOverride !== undefined) {
+      director.setReducedMotion(reducedMotionOverride);
+    }
+  });
+
+  $effect(() => {
+    director.update(ldState);
+  });
+
+  $effect(() => {
+    director.ritualTimescale = ritualTimescale;
+  });
+
+  // ── Reduced-motion via matchMedia (runtime, not prop) ─────────────────────
+  $effect(() => {
+    if (reducedMotionOverride !== undefined) return; // prop wins
+
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    director.setReducedMotion(mq.matches);
+
+    const handler = (e: MediaQueryListEvent) => director.setReducedMotion(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  });
+
   // ── Stable seat assignment ────────────────────────────────────────────────────
-  // prevSeatMap is deliberately NOT reactive: it is memoization between
-  // recomputes (players in prev keep their slot, see core/seats.ts). Holding it
-  // in $state and syncing via $effect creates an infinite read-write loop
-  // (effect_update_depth_exceeded); a plain variable written inside the
-  // $derived is the correct shape.
+  // prevSeatMap is deliberately NOT reactive: memoization between recomputes.
+  // Holding it in $state and syncing via $effect creates an infinite read-write
+  // loop (effect_update_depth_exceeded); plain variable inside $derived is correct.
   let prevSeatMap: Map<string, SeatAssignment> = new Map();
 
   const seatMap = $derived.by(() => {
@@ -46,10 +78,6 @@
   const opponentIds = $derived(opponents.map((p) => p.id));
 
   // ── Nameplate overlay state ───────────────────────────────────────────────────
-  // TableProjector writes projected screen positions each frame via callback.
-  // HEAD_OFFSET_Y: monkey root is at SEAT_Y=0.35 in world space; head crown is
-  // ~0.5 above the root (HEAD_SIZE[1]=1.0), so crown world-Y ~ 0.85. Offset 0.95
-  // above the ROOT puts the nameplate anchor ~0.3 clear of the crown in scene units.
   const HEAD_OFFSET_Y = 0.95;
 
   type PlatePos = { left: string; top: string; visible: boolean };
@@ -58,19 +86,40 @@
   function handleProjectorUpdate(map: Record<string, PlatePos>) {
     platePosMap = map;
   }
+
+  // ── Spotlight position helpers ────────────────────────────────────────────────
+  // spotPos: above the seat (light source position), off-scene default when no target.
+  function spotPos(targetId: string | null): [number, number, number] {
+    if (!targetId) return [0, 20, 0]; // far above scene, invisible
+    const seat = seatMap.get(targetId);
+    if (!seat) return [0, 20, 0];
+    return [seat.transform.position[0], 4.0, seat.transform.position[2]];
+  }
+
+  // spotTargetPos: the point on the monkey the spotlight aims at (head level).
+  function spotTargetPos(targetId: string | null): [number, number, number] {
+    if (!targetId) return [0, 0, 0];
+    const seat = seatMap.get(targetId);
+    if (!seat) return [0, 0, 0];
+    // Head centre is at seat Y + ~0.5 (HEAD_SIZE[1]=1.0, root at SEAT_Y=0.35)
+    return [seat.transform.position[0], 0.85, seat.transform.position[2]];
+  }
+
+  // ── Baseline light values ─────────────────────────────────────────────────────
+  const AMBIENT_BASELINE   = 0.4;
+  const KEY_BASELINE       = 55;
 </script>
 
 <!--
   LiarsDiceTableLayer: full 3D scene for liars dice.
-  Nameplates are CSS overlays projected from 3D head positions each frame via
-  TableProjector (a renderless Canvas child). No @threlte/extras, no WebAssembly.
+  Wave B: director wires reactions + ritual lighting. Two reactive spotlights
+  (callerSpot, accusedSpot) are positioned over seat world coords each frame.
+  Nameplates are CSS overlays projected from 3D head positions via TableProjector.
   Camera: 42 deg FOV, slightly above table level, authored framing.
 -->
 <div class="stage-container">
   <Canvas>
     <!-- Camera: authored film-set framing, no player control -->
-    <!-- Camera sits at seat 0 (the local player's chair): just above their
-         eye line, looking across the felt at the opponents' faces. -->
     <T.PerspectiveCamera
       makeDefault
       fov={42}
@@ -80,24 +129,48 @@
       oncreate={(camera) => { camera.lookAt(0, 0.2, -0.6); }}
     />
 
-    <!-- Ambient fill: warm, low intensity -->
-    <T.AmbientLight color={0xaa9988} intensity={0.4} />
+    <!-- Ambient fill: warm, intensity driven by director during ritual -->
+    <T.AmbientLight
+      color={0xaa9988}
+      intensity={AMBIENT_BASELINE * director.lights.ambientFactor}
+    />
 
-    <!-- Warm key spot: above table centre, broad angle for even felt coverage -->
-    <T.SpotLight
+    <!-- Warm key spot: above table centre, intensity driven by director during ritual.
+         KeySpotlight adds .target to scene via useThrelte() so the light aims correctly. -->
+    <KeySpotlight
       color={0xffe8c0}
-      intensity={55}
+      intensity={KEY_BASELINE * director.lights.keyFactor}
       angle={0.55}
       penumbra={0.35}
       position={[0, 4.2, 1.4]}
-      target-position={[0, 0, 0]}
     />
 
-    <!-- Cool rim: from behind the far seats, separates monkeys from background -->
+    <!-- Cool rim: constant, not affected by ritual -->
     <T.DirectionalLight
       color={0x7ab8d4}
       intensity={0.8}
       position={[-1.5, 2.0, -4]}
+    />
+
+    <!-- Caller spotlight: RitualSpotlight properly adds .target to scene.
+         angle=0.22 rad gives a pool ~0.65 unit radius at 3m distance (one-monkey width). -->
+    <RitualSpotlight
+      color={0xffd080}
+      intensity={director.lights.callerSpotIntensity}
+      angle={0.22}
+      penumbra={0.45}
+      position={spotPos(director.lights.callerSpotTarget)}
+      targetPosition={spotTargetPos(director.lights.callerSpotTarget)}
+    />
+
+    <!-- Accused spotlight: warm orange pool, same cone size as caller spot -->
+    <RitualSpotlight
+      color={0xff9060}
+      intensity={director.lights.accusedSpotIntensity}
+      angle={0.22}
+      penumbra={0.45}
+      position={spotPos(director.lights.accusedSpotTarget)}
+      targetPosition={spotTargetPos(director.lights.accusedSpotTarget)}
     />
 
     <!-- Barrel table geometry -->
@@ -113,13 +186,16 @@
         >
           <PlaceholderMonkey
             furColor={seat.furColour}
-            expression={expressions[player.id] ?? 'neutral'}
-            talkAmplitude={talkAmplitudes[player.id] ?? 0}
+            expression={director.expressions[player.id] ?? 'neutral'}
+            talkAmplitude={director.talkAmplitudes[player.id] ?? 0}
             hat="none"
           />
         </T.Group>
       {/if}
     {/each}
+
+    <!-- Director tick: advances ritual + chatter each frame (must be inside Canvas) -->
+    <TableDirectorTick {director} />
 
     <!-- Renderless projector: runs inside Canvas so useThrelte() context is valid -->
     <TableProjector

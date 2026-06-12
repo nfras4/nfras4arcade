@@ -10,6 +10,7 @@ Chunky, toy-like, mischievous. Crossy Road fidelity, not Pixar, not Fall Guys sq
 
 - **Head and hands only.** No body; the torso is implied below the table edge. Hands appear contextually (shaking the cup, pushing chips) and are hidden by default.
 - **Proportions:** head is a rounded cube, wider than tall (about 1.2 : 1). Muzzle is a second, smaller rounded box on the lower front half. Ears are large flat discs set high on the sides. Eyes are flattened white spheres with black disc pupils, no iris.
+- **Rounding is mandatory (reasserted 2026-06-12, Nick: "very blocky"):** head, muzzle, and jaw use rounded-box geometry (RoundedBoxGeometry from three addons, 2 to 3 segments, corner radius about 0.10 on the head and proportionally less on muzzle/jaw), NOT plain BoxGeometry. Flat shading stays on; the goal is chunky toy, not shipping crate. The mouth cavity softens with the muzzle so the open jaw reads as a snout, not a drawer.
 - **Jaw:** the bottom third of the muzzle is a separate mesh hinged at its back edge, rotating on X from 0 (closed) to 0.45 rad (max open).
 - **Poly budget:** 1,500 triangles max per head including ears and jaw; 400 max per hand.
 - **Flat shading.** Faceted normals everywhere; the visible low-poly facets are the style, not a limitation to hide.
@@ -54,7 +55,9 @@ Input is a scalar amplitude 0 to 1 (Phase 0: a test slider and auto-oscillator; 
 
 ## Lighting and camera
 
-Theatrical staging: one warm key spotlight above table centre, low ambient fill, a cool rim from behind the far seats. Camera locked, slightly above seated eye level, 35 to 40 degree FOV. No camera control for players; the frame is authored like a film set.
+Theatrical staging: one warm key spotlight above table centre, low ambient fill, a cool rim from behind the far seats. Camera authored, slightly above seated eye level; the frame is composed like a film set and players never get free orbit.
+
+**Seated parallax (approved 2026-06-12):** the camera leans subtly toward the mouse to sell "I am sitting at this table". Constrained to about +/-6 degrees yaw and +/-2.5 degrees pitch around the authored framing, eased (lerp ~0.08/frame), drifting back to centre when the pointer leaves the stage. Disabled under prefers-reduced-motion. Touch devices stay static (TV mode revisits this in Phase 2). The constraint is the point: it must feel like turning your head at a chair, never like a camera tool.
 
 ## Motion rules
 

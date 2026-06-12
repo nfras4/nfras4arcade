@@ -25,7 +25,7 @@ export const NODE_HAND_R        = 'HandR';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat' | 'asleep';
+export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat' | 'asleep' | 'laugh';
 
 export type HatId = 'none' | 'party' | 'crown';
 
@@ -99,6 +99,20 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     headPitchDeg:  0,
     headPullBack:  0,
     sweating:      true,
+  },
+  /**
+   * laugh: vindicated player's triumphant reaction during the Liar's Ritual VERDICT cue.
+   * Jaw open wide, eyes squinted, head tilted with a slight pitch back.
+   */
+  laugh: {
+    jawRad:        0.30,
+    eyeScale:      0.85,
+    browOffset:    0.06,
+    browPinch:     0,
+    headTiltDeg:   5,
+    headPitchDeg:  0,
+    headPullBack:  0,
+    sweating:      false,
   },
   /**
    * asleep: used for eliminated players still seated at the table.

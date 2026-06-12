@@ -51,6 +51,13 @@ export interface LDStateLike {
   currentBid: BidLike | null;
   lastRoundResult: RoundResultLike | null;
   onesWild: boolean;
+  /** Current pot size in chips. Used for POT_CHANGED events. */
+  pot?: number;
+  /**
+   * Stable turn order (player ids). Used by REVEAL_STEP to iterate
+   * revealedDice in a consistent order across clients.
+   */
+  turnOrder?: string[];
 }
 
 // ─── Semantic table events ────────────────────────────────────────────────────
@@ -59,11 +66,12 @@ export interface LDStateLike {
 
 export type TableEvent =
   | { type: 'BID_PLACED';       bidderId: string; bid: BidLike; prevBid: BidLike | null }
-  | { type: 'BIG_BID';          bidderId: string; bid: BidLike; prevBid: BidLike }
+  | { type: 'BIG_BID';          bidderId: string; bid: BidLike; prevBid: BidLike; prevBidderId: string }
   | { type: 'TURN_CHANGED';     newTurnId: string; prevTurnId: string | null }
   | { type: 'LIAR_CALLED';      callerId: string; accusedId: string; bid: BidLike }
   | { type: 'REVEAL_STEP';      playerId: string; stepIndex: number; totalSteps: number }
-  | { type: 'VERDICT';          loserId: string; winnerId: string; result: RoundResultLike }
+  | { type: 'VERDICT';          loserId: string; vindicatedId: string; result: RoundResultLike }
   | { type: 'PLAYER_ELIMINATED';playerId: string }
   | { type: 'PHASE_CHANGED';    newPhase: LDStateLike['phase']; prevPhase: LDStateLike['phase'] }
+  | { type: 'POT_CHANGED';      pot: number; prevPot: number }
   | { type: 'EMOTE';            playerId: string; emoteId: string };

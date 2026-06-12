@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import type { LDStateLike, PlayerViewLike } from '$lib/table3d/core/types.js';
+  import { EMOTE_IDS, type EmoteId } from '$lib/table3d/core/emotes.js';
+  import type { LayerHandle } from '$lib/table3d/LiarsDiceTableLayer.svelte';
 
   // ── Lazy scene component (dev only, Three.js stays in its own chunk) ──────────
   type LayerProps = {
@@ -8,8 +10,14 @@
     reducedMotionOverride?: boolean;
     /** Harness-only: 1 = real-time, 0.2 = 5x slow-mo. See TableDirector.ritualTimescale. */
     ritualTimescale?: number;
+    onemote?: (emoteId: EmoteId) => void;
+    onready?: (handle: LayerHandle) => void;
   };
-  let LayerComp = $state<Component<LayerProps> | null>(null);
+  // Use $state.raw so Svelte doesn't try to deep-clone the component constructor
+  // (which has internal .subscribe-like properties that trigger snapshot warnings).
+  let LayerComp = $state.raw<Component<LayerProps> | null>(null);
+  // Populated via onready callback when the layer mounts.
+  let layerHandle: LayerHandle | null = null;
   let sceneError = $state<string | null>(null);
 
   $effect(() => {
@@ -284,6 +292,29 @@
       stepIndex = ROUND_OVER_INDEX;
     });
   }
+
+  // ── Emote harness ─────────────────────────────────────────────────────────────
+  // Simulate the round-trip: local fire -> local echo -> fake broadcast 80ms later.
+
+  function handleHarnessReady(handle: LayerHandle): void {
+    layerHandle = handle;
+  }
+
+  function handleHarnessEmote(emoteId: EmoteId): void {
+    // The layer fires local echo immediately via handleLocalEmote (called by onemote).
+    // 80ms later we simulate a remote broadcast arriving from the server.
+    setTimeout(() => {
+      layerHandle?.handleRemoteEmote('p2', emoteId); // simulate Bongo echoing the emote
+    }, 80);
+  }
+
+  function fireRandomRemoteEmote(): void {
+    // Simulate a random emote from a random opponent (p1..p4, not myId).
+    const remoteIds = ['p1', 'p2', 'p3', 'p4'];
+    const pid = remoteIds[Math.floor(Math.random() * remoteIds.length)];
+    const eid = EMOTE_IDS[Math.floor(Math.random() * EMOTE_IDS.length)];
+    layerHandle?.handleRemoteEmote(pid, eid);
+  }
 </script>
 
 {#if !import.meta.env.DEV}
@@ -298,6 +329,8 @@
           state={currentStep.state}
           reducedMotionOverride={reducedMotionOverride}
           ritualTimescale={ritualTimescale}
+          onemote={handleHarnessEmote}
+          onready={handleHarnessReady}
         />
       {:else}
         <p class="loading">Loading 3D scene...</p>
@@ -331,6 +364,9 @@
         </div>
         <button class="action-btn" onclick={replayRitual}>
           Replay ritual
+        </button>
+        <button class="action-btn" onclick={fireRandomRemoteEmote}>
+          Random remote emote
         </button>
       </section>
 

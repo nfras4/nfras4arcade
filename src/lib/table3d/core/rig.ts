@@ -25,7 +25,7 @@ export const NODE_HAND_R        = 'HandR';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat' | 'asleep' | 'laugh';
+export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat' | 'asleep' | 'laugh' | 'smug';
 
 export type HatId = 'none' | 'party' | 'crown';
 
@@ -126,6 +126,21 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     browPinch:     0,
     headTiltDeg:   3,     // slight list to one side
     headPitchDeg:  28,    // chin toward chest -- reads as "passed out" at distance
+    headPullBack:  0,
+    sweating:      false,
+  },
+
+  /**
+   * smug: asymmetric knowing look. Used by taunt and sus emotes.
+   * One-sided head tilt + squinted eyes + slight jaw smirk.
+   */
+  smug: {
+    jawRad:        0.06,  // barely-open smirk
+    eyeScale:      0.78,  // narrowed, knowing
+    browOffset:    0.03,  // one brow raised (approximated via uniform offset + pinch asymmetry)
+    browPinch:    -0.06,  // outward slant -- opposite of sweat's worry pinch
+    headTiltDeg:   6,     // distinct lean, reads clearly at distance
+    headPitchDeg: -2,     // chin ever so slightly up (confident)
     headPullBack:  0,
     sweating:      false,
   },

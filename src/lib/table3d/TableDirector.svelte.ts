@@ -19,6 +19,7 @@ import { buildRitual } from './core/ritual.js';
 import type { LDStateLike, TableEvent } from './core/types.js';
 import type { ExpressionName } from './core/rig.js';
 import type { RitualCue } from './core/ritual.js';
+import { EMOTE_REGISTRY, type EmoteId } from './core/emotes.js';
 
 // ─── Light state ──────────────────────────────────────────────────────────────
 
@@ -62,11 +63,24 @@ const ELIMINATE_SHOCK_DURATION_MS = 1200;
 
 // ─── TableDirector class ──────────────────────────────────────────────────────
 
+// ─── Emote bubble entry ───────────────────────────────────────────────────────
+
+export interface EmoteBubble {
+  emoteId: EmoteId;
+  firedAt: number; // Date.now() ms
+}
+
 export class TableDirector {
   // Reactive output consumed by the layer
   expressions = $state<Record<string, ExpressionName>>({});
   talkAmplitudes = $state<Record<string, number>>({});
   lights = $state<LightState>({ ...LIGHT_BASELINE });
+
+  /**
+   * Active emote bubbles keyed by playerId. Layer renders a pop-in glyph
+   * above the named monkey's nameplate. Entries are cleared after holdMs.
+   */
+  emoteBubbles = $state<Record<string, EmoteBubble>>({});
 
   /**
    * Ritual playback speed multiplier.
@@ -123,6 +137,15 @@ export class TableDirector {
   /** Set reduced-motion preference. Can be called at any time. */
   setReducedMotion(value: boolean): void {
     this.#reducedMotion = value;
+  }
+
+  /**
+   * Apply an emote directly (bypasses state-diff derivation).
+   * Called by the layer when a player_emote WebSocket message arrives,
+   * and also for local-echo when the local player fires an emote.
+   */
+  applyEmote(playerId: string, emoteId: string): void {
+    this.#onEmote(playerId, emoteId);
   }
 
   /**
@@ -190,8 +213,10 @@ export class TableDirector {
 
       case 'TURN_CHANGED':
       case 'POT_CHANGED':
+        break;
+
       case 'EMOTE':
-        // No visual reaction in Wave B for these.
+        this.#onEmote(event.playerId, event.emoteId);
         break;
     }
 
@@ -222,6 +247,33 @@ export class TableDirector {
     this.#setExpression(prevBidderId, 'sweat', BIG_BID_SWEAT_DURATION_MS);
     // Extend chatter for the big bidder
     this.#chatterState.set(bidderId, { elapsed: 0, duration: BID_CHATTER_DURATION_MS / 1000 });
+  }
+
+  // ── Emote reaction ──────────────────────────────────────────────────────────
+
+  #onEmote(playerId: string, emoteId: string): void {
+    const entry = EMOTE_REGISTRY[emoteId as EmoteId];
+    if (!entry) return; // unknown emote id, drop silently
+
+    // Set expression with hold duration
+    this.#setExpression(playerId, entry.expression, entry.holdMs);
+
+    // Surface bubble for the layer to render
+    this.emoteBubbles = {
+      ...this.emoteBubbles,
+      [playerId]: { emoteId: entry.id, firedAt: Date.now() },
+    };
+
+    // Auto-clear bubble after holdMs
+    setTimeout(() => {
+      const current = this.emoteBubbles[playerId];
+      // Only clear if this is still the same emote (not superseded by a newer one)
+      if (current && current.emoteId === entry.id) {
+        const next = { ...this.emoteBubbles };
+        delete next[playerId];
+        this.emoteBubbles = next;
+      }
+    }, entry.holdMs);
   }
 
   // ── Elimination reaction ────────────────────────────────────────────────────

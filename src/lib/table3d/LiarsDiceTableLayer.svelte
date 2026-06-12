@@ -11,6 +11,13 @@
   import { assignSeats } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
   import type { LDStateLike } from './core/types.js';
+  import { EMOTE_LIST, EMOTE_REGISTRY, type EmoteId } from './core/emotes.js';
+  import { playSting, isMuted, setMuted } from './audio.js';
+
+  /** Handle returned via onready so the parent can route WS emote messages in. */
+  export interface LayerHandle {
+    handleRemoteEmote(playerId: string, emoteId: string): void;
+  }
 
   // ── Props ────────────────────────────────────────────────────────────────────
   let {
@@ -25,10 +32,23 @@
      * Harness-only: production should not pass this prop.
      */
     ritualTimescale = 1,
+    /**
+     * Called when the local player fires an emote via the strip.
+     * The parent (game page or harness) is responsible for sending the
+     * WS message to the server. The layer itself handles local echo.
+     */
+    onemote = undefined as ((emoteId: EmoteId) => void) | undefined,
+    /**
+     * Called once on mount with a handle object so the parent can route
+     * incoming player_emote WS messages into the layer without bind:this.
+     */
+    onready = undefined as ((handle: LayerHandle) => void) | undefined,
   }: {
     state: LDStateLike;
     reducedMotionOverride?: boolean;
     ritualTimescale?: number;
+    onemote?: (emoteId: EmoteId) => void;
+    onready?: (handle: LayerHandle) => void;
   } = $props();
 
   // ── Director ─────────────────────────────────────────────────────────────────
@@ -133,6 +153,55 @@
     const handler = (e: MediaQueryListEvent) => { parallaxReducedMotion = e.matches; };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  });
+
+  // ── Mute toggle state ────────────────────────────────────────────────────────
+  let tableMuted = $state(isMuted());
+
+  function toggleMute(): void {
+    const next = !tableMuted;
+    tableMuted = next;
+    setMuted(next);
+  }
+
+  // ── Emote strip: local echo + dedup ──────────────────────────────────────────
+  // When the local player fires an emote, apply it immediately (don't wait for
+  // the server echo). When the broadcast comes back for myId within 1s, ignore it.
+  let lastLocalEmoteAt = 0;
+  const LOCAL_ECHO_DEDUP_MS = 1000;
+
+  function handleLocalEmote(emoteId: EmoteId): void {
+    // Apply locally at once
+    lastLocalEmoteAt = Date.now();
+    director.applyEmote(ldState.myId || 'me', emoteId);
+    // Play the sting on user gesture
+    if (!tableMuted) {
+      playSting(EMOTE_REGISTRY[emoteId].sting);
+    }
+    // Notify parent so it can send the WS message
+    onemote?.(emoteId);
+  }
+
+  /**
+   * Route an incoming player_emote WS message into the director.
+   * Dedupes same-player echoes within 1s of a local fire.
+   * Called externally via the handle returned by onready.
+   */
+  function handleRemoteEmote(playerId: string, emoteId: string): void {
+    const isLocal = playerId === ldState.myId;
+    if (isLocal && Date.now() - lastLocalEmoteAt < LOCAL_ECHO_DEDUP_MS) {
+      return; // suppress echo of our own local action
+    }
+    director.applyEmote(playerId, emoteId);
+    if (!tableMuted) {
+      const entry = EMOTE_REGISTRY[emoteId as EmoteId];
+      if (entry) playSting(entry.sting);
+    }
+  }
+
+  // Publish the handle once on mount so the parent can route WS messages in.
+  $effect(() => {
+    onready?.({ handleRemoteEmote });
   });
 
   // ── Baseline light values ─────────────────────────────────────────────────────
@@ -254,8 +323,57 @@
             <span class="badge away">AWAY</span>
           {/if}
         </div>
+
+        <!-- Emote bubble: sits above the nameplate, pop-in/fade-out via CSS -->
+        {#if director.emoteBubbles[player.id]}
+          {@const bubble = director.emoteBubbles[player.id]}
+          {#key bubble.firedAt}
+            <div
+              class="emote-bubble"
+              style="left: {pos.left}; top: {pos.top};"
+              aria-hidden="true"
+            >
+              {EMOTE_REGISTRY[bubble.emoteId]?.glyph ?? bubble.emoteId}
+            </div>
+          {/key}
+        {/if}
       {/if}
     {/each}
+
+    <!-- Local player emote bubble: bottom-centre of stage as confirmation -->
+    {#if ldState.myId && director.emoteBubbles[ldState.myId]}
+      {@const bubble = director.emoteBubbles[ldState.myId]}
+      {#key bubble.firedAt}
+        <div class="emote-bubble emote-bubble--local" aria-hidden="true">
+          {EMOTE_REGISTRY[bubble.emoteId]?.glyph ?? bubble.emoteId}
+        </div>
+      {/key}
+    {/if}
+  </div>
+
+  <!-- Emote strip: six emote buttons + mute toggle, sits below the 3D viewport -->
+  <div class="emote-strip" role="toolbar" aria-label="Emote buttons">
+    {#each EMOTE_LIST as entry (entry.id)}
+      <button
+        class="emote-btn"
+        title={entry.label}
+        aria-label={entry.label}
+        onclick={() => handleLocalEmote(entry.id)}
+      >
+        <span class="emote-glyph">{entry.glyph}</span>
+        <span class="emote-label">{entry.label}</span>
+      </button>
+    {/each}
+    <button
+      class="emote-btn emote-btn--mute"
+      title={tableMuted ? 'Unmute sounds' : 'Mute sounds'}
+      aria-label={tableMuted ? 'Unmute sounds' : 'Mute sounds'}
+      aria-pressed={tableMuted}
+      onclick={toggleMute}
+    >
+      <span class="emote-glyph">{tableMuted ? 'M' : 'S'}</span>
+      <span class="emote-label">{tableMuted ? 'Muted' : 'Sound'}</span>
+    </button>
   </div>
 </div>
 
@@ -337,5 +455,117 @@
   .badge.away {
     background: rgba(70, 70, 70, 0.60);
     color: #aaaaaa;
+  }
+
+  /* ── Emote bubbles ────────────────────────────────────────────────────── */
+
+  .emote-bubble {
+    position: absolute;
+    /* Sit 2.2em above the nameplate (which itself is transform: translate(-50%, -100%)) */
+    transform: translate(-50%, calc(-100% - 2.2em));
+    background: rgba(10, 14, 18, 0.88);
+    border: 1px solid rgba(90, 138, 90, 0.45);
+    border-radius: 4px;
+    padding: 0.18em 0.45em;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent-hover, #6b9e6b);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: emote-pop 2s ease-out forwards;
+  }
+
+  /* Local player bubble: fixed at bottom-centre of stage */
+  .emote-bubble--local {
+    position: absolute;
+    bottom: 5.5rem; /* above the emote strip */
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.9rem;
+  }
+
+  @keyframes emote-pop {
+    0%   { opacity: 0; transform: translate(-50%, calc(-100% - 1.5em)) scale(0.7); }
+    12%  { opacity: 1; transform: translate(-50%, calc(-100% - 2.2em)) scale(1.08); }
+    20%  { transform: translate(-50%, calc(-100% - 2.2em)) scale(1.0); }
+    70%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, calc(-100% - 2.8em)) scale(0.9); }
+  }
+
+  /* ── Emote strip ──────────────────────────────────────────────────────── */
+
+  .emote-strip {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    background: rgba(8, 10, 12, 0.82);
+    border-top: 1px solid rgba(90, 138, 90, 0.14);
+    backdrop-filter: blur(6px);
+    z-index: 10;
+    /* Strip height auto from buttons; ~44px min tap target */
+  }
+
+  .emote-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15em;
+    min-height: 44px;
+    padding: 0.3rem 0.2rem;
+    background: transparent;
+    border: none;
+    border-right: 1px solid rgba(90, 138, 90, 0.10);
+    color: var(--text-muted, #a8b8c4);
+    font-family: 'Space Grotesk', sans-serif;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    user-select: none;
+  }
+
+  .emote-btn:last-child {
+    border-right: none;
+  }
+
+  .emote-btn:hover {
+    background: rgba(90, 138, 90, 0.12);
+    color: var(--accent-hover, #6b9e6b);
+  }
+
+  .emote-btn:active {
+    background: rgba(90, 138, 90, 0.22);
+  }
+
+  .emote-btn--mute {
+    flex: 0 0 auto;
+    min-width: 52px;
+    border-left: 1px solid rgba(90, 138, 90, 0.18);
+    color: var(--text-subtle, #6a7a8a);
+  }
+
+  .emote-btn--mute[aria-pressed="true"] {
+    color: rgba(180, 60, 60, 0.85);
+  }
+
+  .emote-glyph {
+    font-size: 0.80rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .emote-label {
+    font-size: 0.52rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    line-height: 1;
   }
 </style>

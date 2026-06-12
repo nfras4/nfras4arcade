@@ -12,12 +12,14 @@
     size = 'large',
     animate = false,
     highlight = false,
+    shimmer = false,
   }: {
     card?: { suit: string; rank: string } | null;
     faceUp?: boolean;
     size?: 'normal' | 'large' | 'huge';
     animate?: boolean;
     highlight?: boolean;
+    shimmer?: boolean;
   } = $props();
 
   let isRed = $derived(card?.suit === 'hearts' || card?.suit === 'diamonds');
@@ -42,6 +44,7 @@
   class:flipping
   class:face-down={!faceUp || !card}
   class:red={isRed && faceUp && card}
+  class:shimmer
 >
   <div class="card-inner">
     {#if faceUp && card}
@@ -164,4 +167,23 @@
 
   .red .rank { color: #e63232; }
   .red .suit-icon { fill: #e63232; }
+
+  /* anticipation shimmer while snap window is active */
+  @keyframes cardShimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      105deg,
+      var(--bg-card) 0%,
+      var(--bg-card) 35%,
+      rgba(255, 255, 255, 0.18) 50%,
+      var(--bg-card) 65%,
+      var(--bg-card) 100%
+    );
+    background-size: 200% auto;
+    animation: cardShimmer 1.4s linear infinite, highlightPulse 0.8s ease-in-out infinite alternate;
+  }
 </style>

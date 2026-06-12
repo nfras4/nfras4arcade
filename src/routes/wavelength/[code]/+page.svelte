@@ -7,6 +7,9 @@
   import { writable } from 'svelte/store';
   import Dial from '$lib/components/wavelength/Dial.svelte';
   import { CATEGORY_LABELS, getCategories } from '$lib/wavelength/cards';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
+  import { fireGoldBurst } from '$lib/vfx/burst';
 
   const PLAYER_COLORS = [
     '#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
@@ -226,6 +229,93 @@
 
   // Has locked in
   let hasLockedIn = $derived(state?.lockedIn?.includes(pid) ?? false);
+
+  // ─── VFX state ────────────────────────────────────────────────────────────
+  // (1) Lock-in: ring at needle + pop badge
+  let lockInRingTrigger = $state(0);
+  let lockInPopKey = $state(0);
+  let prevHasLockedIn = false;
+  $effect(() => {
+    const locked = hasLockedIn;
+    if (locked && !prevHasLockedIn) {
+      prevHasLockedIn = locked;
+      lockInRingTrigger++;
+      lockInPopKey++;
+    } else {
+      prevHasLockedIn = locked;
+    }
+  });
+
+  // (3) Bullseye: gold burst + BULLSEYE stamp
+  let bullseyeShockTrigger = $state(0);
+  let bullseyeVisible = $state(false);
+  let prevBullseyeCount = 0;
+  $effect(() => {
+    const count = state?.roundInsight?.bullseyeCount ?? 0;
+    if (count > 0 && prevBullseyeCount === 0) {
+      prevBullseyeCount = count;
+      bullseyeShockTrigger++;
+      bullseyeVisible = true;
+      const dialEl = document.querySelector('.dial-wrapper');
+      if (dialEl) {
+        const rect = dialEl.getBoundingClientRect();
+        fireGoldBurst({
+          x: (rect.left + rect.width / 2) / window.innerWidth,
+          y: (rect.top + rect.height * 0.45) / window.innerHeight,
+        });
+      } else {
+        fireGoldBurst();
+      }
+      const t = setTimeout(() => { bullseyeVisible = false; }, 1100);
+      return () => clearTimeout(t);
+    } else if (count === 0) {
+      prevBullseyeCount = 0;
+    }
+  });
+
+  // (4) Score reveal: FloatUp per player
+  interface ScoreFloat { id: number; text: string; color: string; }
+  let scoreFloats: ScoreFloat[] = $state([]);
+  let prevRevealPhase = false;
+  $effect(() => {
+    const isReveal = state?.phase === 'reveal';
+    if (isReveal && !prevRevealPhase) {
+      prevRevealPhase = true;
+      const timers: ReturnType<typeof setTimeout>[] = [];
+      if (state?.roundScores && state?.players) {
+        let delay = 0;
+        for (const p of state.players) {
+          const pts = state.roundScores[p.id] ?? 0;
+          if (pts > 0) {
+            const capturedPts = pts;
+            const capturedId = p.id;
+            timers.push(setTimeout(() => {
+              const color = playerColorMap[capturedId] ?? 'var(--accent)';
+              scoreFloats = [...scoreFloats, { id: Date.now() + Math.random(), text: `+${capturedPts}`, color }];
+            }, delay));
+            delay += 120;
+          }
+        }
+      }
+      return () => { timers.forEach(clearTimeout); };
+    } else if (!isReveal) {
+      prevRevealPhase = false;
+    }
+  });
+
+  // (5) Game over: winner gold sweep
+  let gameOverGoldKey = $state(0);
+  let prevGameOver = false;
+  $effect(() => {
+    const isOver = state?.phase === 'game_over';
+    if (isOver && !prevGameOver) {
+      prevGameOver = true;
+      gameOverGoldKey++;
+      fireGoldBurst({ x: 0.5, y: 0.35 });
+    } else if (!isOver) {
+      prevGameOver = false;
+    }
+  });
 
   // Actions
   function startGame() {
@@ -590,7 +680,14 @@
           {#if !hasLockedIn}
             <button class="btn-primary" onclick={lockGuess}>Lock In</button>
           {:else}
-            <p class="locked-in-text">Locked in! Waiting for others...</p>
+            <div class="locked-in-wrap">
+              {#key lockInPopKey}
+                <p class="locked-in-text vfx-pop-in">LOCKED</p>
+              {/key}
+              <div class="needle-ring-anchor">
+                <Shockwave trigger={lockInRingTrigger} color="#00e6ff" size={48} />
+              </div>
+            </div>
           {/if}
         {/if}
 
@@ -647,8 +744,21 @@
           {revealScores}
         />
 
-        <!-- Round scores -->
-        <div class="round-scores">
+        <!-- BULLSEYE overlay -->
+        {#if bullseyeVisible}
+          <div class="bullseye-overlay" aria-hidden="true">
+            <div class="bullseye-dial-anchor">
+              <Shockwave trigger={bullseyeShockTrigger} color="#f5c842" size={160} />
+            </div>
+            <span class="bullseye-stamp vfx-slam-in vfx-sparkle-text">BULLSEYE</span>
+          </div>
+        {/if}
+
+        <!-- Round scores with FloatUp -->
+        <div class="round-scores score-floats-anchor">
+          {#each scoreFloats as sf (sf.id)}
+            <FloatUp text={sf.text} color={sf.color} />
+          {/each}
           <h3 class="section-label">Round Scores</h3>
           {#each state.players.filter((p: any) => p.id !== state.psychicId) as player}
             <div class="score-row">
@@ -742,11 +852,21 @@
         <!-- Final scoreboard -->
         <div class="scoreboard final-scoreboard">
           {#each sortedPlayers as player, i}
-            <div class="score-row" class:highlight={player.id === pid} class:winner={i === 0}>
-              <span class="rank">#{i + 1}</span>
-              <span class="score-row-name">{player.name}{player.id === pid ? ' (you)' : ''}</span>
-              <span class="score-row-value">{player.score ?? 0}</span>
-            </div>
+            {#if i === 0}
+              {#key gameOverGoldKey}
+                <div class="score-row winner vfx-flash-gold" class:highlight={player.id === pid}>
+                  <span class="rank">#{i + 1}</span>
+                  <span class="score-row-name winner-name vfx-sparkle-text">{player.name}{player.id === pid ? ' (you)' : ''}</span>
+                  <span class="score-row-value">{player.score ?? 0}</span>
+                </div>
+              {/key}
+            {:else}
+              <div class="score-row" class:highlight={player.id === pid} class:winner={i === 0}>
+                <span class="rank">#{i + 1}</span>
+                <span class="score-row-name">{player.name}{player.id === pid ? ' (you)' : ''}</span>
+                <span class="score-row-value">{player.score ?? 0}</span>
+              </div>
+            {/if}
           {/each}
         </div>
 
@@ -1650,4 +1770,60 @@
   }
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
+
+  /* ── VFX: lock-in wrap ─────────────────────────────────────────────── */
+  .locked-in-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .needle-ring-anchor {
+    position: relative;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* ── VFX: bullseye overlay ─────────────────────────────────────────── */
+  .bullseye-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .bullseye-dial-anchor {
+    position: relative;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .bullseye-stamp {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: clamp(2.5rem, 10vw, 4rem);
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: -1rem;
+    pointer-events: none;
+    /* vfx-sparkle-text handles color via background-clip */
+  }
+
+  /* ── VFX: score floats anchor ──────────────────────────────────────── */
+  .score-floats-anchor {
+    position: relative;
+  }
+
+  /* ── VFX: winner name shimmer ──────────────────────────────────────── */
+  .winner-name {
+    font-weight: 700;
+  }
 </style>

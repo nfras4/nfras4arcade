@@ -8,6 +8,9 @@
   import { isLoggedIn, userStats, currentUser } from '$lib/auth';
   import Card from '$lib/components/cards/Card.svelte';
   import NameFrame from '$lib/components/NameFrame.svelte';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
+  import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/blackjack');
@@ -111,6 +114,135 @@
   let myChips = $derived(myPlayer?.chips ?? 0);
   let isMyTurn = $derived(currentPlayerId === pid);
   let activeHand = $derived(isMyTurn ? (myHands[currentHandIndex] ?? null) : null);
+
+  // ── VFX state ─────────────────────────────────────────────────────────────
+  // Deal transition flash (betting -> playing)
+  let dealFlashKey = $state(0);
+
+  // Dealer reveal tension + flash
+  let dealerRevealKey = $state(0);
+  let dealerDimActive = $state(false);
+  let dealerFlashActive = $state(false);
+
+  // Per-hand bust / blackjack retrigger keys (indexed by hand index)
+  let bustKeys: number[] = $state([0, 0, 0, 0]);
+  let bjKeys: number[] = $state([0, 0, 0, 0]);
+  // Track previous bust/bj state for each hand slot
+  let prevBust: boolean[] = [false, false, false, false];
+  let prevBj: boolean[] = [false, false, false, false];
+
+  // Split flash key
+  let splitKey = $state(0);
+  let prevHandCount = 0;
+
+  // Results phase animation key (staggered badges + FloatUps)
+  let resultKey = $state(0);
+  // FloatUp payout items: { id, text, color }
+  let floatUpItems: { id: number; text: string; color: string }[] = $state([]);
+
+  // Push pulse key (unused in markup but reserved)
+  let pushKeys: Record<string, number> = $state({});
+
+  // ── VFX effects ───────────────────────────────────────────────────────────
+
+  // 1. Deal flash: betting -> playing
+  $effect(() => {
+    const ph = state?.phase;
+    if (ph === 'playing' && prevPhase === 'betting') {
+      dealFlashKey++;
+    }
+  });
+
+  // 2. Dealer reveal tension beat
+  $effect(() => {
+    const revealed = dealerRevealed;
+    if (revealed && !dealerDimActive && !dealerFlashActive) {
+      dealerRevealKey++;
+      dealerDimActive = true;
+      const t1 = setTimeout(() => {
+        dealerDimActive = false;
+        dealerFlashActive = true;
+      }, 300);
+      const t2 = setTimeout(() => {
+        dealerFlashActive = false;
+      }, 600);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  });
+
+  // 3. Per-hand bust + blackjack detection
+  $effect(() => {
+    const hands = myHands;
+    for (let i = 0; i < 4; i++) {
+      const hand = hands[i];
+      const isBust = hand?.busted ?? false;
+      const isBj = hand?.isBlackjack ?? false;
+      if (isBust && !prevBust[i]) {
+        bustKeys[i]++;
+        fireLoss({ x: 0.5, y: 0.55 });
+      }
+      if (isBj && !prevBj[i]) {
+        bjKeys[i]++;
+        fireGoldBurst({ x: 0.5, y: 0.45 });
+      }
+      prevBust[i] = isBust;
+      prevBj[i] = isBj;
+    }
+  });
+
+  // 4. Split flash
+  $effect(() => {
+    const count = myHands.length;
+    if (count > prevHandCount && prevHandCount > 0) {
+      splitKey++;
+    }
+    prevHandCount = count;
+  });
+
+  // 5. Results: staggered badges + FloatUps for payouts (fires once per round_over)
+  let prevResultPhase = false;
+  $effect(() => {
+    const isRoundOver = state?.phase === 'round_over';
+    if (isRoundOver && !prevResultPhase) {
+      resultKey++;
+      const pay = payouts ?? {};
+      const newFloats: { id: number; text: string; color: string }[] = [];
+      for (const [, amount] of Object.entries(pay)) {
+        if ((amount as number) !== 0) {
+          const isPos = (amount as number) > 0;
+          newFloats.push({
+            id: Date.now() + Math.random(),
+            text: (isPos ? '+' : '') + String(amount),
+            color: isPos ? 'var(--felt-green)' : 'var(--bust-red)',
+          });
+        }
+      }
+      if (newFloats.length > 0) {
+        floatUpItems = [...floatUpItems, ...newFloats];
+      }
+      const anyWin = Object.values(pay).some((v) => (v as number) > 0);
+      if (anyWin) fireGoldBurst({ x: 0.5, y: 0.35 });
+    }
+    prevResultPhase = isRoundOver;
+  });
+
+  // 6. Push pulse keys
+  $effect(() => {
+    if (state?.phase === 'round_over' && results) {
+      const newPushKeys: Record<string, number> = {};
+      for (const [pid2, res] of Object.entries(results as Record<string, string[]>)) {
+        (res as string[]).forEach((r, i) => {
+          if (r === 'push') {
+            const k = pid2 + '_' + i;
+            newPushKeys[k] = (pushKeys[k] ?? 0) + 1;
+          }
+        });
+      }
+      if (Object.keys(newPushKeys).length > 0) {
+        pushKeys = { ...pushKeys, ...newPushKeys };
+      }
+    }
+  });
 
   // Bet constraints
   let minBet = $derived(state?.minBet ?? 10);
@@ -390,7 +522,13 @@
         </div>
 
         <!-- Dealer area -->
-        <div class="dealer-area">
+        <div class="dealer-area" class:dealer-dim={dealerDimActive} class:dealer-flash={dealerFlashActive}>
+          {#key dealFlashKey}
+            {#if dealFlashKey > 0}
+              <div class="vfx-flash-gold dealer-flash-overlay" aria-hidden="true"></div>
+            {/if}
+          {/key}
+          <Shockwave trigger={dealerRevealKey} color="var(--shop-gold)" size={90} />
           <div class="dealer-header">
             <span class="area-label geo-title">Dealer</span>
             {#if dealerRevealed && dealerValue !== null}
@@ -417,12 +555,23 @@
               <span class="chips-display">{myChips} chips</span>
             </div>
             {#each myHands as hand, hi}
+              {#key bustKeys[hi]}
+              {#key bjKeys[hi]}
               <div
                 class="hand-block"
                 class:active-hand={isMyTurn && hi === currentHandIndex}
                 class:stood={hand.stood}
                 class:busted={hand.busted}
+                class:vfx-shake-hard={hand.busted && bustKeys[hi] > 0}
+                class:vfx-flash-red={hand.busted && bustKeys[hi] > 0}
+                class:vfx-flash-gold={hand.isBlackjack && bjKeys[hi] > 0}
               >
+                {#if hand.busted && bustKeys[hi] > 0}
+                  <span class="vfx-slam-in bust-stamp" aria-hidden="true">BUST</span>
+                {/if}
+                {#if hand.isBlackjack && bjKeys[hi] > 0}
+                  <span class="vfx-slam-in vfx-sparkle-text bj-stamp" aria-hidden="true">BLACKJACK</span>
+                {/if}
                 <div class="hand-meta">
                   {#if myHands.length > 1}<span class="hand-index geo-title">Hand {hi + 1}</span>{/if}
                   <span class="hand-value" class:bust={handValue(hand) > 21}>
@@ -439,12 +588,14 @@
                   {/each}
                 </div>
               </div>
+              {/key}
+              {/key}
             {/each}
           </div>
 
           <!-- Action buttons for my turn -->
           {#if isMyTurn && activeHand && !activeHand.stood && !activeHand.busted}
-            <div class="action-buttons">
+            <div class="action-buttons vfx-breathe">
               <button class="btn-action btn-hit" onclick={() => { playCardSound(); socket.send({ type: 'hit' }); }}>
                 Hit
               </button>
@@ -536,12 +687,21 @@
         </div>
 
         <!-- Results for all players -->
-        <div class="results-section">
-          {#each state.players as player}
+        <div class="results-section" style="position:relative">
+          {#each floatUpItems as item (item.id)}
+            <FloatUp text={item.text} color={item.color} />
+          {/each}
+          {#each state.players as player, pi}
             {@const playerResults = results?.[player.id] ?? []}
             {@const playerPayout = payouts?.[player.id] ?? 0}
             {@const theirHands = playerHands[player.id] ?? []}
-            <div class="result-player-block" class:is-me={player.id === pid}>
+            <div
+              class="result-player-block"
+              class:is-me={player.id === pid}
+              class:vfx-flash-gold={playerPayout > 0 && resultKey > 0}
+              class:vfx-flash-red={playerPayout < 0 && resultKey > 0}
+              style="animation-delay: {pi * 60}ms"
+            >
               <div class="result-player-header">
                 <NameFrame name={player.name} frameSvg={player.frameSvg} emblemSvg={player.emblemSvg} nameColour={player.nameColour} />
                 <span class="result-payout" class:payout-pos={playerPayout > 0} class:payout-neg={playerPayout < 0}>
@@ -550,6 +710,8 @@
                 <span class="result-chips-after">{player.chips ?? 0} chips</span>
               </div>
               {#each theirHands as hand, hi}
+                {@const res = playerResults[hi]}
+                {@const pushKey = player.id + '_' + hi}
                 <div class="result-hand-row">
                   {#if theirHands.length > 1}<span class="hand-index-small">H{hi + 1}</span>{/if}
                   <div class="result-cards">
@@ -557,10 +719,20 @@
                       <Card {card} faceUp={true} dealDelay={i * 80} />
                     {/each}
                   </div>
-                  {#if playerResults[hi]}
-                    <span class="result-badge result-{resultColor(playerResults[hi])}">
-                      {resultLabel(playerResults[hi])}
-                    </span>
+                  {#if res}
+                    {#key resultKey}
+                      <span
+                        class="result-badge result-{resultColor(res)} vfx-pop-in"
+                        class:vfx-push-pulse={res === 'push'}
+                        style="animation-delay: {(pi * 2 + hi) * 80}ms"
+                      >
+                        {#if res === 'blackjack'}
+                          <span class="vfx-sparkle-text">{resultLabel(res)}</span>
+                        {:else}
+                          {resultLabel(res)}
+                        {/if}
+                      </span>
+                    {/key}
                   {/if}
                 </div>
               {/each}
@@ -1513,4 +1685,91 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* ── VFX additions ───────────────────────────────────────────────────── */
+
+  /* Dealer area: needs position:relative for Shockwave + overlays */
+  .dealer-area {
+    position: relative;
+    overflow: visible;
+  }
+
+  /* Dealer reveal tension: dim then white flash */
+  .dealer-area.dealer-dim {
+    transition: opacity 0.15s ease;
+    opacity: 0.45;
+  }
+
+  .dealer-area.dealer-flash {
+    transition: filter 0.12s ease;
+    filter: brightness(2.2);
+  }
+
+  /* Dealer deal-transition gold flash overlay (pointer-events:none) */
+  .dealer-flash-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* hand-block: needs position:relative for stamps */
+  .hand-block {
+    position: relative;
+    overflow: visible;
+  }
+
+  /* BUST stamp - falls in from above */
+  .bust-stamp {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    color: var(--bust-red);
+    text-shadow: 0 0 12px var(--bust-red), 0 2px 8px rgba(0,0,0,0.6);
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+  }
+
+  /* BLACKJACK stamp */
+  .bj-stamp {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.6rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+    filter: drop-shadow(0 0 8px var(--shop-gold));
+  }
+
+  /* Push pulse on result badges */
+  @keyframes bj-push-pulse {
+    0%, 100% { opacity: 1; box-shadow: none; }
+    50%       { opacity: 0.7; box-shadow: 0 0 10px rgba(180, 180, 180, 0.4); }
+  }
+
+  .vfx-push-pulse {
+    animation: bj-push-pulse 700ms ease-in-out 2;
+  }
+
+  /* Action buttons breathe: override currentColor to use gold */
+  .action-buttons.vfx-breathe {
+    color: var(--shop-gold);
+  }
+
+  /* result-player-block: position:relative so FloatUps work */
+  .results-section {
+    position: relative;
+  }
 </style>

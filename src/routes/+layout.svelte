@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import '$lib/vfx/vfx.css';
   import { goto } from '$app/navigation';
   import LevelUpToast from '$lib/components/LevelUpToast.svelte';
   import XpGainedToast from '$lib/components/XpGainedToast.svelte';

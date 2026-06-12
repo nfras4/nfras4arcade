@@ -6,6 +6,8 @@
   import { dispatchRelayMessages } from '$lib/levelUpDispatch';
   import { isLoggedIn } from '$lib/auth';
   import { fireWinConfetti } from '$lib/vfx';
+  import { fireLoss } from '$lib/vfx/burst';
+  import Shockwave from '$lib/vfx/Shockwave.svelte';
   import SnapCard from '$lib/components/snap/SnapCard.svelte';
   import NameFrame from '$lib/components/NameFrame.svelte';
 
@@ -23,6 +25,18 @@
   let snapFlash = $state(false);
   let isSpectator = $state(false);
   let errorTimeout: ReturnType<typeof setTimeout>;
+
+  // VFX state
+  let cardPlayedShakeKey = $state(0);
+  let validSnapShakeKey = $state(0);
+  let shockwaveTrigger = $state(0);
+  let validSnapFlashKey = $state(0);
+  let falseSnapFlashKey = $state(0);
+  let falseSnapOffenderId: string | null = $state(null);
+  let falseSnapWobbleKey = $state(0);
+  let showWinnerBanner = $state(false);
+  let winnerBannerKey = $state(0);
+  let eliminatedIds: Set<string> = $state(new Set());
 
   $effect(() => {
     const unsub = socket.onMessage((msg: any) => {
@@ -87,6 +101,52 @@
     }
   });
 
+  // VFX: card_played -> shake the play area briefly
+  $effect(() => {
+    const unsub = socket.onMessage((msg: any) => {
+      if (msg.type === 'card_played') {
+        cardPlayedShakeKey++;
+      } else if (msg.type === 'snap_result') {
+        if (msg.wasValid) {
+          validSnapShakeKey++;
+          shockwaveTrigger++;
+          validSnapFlashKey++;
+        } else {
+          falseSnapFlashKey++;
+          falseSnapOffenderId = msg.callerId ?? null;
+          falseSnapWobbleKey++;
+          fireLoss({ x: 0.5, y: 0.5 });
+          const t = setTimeout(() => { falseSnapOffenderId = null; }, 900);
+          return () => clearTimeout(t);
+        }
+      }
+    });
+    return () => unsub();
+  });
+
+  // VFX: track eliminated players
+  $effect(() => {
+    const players = state?.players;
+    if (!players) return;
+    const next = new Set<string>();
+    for (const p of players) {
+      if (p.deckSize === 0 && state?.phase === 'playing') next.add(p.id);
+    }
+    eliminatedIds = next;
+  });
+
+  // VFX: winner banner
+  $effect(() => {
+    if (isGameOver && state?.winnerId) {
+      showWinnerBanner = false;
+      const t = setTimeout(() => {
+        showWinnerBanner = true;
+        winnerBannerKey++;
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  });
+
   // Actions
   function startGame() { socket.send({ type: 'start_game' }); }
   function drawCard() { socket.send({ type: 'draw' }); }
@@ -124,46 +184,80 @@
     </div>
 
   {:else if isPlaying}
-    <div class="snap-container center-playing" class:snap-flash={snapFlash}>
-      <!-- Player status bar -->
-      <div class="center-status-bar">
-        <!-- TODO: wire NameFrame (deferred, see deep-interview-nameframe-rollout.md). Center-pad + per-device split architecture requires separate design pass. -->
-        {#each state.players as player (player.id)}
-          <span class="center-player-chip" class:disconnected={!player.connected}>
-            {player.name}: {player.deckSize}
-          </span>
-        {/each}
-      </div>
-
-      <!-- Main card area -->
-      <div class="center-card-area">
-        <SnapCard card={topCard} faceUp={!!topCard} size="huge" animate={true} highlight={snapIsActive} />
-        <span class="pile-badge">{state.pileSize} in pile</span>
-      </div>
-
-      <!-- Snap overlay / tap target -->
-      {#if snapIsActive}
-        <button class="center-snap-target" onclick={callSnap}>
-          <span class="center-snap-text geo-title">SNAP!</span>
-        </button>
-      {/if}
-
-      <!-- Snap result overlay -->
-      {#if lastSnapResult}
-        <div class="snap-result-overlay" class:valid={lastSnapResult.wasValid} class:invalid={!lastSnapResult.wasValid}>
-          {#if lastSnapResult.wasValid}
-            <p class="snap-result-text">{lastSnapResult.winnerName} wins {lastSnapResult.pileSize} cards!</p>
-          {:else}
-            <p class="snap-result-text">False snap! {lastSnapResult.winnerName} loses {lastSnapResult.pileSize} cards</p>
-          {/if}
+    {#key validSnapShakeKey}
+      <div class="snap-container center-playing" class:snap-flash={snapFlash} class:vfx-shake-hard={validSnapShakeKey > 0}>
+        <!-- Player status bar -->
+        <div class="center-status-bar">
+          <!-- TODO: wire NameFrame (deferred, see deep-interview-nameframe-rollout.md). Center-pad + per-device split architecture requires separate design pass. -->
+          {#each state.players as player (player.id)}
+            <span
+              class="center-player-chip"
+              class:disconnected={!player.connected}
+              class:player-eliminated={eliminatedIds.has(player.id)}
+            >
+              {#if falseSnapOffenderId === player.id}
+                {#key falseSnapWobbleKey}
+                  <span class="false-snap-offender">{player.name}: {player.deckSize}</span>
+                {/key}
+              {:else}
+                {player.name}: {player.deckSize}
+              {/if}
+            </span>
+          {/each}
         </div>
-      {/if}
-    </div>
+
+        <!-- Main card area -->
+        <div class="center-card-area" style="position:relative;">
+          <SnapCard card={topCard} faceUp={!!topCard} size="huge" animate={true} highlight={snapIsActive} shimmer={snapIsActive} />
+          <Shockwave trigger={shockwaveTrigger} color="var(--green, #2ecc71)" size={220} />
+          <span class="pile-badge">{state.pileSize} in pile</span>
+        </div>
+
+        <!-- valid snap green flash layer -->
+        {#key validSnapFlashKey}
+          {#if validSnapFlashKey > 0}
+            <div class="snap-valid-flash" aria-hidden="true"></div>
+          {/if}
+        {/key}
+
+        <!-- false snap red flash layer -->
+        {#key falseSnapFlashKey}
+          {#if falseSnapFlashKey > 0}
+            <div class="snap-false-flash" aria-hidden="true"></div>
+          {/if}
+        {/key}
+
+        <!-- Snap overlay / tap target -->
+        {#if snapIsActive}
+          <button class="center-snap-target" onclick={callSnap}>
+            <!-- speed-lines vignette overlay -->
+            <span class="snap-speed-lines" aria-hidden="true"></span>
+            <span class="center-snap-text geo-title">SNAP!</span>
+          </button>
+        {/if}
+
+        <!-- Snap result overlay -->
+        {#if lastSnapResult}
+          <div class="snap-result-overlay" class:valid={lastSnapResult.wasValid} class:invalid={!lastSnapResult.wasValid}>
+            {#if lastSnapResult.wasValid}
+              <p class="snap-result-text">{lastSnapResult.winnerName} wins {lastSnapResult.pileSize} cards!</p>
+            {:else}
+              <p class="snap-result-text">False snap! {lastSnapResult.winnerName} loses {lastSnapResult.pileSize} cards</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/key}
 
   {:else if isGameOver}
     <div class="snap-container center-content">
       <div class="game-over-display">
-        <h1 class="winner-text geo-title">{state.winnerName ?? 'Nobody'} wins!</h1>
+        {#if showWinnerBanner}
+          {#key winnerBannerKey}
+            <p class="snap-champion-label vfx-slam-in">SNAP CHAMPION</p>
+          {/key}
+        {/if}
+        <h1 class="winner-text geo-title {showWinnerBanner ? 'vfx-sparkle-text' : ''}">{state.winnerName ?? 'Nobody'} wins!</h1>
         {#if isHost}
           <div class="action-row">
             <button class="btn-primary btn-full" onclick={playAgain}>Play Again</button>
@@ -212,7 +306,8 @@
     </div>
 
   {:else if isPlaying}
-    <div class="snap-container player-playing" class:snap-flash={snapFlash}>
+    {#key validSnapShakeKey}
+    <div class="snap-container player-playing" class:snap-flash={snapFlash} class:vfx-shake-hard={validSnapShakeKey > 0}>
       {#if isSpectator}<div class="spectator-banner">Spectating</div>{/if}
       <!-- Top bar -->
       <div class="top-bar">
@@ -220,9 +315,24 @@
         <span class="top-deck">Your cards: {myDeckSize}</span>
       </div>
 
+      <!-- valid snap green flash layer (player) -->
+      {#key validSnapFlashKey}
+        {#if validSnapFlashKey > 0}
+          <div class="snap-valid-flash" aria-hidden="true"></div>
+        {/if}
+      {/key}
+
+      <!-- false snap red flash layer (player) -->
+      {#key falseSnapFlashKey}
+        {#if falseSnapFlashKey > 0}
+          <div class="snap-false-flash" aria-hidden="true"></div>
+        {/if}
+      {/key}
+
       <!-- Center card display -->
-      <div class="card-display-area">
-        <SnapCard card={topCard} faceUp={!!topCard} size="large" animate={true} highlight={snapIsActive} />
+      <div class="card-display-area" style="position:relative;">
+        <SnapCard card={topCard} faceUp={!!topCard} size="large" animate={true} highlight={snapIsActive} shimmer={snapIsActive} />
+        <Shockwave trigger={shockwaveTrigger} color="var(--green, #2ecc71)" size={160} />
 
         <!-- Snap result overlay -->
         {#if lastSnapResult}
@@ -230,7 +340,16 @@
             {#if lastSnapResult.wasValid}
               <p>{lastSnapResult.winnerName} wins {lastSnapResult.pileSize} cards!</p>
             {:else}
-              <p>False snap! {lastSnapResult.winnerName} loses {lastSnapResult.pileSize} cards</p>
+              <p>False snap!
+                {#if falseSnapOffenderId === myPlayerId}
+                  {#key falseSnapWobbleKey}
+                    <span class="false-snap-offender">{lastSnapResult.winnerName}</span>
+                  {/key}
+                {:else}
+                  {lastSnapResult.winnerName}
+                {/if}
+                loses {lastSnapResult.pileSize} cards
+              </p>
             {/if}
           </div>
         {/if}
@@ -244,12 +363,15 @@
             <p class="eliminated-sub">You'll join next round</p>
           </div>
         {:else if isEliminated}
-          <div class="eliminated-msg">
+          <div class="eliminated-msg player-eliminated-msg">
             <p class="eliminated-text geo-title">You're out!</p>
             <p class="eliminated-sub">Watch the rest of the game</p>
           </div>
         {:else if snapIsActive}
-          <button class="snap-btn" onclick={callSnap}>SNAP!</button>
+          <button class="snap-btn" onclick={callSnap}>
+            <span class="snap-speed-lines" aria-hidden="true"></span>
+            SNAP!
+          </button>
         {:else if isMyTurn}
           <button class="draw-btn btn-primary" onclick={drawCard}>DRAW</button>
         {:else}
@@ -261,12 +383,18 @@
         {/if}
       </div>
     </div>
+    {/key}
 
   {:else if isGameOver}
     <div class="snap-container center-content">
       <div class="game-over-display">
+        {#if showWinnerBanner}
+          {#key winnerBannerKey}
+            <p class="snap-champion-label vfx-slam-in">SNAP CHAMPION</p>
+          {/key}
+        {/if}
         {#if didWin}
-          <h1 class="winner-text geo-title you-won">You win!</h1>
+          <h1 class="winner-text geo-title you-won {showWinnerBanner ? 'vfx-sparkle-text' : ''}">You win!</h1>
         {:else}
           <h1 class="winner-text geo-title">{state.winnerName ?? 'Nobody'} wins!</h1>
         {/if}
@@ -850,5 +978,117 @@
     background: var(--accent-faint, rgba(74, 144, 217, 0.1));
     color: var(--accent, #4a90d9);
     border-bottom: 1px solid var(--border);
+  }
+
+  /* === VFX: speed-lines vignette on snap window === */
+  .snap-speed-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+      radial-gradient(
+        ellipse at center,
+        transparent 28%,
+        rgba(46, 204, 113, 0.08) 55%,
+        rgba(46, 204, 113, 0.22) 100%
+      ),
+      repeating-conic-gradient(
+        from 0deg at 50% 50%,
+        rgba(255, 255, 255, 0.07) 0deg 3deg,
+        transparent 3deg 15deg
+      );
+    animation: speedLinesSpin 0.6s linear infinite;
+    z-index: 1;
+  }
+
+  .center-snap-text {
+    position: relative;
+    z-index: 2;
+  }
+
+  @keyframes speedLinesSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+
+  /* === VFX: valid snap full-screen green flash === */
+  @keyframes snapValidFlash {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .snap-valid-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 180;
+    background: rgba(46, 204, 113, 0.28);
+    box-shadow: inset 0 0 60px rgba(46, 204, 113, 0.4);
+    animation: snapValidFlash 550ms ease-out forwards;
+  }
+
+  /* === VFX: false snap red flash === */
+  @keyframes snapFalseFlash {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .snap-false-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 180;
+    background: rgba(231, 76, 60, 0.28);
+    box-shadow: inset 0 0 60px rgba(231, 76, 60, 0.4);
+    animation: snapFalseFlash 550ms ease-out forwards;
+  }
+
+  /* === VFX: false snap offender name wobble === */
+  @keyframes falseSnapWobble {
+    0%   { transform: translateX(0) rotate(0deg); }
+    15%  { transform: translateX(-6px) rotate(-3deg); }
+    30%  { transform: translateX(6px) rotate(3deg); }
+    45%  { transform: translateX(-5px) rotate(-2deg); }
+    60%  { transform: translateX(5px) rotate(2deg); }
+    75%  { transform: translateX(-3px) rotate(-1deg); }
+    90%  { transform: translateX(3px) rotate(1deg); }
+    100% { transform: translateX(0) rotate(0deg); }
+  }
+
+  .false-snap-offender {
+    display: inline-block;
+    animation: falseSnapWobble 600ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    color: #e74c3c;
+  }
+
+  /* === VFX: eliminated player row desaturate + slide === */
+  @keyframes eliminatedSlide {
+    from { filter: saturate(1); transform: translateY(0); opacity: 1; }
+    to   { filter: saturate(0); transform: translateY(4px); opacity: 0.45; }
+  }
+
+  .player-eliminated {
+    animation: eliminatedSlide 500ms ease-out forwards;
+  }
+
+  .player-eliminated-msg {
+    animation: eliminatedSlide 500ms ease-out forwards;
+    filter: saturate(0);
+    opacity: 0.45;
+  }
+
+  /* === VFX: SNAP CHAMPION stamp === */
+  .snap-champion-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: clamp(1.1rem, 5vw, 1.6rem);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent, #4a90d9);
+    text-align: center;
+    margin: 0;
+    padding: 0;
+    text-shadow: 0 0 18px rgba(74, 144, 217, 0.5);
   }
 </style>

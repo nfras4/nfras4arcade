@@ -14,6 +14,9 @@
     type Influence,
     type PendingActionView,
   } from '$lib/coup/types';
+  import FloatUp from '$lib/vfx/FloatUp.svelte';
+  import Spotlight from '$lib/vfx/Spotlight.svelte';
+  import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
 
   const code = $page.params.code!;
   const socket = new CoupSocket();
@@ -83,6 +86,131 @@
     if (!pa || pa.phase !== 'exchange_select' || pa.playerId !== pid) {
       exchangeSelection = [];
     }
+  });
+
+  // ─── VFX state ────────────────────────────────────────────────
+  // (1) Action banner key + red crosshair target id
+  let actionBannerKey = $state(0);
+  let crosshairTargetId = $state<string | null>(null);
+  let crosshairKey = $state(0);
+  let crosshairVisible = $state(false);
+
+  // (2) Challenge spotlight
+  let challengeKey = $state(0);
+  let challengeVisible = $state(false);
+
+  // (3) Block shield
+  let blockShieldPlayerId = $state<string | null>(null);
+  let blockShieldKey = $state(0);
+
+  // (4) Lose influence: track card dissolve and burst
+  let loseInfluenceKey = $state(0);
+  let loseInfluenceTarget = $state<string | null>(null);
+
+  // (5) Elimination: track newly eliminated ids
+  let eliminatedIds = $state<Set<string>>(new Set());
+
+  // (6) game_over coronation
+  let gameOverKey = $state(0);
+  let gameOverFloats = $state<number[]>([]);
+  let gameOverSpotlight = $state(false);
+
+  // (7) Turn breathe key (to re-trigger on turn change)
+  let turnBreatheKey = $state(0);
+
+  // Track previous pa phase + previous currentPlayerId for transition detection
+  let _prevPaPhase = $state<string | null>(null);
+  let _prevCurrentPlayerId = $state<string | null>(null);
+  let _prevGamePhase = $state<string | null>(null);
+
+  $effect(() => {
+    const curPhase = pa?.phase ?? null;
+    const curCurrentPlayer = ts?.currentPlayerId ?? null;
+    const curGamePhase = state?.phase ?? null;
+
+    // (1) Action declared: new awaiting_challenge means a fresh action was just declared
+    if (curPhase === 'awaiting_challenge' && _prevPaPhase !== 'awaiting_challenge') {
+      actionBannerKey++;
+      const aType = pa?.action?.type ?? null;
+      if (aType === 'coup' || aType === 'assassinate') {
+        const tId = pa?.action?.targetId ?? null;
+        crosshairTargetId = tId;
+        crosshairKey++;
+        crosshairVisible = true;
+        const t1 = setTimeout(() => { crosshairVisible = false; }, 900);
+        return () => clearTimeout(t1);
+      }
+    }
+
+    // (2) Challenge: awaiting_block_challenge means a challenge was issued
+    if (curPhase === 'awaiting_block_challenge' && _prevPaPhase !== 'awaiting_block_challenge') {
+      challengeKey++;
+      challengeVisible = true;
+      const t2 = setTimeout(() => { challengeVisible = false; }, 1100);
+      return () => clearTimeout(t2);
+    }
+    // Also fire if challenge happened during awaiting_challenge (phase jumped away)
+    if (_prevPaPhase === 'awaiting_challenge' && curPhase === 'lose_influence') {
+      challengeKey++;
+      challengeVisible = true;
+      const t3 = setTimeout(() => { challengeVisible = false; }, 1100);
+      return () => clearTimeout(t3);
+    }
+
+    // (3) Block: awaiting_block_challenge entered from awaiting_block
+    if (curPhase === 'awaiting_block_challenge' && _prevPaPhase === 'awaiting_block') {
+      const blockerId = pa?.block?.blockerId ?? null;
+      if (blockerId) {
+        blockShieldPlayerId = blockerId;
+        blockShieldKey++;
+      }
+    }
+
+    // (4) Lose influence transition
+    if (curPhase === 'lose_influence' && _prevPaPhase !== 'lose_influence') {
+      loseInfluenceKey++;
+      loseInfluenceTarget = pa?.targetId ?? null;
+    }
+    // Lose influence resolved: fire burst when we leave lose_influence
+    if (_prevPaPhase === 'lose_influence' && curPhase !== 'lose_influence') {
+      fireLoss();
+    }
+
+    // (6) game_over
+    if (curGamePhase === 'game_over' && _prevGamePhase !== 'game_over') {
+      gameOverKey++;
+      gameOverSpotlight = true;
+      const pot = ts?.pot ?? 0;
+      if (pot > 0) {
+        fireGoldBurst();
+        // Stagger a few FloatUp pops
+        const t6a = setTimeout(() => { gameOverFloats = [...gameOverFloats, Date.now()]; }, 200);
+        const t6b = setTimeout(() => { gameOverFloats = [...gameOverFloats, Date.now() + 1]; }, 480);
+        const t6c = setTimeout(() => { gameOverFloats = [...gameOverFloats, Date.now() + 2]; }, 760);
+        return () => { clearTimeout(t6a); clearTimeout(t6b); clearTimeout(t6c); };
+      } else {
+        fireGoldBurst();
+      }
+    }
+
+    // (7) Turn breathe: re-key on turn change
+    if (curCurrentPlayer !== _prevCurrentPlayerId) {
+      turnBreatheKey++;
+    }
+
+    _prevPaPhase = curPhase;
+    _prevCurrentPlayerId = curCurrentPlayer;
+    _prevGamePhase = curGamePhase;
+  });
+
+  // Track eliminations reactively for (5)
+  $effect(() => {
+    if (!ts || !state) return;
+    const newSet = new Set<string>();
+    for (const p of state.players) {
+      if (ts.playerStates[p.id]?.eliminated) newSet.add(p.id);
+    }
+    eliminatedIds = newSet;
   });
 
   function playerName(id: string): string {
@@ -326,7 +454,9 @@
           </div>
           <div class="turn-display">
             {#if isMyTurn && !pa}
-              <span class="your-turn">Your turn</span>
+              {#key turnBreatheKey}
+                <span class="your-turn vfx-breathe">Your turn</span>
+              {/key}
             {:else if currentTurnName}
               <span class="waiting-turn">Turn: {currentTurnName}</span>
             {/if}
@@ -346,8 +476,11 @@
         <div class="opponents">
           {#each state.players.filter((p) => p.id !== pid) as opp}
             {@const ops = ts?.playerStates[opp.id]}
-            <div class="opponent" class:eliminated={ops?.eliminated}
-                 class:active={ts?.currentPlayerId === opp.id}>
+            <div class="opponent"
+                 class:eliminated={ops?.eliminated}
+                 class:vfx-opp-slump={ops?.eliminated && eliminatedIds.has(opp.id)}
+                 class:active={ts?.currentPlayerId === opp.id}
+                 style:position="relative">
               <div class="opp-head">
                 <span class="opp-name" style:color={opp.nameColour ?? undefined}>{opp.name}</span>
                 {#if opp.isBot}<span class="bot-badge">BOT</span>{/if}
@@ -360,31 +493,69 @@
                 {#each Array(ops?.hiddenCardCount ?? 0) as _}
                   <span class="card-back" aria-label="Face-down card"></span>
                 {/each}
-                {#each ops?.revealedCards ?? [] as role}
-                  <span class="card-up revealed" title={ROLE_LABEL[role]}>
-                    <span class="role-glyph">{ROLE_GLYPH[role]}</span>
-                    <span class="role-name">{ROLE_LABEL[role]}</span>
-                  </span>
+                {#each ops?.revealedCards ?? [] as role, rIdx}
+                  {#key `${opp.id}-revealed-${rIdx}`}
+                    <span
+                      class="card-up revealed"
+                      class:vfx-dissolve-out={pa?.phase === 'lose_influence' && pa.targetId === opp.id && loseInfluenceTarget === opp.id}
+                      title={ROLE_LABEL[role]}
+                    >
+                      <span class="role-glyph">{ROLE_GLYPH[role]}</span>
+                      <span class="role-name">{ROLE_LABEL[role]}</span>
+                    </span>
+                  {/key}
                 {/each}
               </div>
+              <!-- (1) Crosshair overlay for coup/assassinate target -->
+              {#if crosshairVisible && crosshairTargetId === opp.id}
+                {#key crosshairKey}
+                  <div class="coup-crosshair" aria-hidden="true">
+                    <div class="crosshair-ring"></div>
+                    <div class="crosshair-h"></div>
+                    <div class="crosshair-v"></div>
+                  </div>
+                {/key}
+              {/if}
+              <!-- (3) Block shield ring -->
+              {#if blockShieldPlayerId === opp.id}
+                {#key blockShieldKey}
+                  <div class="block-shield-ring" aria-hidden="true"></div>
+                {/key}
+              {/if}
             </div>
           {/each}
         </div>
 
+        <!-- (2) Challenge spotlight overlay -->
+        {#if challengeVisible}
+          {#key challengeKey}
+            <Spotlight active={true}>
+              <span class="challenge-slam vfx-slam-in">CHALLENGE!</span>
+            </Spotlight>
+          {/key}
+        {/if}
+
         <!-- Pending action banner -->
         {#if pa}
-          <div class="pending-banner">
+          <div class="pending-banner" style:position="relative">
             {#if pa.phase === 'awaiting_challenge'}
-              <span class="pending-text">{describeAction(pa.action.type, pa.action.playerId, pa.action.targetId)}</span>
+              <!-- (1) Action banner slams in on each new pending action -->
+              {#key actionBannerKey}
+                <span class="pending-text vfx-slam-in">{describeAction(pa.action.type, pa.action.playerId, pa.action.targetId)}</span>
+              {/key}
               <span class="pending-sub">Challenge or pass?</span>
             {:else if pa.phase === 'awaiting_block'}
-              <span class="pending-text">{describeAction(pa.action.type, pa.action.playerId, pa.action.targetId)}</span>
+              {#key actionBannerKey}
+                <span class="pending-text vfx-slam-in">{describeAction(pa.action.type, pa.action.playerId, pa.action.targetId)}</span>
+              {/key}
               <span class="pending-sub">Block or pass?</span>
             {:else if pa.phase === 'awaiting_block_challenge'}
               <span class="pending-text">{playerName(pa.block.blockerId)} blocks with {ROLE_LABEL[pa.block.claimedRole]}</span>
               <span class="pending-sub">Challenge the block?</span>
             {:else if pa.phase === 'lose_influence'}
-              <span class="pending-text">{playerName(pa.targetId)} must lose an influence</span>
+              {#key loseInfluenceKey}
+                <span class="pending-text vfx-slam-in lose-influence-text">{playerName(pa.targetId)} loses an influence</span>
+              {/key}
               <span class="pending-sub">Reason: {pa.reason.replace('_', ' ')}</span>
             {:else if pa.phase === 'exchange_select'}
               <span class="pending-text">{playerName(pa.playerId)} is exchanging cards</span>
@@ -405,6 +576,7 @@
                 <button
                   class="my-card"
                   class:selectable={pa && pa.phase === 'lose_influence' && pa.targetId === pid}
+                  class:vfx-flash-red={pa && pa.phase === 'lose_influence' && pa.targetId === pid}
                   disabled={!(pa && pa.phase === 'lose_influence' && pa.targetId === pid)}
                   onclick={() => loseCard(idx)}
                   title={ROLE_LABEL[role]}
@@ -542,13 +714,35 @@
     <!-- ─── GAME OVER ─── -->
     {:else if state.phase === 'game_over'}
       <div class="phase-panel">
+        <!-- (6) game_over coronation spotlight -->
+        {#key gameOverKey}
+          <Spotlight active={gameOverSpotlight}>
+            {#if ts?.winnerId}
+              <div class="coronation-inner">
+                <span class="coronation-label">Winner</span>
+                <span class="geo-title vfx-sparkle-text coronation-name">{playerName(ts.winnerId)}</span>
+                {#if ts.pot > 0}
+                  <span class="coronation-pot">+{ts.pot} chips</span>
+                {/if}
+              </div>
+            {/if}
+          </Spotlight>
+        {/key}
+
         <h2 class="geo-title phase-title">Game Over</h2>
         {#if ts?.winnerId}
-          <div class="winner-row fade-in">
+          <div class="winner-row fade-in" style:position="relative">
             <span class="winner-label">Winner</span>
-            <span class="winner-name">{playerName(ts.winnerId)}</span>
+            {#key gameOverKey}
+              <span class="winner-name vfx-slam-in">{playerName(ts.winnerId)}</span>
+            {/key}
             {#if ts.pot > 0}
-              <span class="winner-pot">+{ts.pot} chips</span>
+              <div style:position="relative" style:display="inline-flex" style:align-items="center">
+                <span class="winner-pot">+{ts.pot} chips</span>
+                {#each gameOverFloats as fid (fid)}
+                  <FloatUp text="+{ts.pot}" color="var(--yellow, #eab308)" />
+                {/each}
+              </div>
             {/if}
           </div>
         {/if}
@@ -980,4 +1174,136 @@
 
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #4a90d9); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* ── VFX additions ─────────────────────────────────────────── */
+
+  /* (1) Coup / assassinate crosshair overlay */
+  .coup-crosshair {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    overflow: hidden;
+    border-radius: 3px;
+  }
+  .crosshair-ring {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border: 2px solid rgba(233, 69, 96, 0.9);
+    border-radius: 50%;
+    animation: coup-ring-expand 0.9s ease-out forwards;
+  }
+  .crosshair-h {
+    position: absolute;
+    width: 100%;
+    height: 1px;
+    background: rgba(233, 69, 96, 0.7);
+    animation: coup-cross-fade 0.9s ease-out forwards;
+  }
+  .crosshair-v {
+    position: absolute;
+    width: 1px;
+    height: 100%;
+    background: rgba(233, 69, 96, 0.7);
+    animation: coup-cross-fade 0.9s ease-out forwards;
+  }
+  @keyframes coup-ring-expand {
+    0%   { transform: scale(0.2); opacity: 1; }
+    60%  { opacity: 0.8; }
+    100% { transform: scale(2.6); opacity: 0; }
+  }
+  @keyframes coup-cross-fade {
+    0%   { opacity: 0.85; }
+    50%  { opacity: 0.6; }
+    100% { opacity: 0; }
+  }
+  /* Red flash on the tile itself */
+  .opponent.vfx-flash-red {
+    animation: vfx-flash-red-kf 450ms ease-out forwards;
+  }
+
+  /* (2) Challenge slam text */
+  .challenge-slam {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: clamp(2rem, 8vw, 3.5rem);
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--yellow, #eab308);
+    text-shadow: 0 0 24px rgba(234, 179, 8, 0.7), 0 2px 8px rgba(0,0,0,0.6);
+    padding: 0.5rem 1.25rem;
+    border: 2px solid rgba(234, 179, 8, 0.5);
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  /* (3) Block shield ring */
+  .block-shield-ring {
+    position: absolute;
+    inset: -4px;
+    border: 3px solid rgba(74, 144, 217, 0.9);
+    border-radius: 5px;
+    pointer-events: none;
+    z-index: 10;
+    animation: block-shield-pop 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  @keyframes block-shield-pop {
+    0%   { transform: scale(0.6); opacity: 0; box-shadow: 0 0 0 0 rgba(74, 144, 217, 0.7); }
+    40%  { transform: scale(1.08); opacity: 1; box-shadow: 0 0 12px 4px rgba(74, 144, 217, 0.5); }
+    70%  { transform: scale(1.0); box-shadow: 0 0 6px 2px rgba(74, 144, 217, 0.3); }
+    100% { transform: scale(1.0); opacity: 0; box-shadow: none; }
+  }
+
+  /* (4) Lose influence text colour */
+  .lose-influence-text {
+    color: #e94560;
+  }
+
+  /* (5) Eliminated tile slump */
+  .vfx-opp-slump {
+    filter: grayscale(1);
+    transform: rotate(-1.5deg);
+    transform-origin: bottom center;
+    transition: filter 0.6s ease, transform 0.6s ease;
+  }
+
+  /* (6) Coronation inner layout */
+  .coronation-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.25rem 2rem;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(240, 192, 48, 0.4);
+    border-radius: 4px;
+  }
+  .coronation-label {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(240, 192, 48, 0.7);
+  }
+  .coronation-name {
+    font-size: clamp(1.6rem, 7vw, 2.8rem);
+    letter-spacing: 0.1em;
+  }
+  .coronation-pot {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--yellow, #eab308);
+  }
+
+  /* (7) Turn breathe -- vfx-breathe is a global class; local colour override */
+  .your-turn.vfx-breathe {
+    display: inline-block;
+  }
 </style>

@@ -3,6 +3,9 @@
  * Node names here are the permanent interface: the Phase 0 procedural placeholder
  * and every future Blender GLB must use them exactly so models swap with zero code changes.
  * See: docs/table-art-bible.md, section "Rig contract"
+ *
+ * PORTABILITY: This file is engine-agnostic. No imports from svelte, three, threlte,
+ * or SvelteKit. See docs/table-porting.md for the boundary rule.
  */
 
 // ─── Node name constants ───────────────────────────────────────────────────────
@@ -22,7 +25,7 @@ export const NODE_HAND_R        = 'HandR';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat';
+export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat' | 'asleep';
 
 export type HatId = 'none' | 'party' | 'crown';
 
@@ -38,6 +41,8 @@ export interface ExpressionPose {
   browPinch: number;
   /** Head tilt in degrees around Z-axis. Positive = tilt right. */
   headTiltDeg: number;
+  /** Head pitch in degrees around X-axis. Positive = chin down (nodding forward). */
+  headPitchDeg: number;
   /** Head pull-back translation in local Z units. Positive = pull back. */
   headPullBack: number;
   /** Whether the sweat tremor is active for this expression. */
@@ -56,40 +61,59 @@ export interface MonkeyConfig {
 
 export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
   neutral: {
-    jawRad:       0,
-    eyeScale:     1.0,
-    browOffset:   0,
-    browPinch:    0,
-    headTiltDeg:  0,
-    headPullBack: 0,
-    sweating:     false,
+    jawRad:        0,
+    eyeScale:      1.0,
+    browOffset:    0,
+    browPinch:     0,
+    headTiltDeg:   0,
+    headPitchDeg:  0,
+    headPullBack:  0,
+    sweating:      false,
   },
   grin: {
-    jawRad:       0.12,
-    eyeScale:     0.85,
-    browOffset:   0,
-    browPinch:    0,
-    headTiltDeg:  4,
-    headPullBack: 0,
-    sweating:     false,
+    jawRad:        0.12,
+    eyeScale:      0.85,
+    browOffset:    0,
+    browPinch:     0,
+    headTiltDeg:   4,
+    headPitchDeg:  0,
+    headPullBack:  0,
+    sweating:      false,
   },
   shock: {
-    jawRad:       0.40,
-    eyeScale:     1.30,
-    browOffset:   0.08,  // raised brows
-    browPinch:    0,
-    headTiltDeg:  0,
-    headPullBack: 6,     // pulls back (6 degrees-worth of units)
-    sweating:     false,
+    jawRad:        0.40,
+    eyeScale:      1.30,
+    browOffset:    0.08,  // raised brows
+    browPinch:     0,
+    headTiltDeg:   0,
+    headPitchDeg:  0,
+    headPullBack:  6,     // pulls back (6 degrees-worth of units)
+    sweating:      false,
   },
   sweat: {
-    jawRad:       0,
-    eyeScale:     0.70,
-    browOffset:   0,
-    browPinch:    0.12,  // pinched inward
-    headTiltDeg:  0,
-    headPullBack: 0,
-    sweating:     true,
+    jawRad:        0,
+    eyeScale:      0.70,
+    browOffset:    0,
+    browPinch:     0.12,  // pinched inward
+    headTiltDeg:   0,
+    headPitchDeg:  0,
+    headPullBack:  0,
+    sweating:      true,
+  },
+  /**
+   * asleep: used for eliminated players still seated at the table.
+   * Head pitched far forward (chin toward chest), eyes near-closed.
+   * Must read clearly at 200px and at the new camera distance (~2.4 units).
+   */
+  asleep: {
+    jawRad:        0.08,  // mouth slightly slack
+    eyeScale:      0.15,  // nearly closed
+    browOffset:   -0.04,  // brows low, heavy
+    browPinch:     0,
+    headTiltDeg:   3,     // slight list to one side
+    headPitchDeg:  28,    // chin toward chest -- reads as "passed out" at distance
+    headPullBack:  0,
+    sweating:      false,
   },
 };
 

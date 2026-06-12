@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FUR_COLOURS, type ExpressionName, type HatId } from '$lib/table3d/rig.js';
+  import { FUR_COLOURS, type ExpressionName, type HatId } from '$lib/table3d/core/rig.js';
   import type { Component } from 'svelte';
 
   // ─── State ───────────────────────────────────────────────────────────────────

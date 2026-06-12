@@ -72,3 +72,24 @@ Theatrical staging: one warm key spotlight above table centre, low ambient fill,
 - Shared scene code in `src/lib/table3d/`. Rig node names and expression presets as constants in `src/lib/table3d/rig.ts`; nothing references node names as inline strings.
 - The placeholder monkey is built procedurally from primitives, strictly to the rig contract.
 - Svelte 5 runes throughout; `$effect`, never `onMount`. Scoped styles and CSS vars, no Tailwind. No em dashes in copy.
+- Imperative Three.js rigs mount via `<T is={root} />`, NOT `scene.add(root)`. Mounting imperatively bypasses Threlte parent transforms; every monkey would stack at the origin. The `$effect` only disposes GPU resources on unmount.
+
+## Table staging datum (canonical, Phase 0 tuned)
+
+These numbers are the approved staging values. Future scenes derive from them; do not adjust without art direction sign-off.
+
+| Parameter | Value | Notes |
+|---|---|---|
+| Felt surface Y | 0.06 | Top face of felt disc (`BarrelTable.svelte`) |
+| Felt radius | 2.0 | `CylinderGeometry` top/bottom radius |
+| Barrel body radius | 1.85 | Slightly inset from felt edge |
+| Base flare | r=1.90 bottom / r=2.10 top | Foot ring |
+| Seat root Y | 0.35 | `SEAT_Y` in `core/seats.ts`; head centre ~0.85 world-Y |
+| Arc radius | 2.15 | `ARC_RADIUS` in `core/seats.ts` |
+| Half-arc angle | 65 deg | `HALF_ARC_DEG`; total spread 130 deg, all seats on far half |
+| Camera position | `[0, 1.5, 3.6]` | Eye level slightly above seat root |
+| Camera FOV | 42 deg | Horizontal field of view |
+| Camera lookAt | `[0, 0.2, -0.6]` | Slightly below and behind table centre |
+| Key light | 55 candela, pos `[0, 4.2, 1.4]`, angle 0.55 | Warm `#ffe8c0` spotlight |
+| Nameplate anchor | seat root Y + 0.95 | World-Y ~1.30; clears crown with margin |
+| Nameplate left clamp | 6% to 94% | Prevents edge-seat plates clipping stage bounds |

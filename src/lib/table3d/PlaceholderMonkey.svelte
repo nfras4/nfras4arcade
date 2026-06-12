@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { useTask, useThrelte } from '@threlte/core';
+  import { T, useTask } from '@threlte/core';
   import * as THREE from 'three';
   import {
     NODE_ROOT, NODE_HEAD, NODE_JAW,
@@ -14,7 +14,7 @@
     HEAD_SIZE, MUZZLE_SIZE, JAW_SIZE, EAR_PARAMS, INNER_EAR_PARAMS,
     EYE_SPHERE_PARAMS, PUPIL_PARAMS, CREAM_COLOUR,
     type ExpressionName, type HatId,
-  } from './rig.js';
+  } from './core/rig.js';
 
   // ── Props ────────────────────────────────────────────────────────────────────
   let {
@@ -28,9 +28,6 @@
     talkAmplitude?: number;
     hat?: HatId;
   } = $props();
-
-  // ── Threlte context ──────────────────────────────────────────────────────────
-  const { scene } = useThrelte();
 
   // ── Reduced-motion detection (listener in $effect with cleanup) ──────────────
   const rmQuery =
@@ -331,11 +328,14 @@
     }
   });
 
-  // ── Mount / unmount with geometry+material disposal ───────────────────────────
+  // ── Disposal on unmount ───────────────────────────────────────────────────────
+  // The root is rendered via <T is={root}> in the template (NOT scene.add):
+  // mounting imperatively onto the scene bypasses Threlte's parent transforms,
+  // so a wrapping <T.Group position> would silently do nothing and every
+  // monkey would stack at the origin. Threlte attaches/detaches the object;
+  // this effect only disposes GPU resources.
   $effect(() => {
-    scene.add(root);
     return () => {
-      scene.remove(root);
       root.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
@@ -350,13 +350,14 @@
   });
 
   // ── Lerped pose state ─────────────────────────────────────────────────────────
-  let curJaw       = 0;
-  let curEyeScale  = 1.0;
-  let curBrowOff   = 0;
-  let curBrowPinch = 0;
-  let curHeadTilt  = 0;
-  let curHeadPull  = 0;
-  let elapsed      = 0;
+  let curJaw        = 0;
+  let curEyeScale   = 1.0;
+  let curBrowOff    = 0;
+  let curBrowPinch  = 0;
+  let curHeadTilt   = 0;
+  let curHeadPitch  = 0;
+  let curHeadPull   = 0;
+  let elapsed       = 0;
 
   const browBaseY = eyeYPos + 0.16;
 
@@ -370,19 +371,21 @@
     const jawTarget = Math.min(pose.jawRad + amp * JAW_MAX_TALK_RAD, JAW_CLAMP_MAX_RAD);
 
     if (reducedMotion) {
-      curJaw       = jawTarget;
-      curEyeScale  = pose.eyeScale;
-      curBrowOff   = pose.browOffset;
-      curBrowPinch = pose.browPinch;
-      curHeadTilt  = pose.headTiltDeg;
-      curHeadPull  = pose.headPullBack;
+      curJaw        = jawTarget;
+      curEyeScale   = pose.eyeScale;
+      curBrowOff    = pose.browOffset;
+      curBrowPinch  = pose.browPinch;
+      curHeadTilt   = pose.headTiltDeg;
+      curHeadPitch  = pose.headPitchDeg;
+      curHeadPull   = pose.headPullBack;
     } else {
-      curJaw       += (jawTarget         - curJaw)       * JAW_LERP_FACTOR;
-      curEyeScale  += (pose.eyeScale     - curEyeScale)  * EXPR_LERP_FACTOR;
-      curBrowOff   += (pose.browOffset   - curBrowOff)   * EXPR_LERP_FACTOR;
-      curBrowPinch += (pose.browPinch    - curBrowPinch) * EXPR_LERP_FACTOR;
-      curHeadTilt  += (pose.headTiltDeg  - curHeadTilt)  * EXPR_LERP_FACTOR;
-      curHeadPull  += (pose.headPullBack - curHeadPull)  * EXPR_LERP_FACTOR;
+      curJaw        += (jawTarget          - curJaw)        * JAW_LERP_FACTOR;
+      curEyeScale   += (pose.eyeScale      - curEyeScale)   * EXPR_LERP_FACTOR;
+      curBrowOff    += (pose.browOffset    - curBrowOff)    * EXPR_LERP_FACTOR;
+      curBrowPinch  += (pose.browPinch     - curBrowPinch)  * EXPR_LERP_FACTOR;
+      curHeadTilt   += (pose.headTiltDeg   - curHeadTilt)   * EXPR_LERP_FACTOR;
+      curHeadPitch  += (pose.headPitchDeg  - curHeadPitch)  * EXPR_LERP_FACTOR;
+      curHeadPull   += (pose.headPullBack  - curHeadPull)   * EXPR_LERP_FACTOR;
     }
 
     jawGroup.rotation.x = curJaw;
@@ -395,11 +398,13 @@
     browLGroup.rotation.z =  curBrowPinch;
     browRGroup.rotation.z = -curBrowPinch;
 
-    const tiltRad   = (curHeadTilt * Math.PI) / 180;
+    const tiltRad   = (curHeadTilt  * Math.PI) / 180;
+    const pitchRad  = (curHeadPitch * Math.PI) / 180;
     const pullUnits = curHeadPull * 0.008;
 
-    let headRotZ = tiltRad;
-    let headRotX = 0;
+    let headRotZ   = tiltRad;
+    // Pitch (chin-down nod) is the base X rotation; bob adds on top.
+    let headRotX   = pitchRad;
     const headPosZ = -pullUnits;
 
     if (!reducedMotion) {
@@ -409,7 +414,7 @@
       }
       if (amp > 0.01) {
         const bobRad = (amp * HEAD_BOB_DEG_PER_AMP * Math.PI) / 180;
-        headRotX = Math.sin(elapsed * 4 * Math.PI) * bobRad * 0.25;
+        headRotX += Math.sin(elapsed * 4 * Math.PI) * bobRad * 0.25;
       }
     }
 
@@ -418,3 +423,6 @@
     headGroup.position.z = headPosZ;
   });
 </script>
+
+<!-- Attach the imperative rig under Threlte's tree so parent transforms apply. -->
+<T is={root} />

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import PlaceholderMonkey from './PlaceholderMonkey.svelte';
-  import type { ExpressionName, HatId } from './rig.js';
+  import type { ExpressionName, HatId } from './core/rig.js';
 
   let {
     furColor = '#8B5E3C',

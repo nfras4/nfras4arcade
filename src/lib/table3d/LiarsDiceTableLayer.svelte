@@ -371,8 +371,8 @@
       aria-pressed={tableMuted}
       onclick={toggleMute}
     >
-      <span class="emote-glyph">{tableMuted ? 'M' : 'S'}</span>
-      <span class="emote-label">{tableMuted ? 'Muted' : 'Sound'}</span>
+      <span class="emote-glyph">{tableMuted ? '🔇' : '🔊'}</span>
+      <span class="emote-label">{tableMuted ? 'Sound off' : 'Sound on'}</span>
     </button>
   </div>
 </div>

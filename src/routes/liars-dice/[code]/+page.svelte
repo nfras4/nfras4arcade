@@ -9,9 +9,72 @@
   import FloatUp from '$lib/vfx/FloatUp.svelte';
   import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
+  import type { Component } from 'svelte';
+  import type { LDStateLike } from '$lib/table3d/core/types.js';
+  import type { EmoteId } from '$lib/table3d/core/emotes.js';
+  import type { LayerHandle } from '$lib/table3d/LiarsDiceTableLayer.svelte';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/liars-dice');
+
+  // ── Table view toggle ──────────────────────────────────────────────────────
+  // localStorage key 'ld-table-view': '1' = on, '0' = off.
+  // Default on first visit: on when viewport >= 900px AND WebGL available.
+  // A stored key always wins over the default.
+  const TABLE_VIEW_KEY = 'ld-table-view';
+
+  function probeWebGL(): boolean {
+    try {
+      const c = document.createElement('canvas');
+      return !!(c.getContext('webgl') || c.getContext('experimental-webgl'));
+    } catch {
+      return false;
+    }
+  }
+
+  function resolveTableViewDefault(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    const stored = localStorage.getItem(TABLE_VIEW_KEY);
+    if (stored !== null) return stored === '1';
+    // First visit: on when wide viewport AND WebGL available
+    return window.innerWidth >= 900 && probeWebGL();
+  }
+
+  let tableView = $state(resolveTableViewDefault());
+
+  // Write-back: persist whenever tableView changes
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(TABLE_VIEW_KEY, tableView ? '1' : '0');
+    }
+  });
+
+  // ── Lazy layer import (only when table view is active) ─────────────────────
+  type LayerProps = {
+    state: LDStateLike;
+    onemote?: (emoteId: EmoteId) => void;
+    onready?: (handle: LayerHandle) => void;
+  };
+  // $state.raw: prevents Svelte deep-clone/snapshot on Component constructor.
+  let LayerComp = $state.raw<Component<LayerProps> | null>(null);
+  let layerHandle: LayerHandle | null = null;
+  let layerLoadError = $state<string | null>(null);
+
+  $effect(() => {
+    if (!tableView) return; // only load when view is active
+    if (LayerComp) return;  // already loaded
+    import('$lib/table3d/LiarsDiceTableLayer.svelte')
+      .then((mod) => { LayerComp = mod.default as Component<LayerProps>; })
+      .catch((err) => { layerLoadError = String(err); });
+  });
+
+  function handleLayerReady(handle: LayerHandle): void {
+    layerHandle = handle;
+  }
+
+  function handleLayerEmote(emoteId: EmoteId): void {
+    socket.send({ type: 'emote', emoteId });
+  }
 
   interface PlayerView {
     id: string;
@@ -220,6 +283,8 @@
         errorMsg.set(msg.message);
         clearTimeout(errorTimeout);
         errorTimeout = setTimeout(() => errorMsg.set(null), 4000);
+      } else if (msg.type === 'player_emote') {
+        layerHandle?.handleRemoteEmote(msg.playerId, msg.emoteId);
       }
       dispatchRelayMessages(msg);
     });
@@ -269,6 +334,35 @@
 
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
+
+  // ── LDStateLike mapping for the table layer ────────────────────────────────
+  // Maps the page's LDState + myPlayerId into the engine-agnostic LDStateLike
+  // shape consumed by LiarsDiceTableLayer. Players are mapped to PlayerViewLike
+  // (nameColour is not in PlayerView; pass null so the layer uses its default).
+  let ldStateLike = $derived<LDStateLike | null>(
+    state
+      ? {
+          phase: state.phase,
+          players: state.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+            connected: p.connected,
+            isBot: p.isBot,
+            diceCount: p.diceCount,
+            eliminated: p.eliminated,
+            chips: p.chips,
+            nameColour: p.nameColour ?? null,
+          })),
+          myId: pid ?? '',
+          currentTurnId: state.currentTurnId,
+          currentBid: state.currentBid,
+          lastRoundResult: state.lastRoundResult,
+          onesWild: state.onesWild,
+          pot: state.pot,
+          turnOrder: state.turnOrder,
+        }
+      : null
+  );
   let me = $derived(state?.players.find((p) => p.id === pid) ?? null);
   let isHost = $derived(me?.isHost ?? false);
   let isMyTurn = $derived(state?.currentTurnId === pid);
@@ -363,7 +457,7 @@
 {/if}
 
 {#if state}
-  <div class="game" style={tableFeltStyle}>
+  <div class="game" class:table-mode={tableView} style={tableFeltStyle}>
     <header class="header">
       <div class="room-code">
         Room <strong>{state.code}</strong>
@@ -390,9 +484,34 @@
           {/if}
         {/key}
       </div>
+      <button
+        class="btn-view-toggle"
+        onclick={() => { tableView = !tableView; }}
+        aria-pressed={tableView}
+        title={tableView ? 'Switch to classic view' : 'Switch to table view'}
+      >
+        {tableView ? 'Classic view' : 'Table view'}
+      </button>
     </header>
 
-    <!-- Player table -->
+    <!-- 3D stage band: only rendered in table view; fully unmounted otherwise (no hidden canvas burning frames) -->
+    {#if tableView && ldStateLike}
+      <div class="stage-band">
+        {#if LayerComp}
+          <LayerComp
+            state={ldStateLike}
+            onemote={handleLayerEmote}
+            onready={handleLayerReady}
+          />
+        {:else if layerLoadError}
+          <p class="stage-error">{layerLoadError}</p>
+        {:else}
+          <p class="stage-loading">Loading 3D scene...</p>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Player table: hidden in table view (monkeys + nameplates replace it) -->
     <section class="players">
       {#each state.players as p (p.id)}
         {#key loserFlashKey}
@@ -1148,4 +1267,95 @@
 
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   button:active:not(:disabled) { transform: scale(0.97); transition: transform 0.1s; }
+
+  /* ── View toggle button ─────────────────────────────────────────────────── */
+
+  .btn-view-toggle {
+    padding: 0.3rem 0.65rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .btn-view-toggle:hover {
+    background: var(--accent-faint);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  .btn-view-toggle[aria-pressed="true"] {
+    background: var(--accent-faint);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  /* ── 3D stage band ──────────────────────────────────────────────────────── */
+
+  .stage-band {
+    width: 100%;
+    height: clamp(320px, 52vh, 560px);
+    position: relative;
+    overflow: hidden;
+    background: #080a0c;
+    /* Negative margin pulls the stage band to full column width in table-mode */
+  }
+
+  .stage-loading,
+  .stage-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .stage-error { color: var(--red, #e94560); }
+
+  /* ── Table-mode layout overrides ────────────────────────────────────────── */
+  /* All selectors are gated behind .table-mode so classic view stays
+     pixel-identical. No existing selectors are modified. */
+
+  .table-mode {
+    max-width: 1100px;
+  }
+
+  /* In table-mode the .players tile grid is hidden: monkeys + nameplates
+     in the stage replace it. */
+  .table-mode .players {
+    display: none;
+  }
+
+  /* Compact the control panels in table-mode so they sit tightly
+     below the stage band. */
+  .table-mode .panel {
+    max-width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  .table-mode .my-dice {
+    max-width: 560px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  /* Stage band stretches to the full 1100px column; break out of
+     the narrow content max-width by pulling full-bleed within the .game wrapper. */
+  .table-mode .stage-band {
+    width: 100%;
+    /* Stage fills the widened column already via .game max-width: 1100px */
+  }
 </style>

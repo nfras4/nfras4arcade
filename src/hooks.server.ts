@@ -4,6 +4,9 @@ import { getTokenFromCookie, validateSession } from '$lib/server/auth/session';
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
+  // canvas-confetti spawns a blob: Web Worker for off-main-thread particles;
+  // without worker-src it falls back to script-src and gets blocked at win moments.
+  "worker-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",

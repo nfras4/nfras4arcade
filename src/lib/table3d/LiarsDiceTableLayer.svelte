@@ -9,11 +9,12 @@
   import KeySpotlight from './KeySpotlight.svelte';
   import RitualOverlay from './RitualOverlay.svelte';
   import { TableDirector } from './TableDirector.svelte.js';
-  import { assignSeats, MONKEY_SCALE } from './core/seats.js';
+  import { assignSeats, MONKEY_SCALE, FULL_TABLE_ARC } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
   import type { LDStateLike } from './core/types.js';
   import { EMOTE_LIST, EMOTE_REGISTRY, type EmoteId } from './core/emotes.js';
   import { playSting, isMuted, setMuted } from './audio.js';
+  import { TV_CAMERA_POSITION, TV_CAMERA_LOOK_AT, TV_CAMERA_FOV } from './core/camera.js';
 
   /** Handle returned via onready so the parent can route WS emote messages in. */
   export interface LayerHandle {
@@ -44,12 +45,24 @@
      * incoming player_emote WS messages into the layer without bind:this.
      */
     onready = undefined as ((handle: LayerHandle) => void) | undefined,
+    /**
+     * When true, use FULL_TABLE_ARC layout (6 seats, including local).
+     * When false (default), use DESKTOP_ARC (5 opponents, local excluded).
+     */
+    fullTable = false,
+    /**
+     * When false, hide the emote button strip (but emote bubbles still render).
+     * Default true for backward compatibility.
+     */
+    showEmoteStrip = true,
   }: {
     state: LDStateLike;
     reducedMotionOverride?: boolean;
     ritualTimescale?: number;
     onemote?: (emoteId: EmoteId) => void;
     onready?: (handle: LayerHandle) => void;
+    fullTable?: boolean;
+    showEmoteStrip?: boolean;
   } = $props();
 
   // ── Director ─────────────────────────────────────────────────────────────────
@@ -94,13 +107,22 @@
   let prevSeatMap: Map<string, SeatAssignment> = new Map();
 
   const seatMap = $derived.by(() => {
-    const next = assignSeats(ldState.players, ldState.myId, prevSeatMap);
+    const next = assignSeats(ldState.players, ldState.myId, prevSeatMap, {
+      layout: fullTable ? FULL_TABLE_ARC : undefined,
+      includeLocal: fullTable,
+    });
     prevSeatMap = next;
     return next;
   });
 
   // ── Opponent list ─────────────────────────────────────────────────────────────
-  const opponents = $derived(ldState.players.filter((p) => p.id !== ldState.myId));
+  // In fullTable mode, render all players (including local).
+  // Otherwise exclude the local player (they control the camera).
+  const opponents = $derived(
+    fullTable
+      ? ldState.players
+      : ldState.players.filter((p) => p.id !== ldState.myId)
+  );
   const opponentIds = $derived(opponents.map((p) => p.id));
 
   // ── Player name map for ritual overlay ──────────────────────────────────────────
@@ -155,9 +177,14 @@
   let stageEl = $state<HTMLElement | null>(null);
 
   // Reduced-motion state for CameraRig (mirrors the director's own detection).
+  // Also disable parallax when fullTable is true (TV is not a head you lean).
   let parallaxReducedMotion = $state(reducedMotionOverride ?? false);
 
   $effect(() => {
+    if (fullTable) {
+      parallaxReducedMotion = true;
+      return;
+    }
     if (reducedMotionOverride !== undefined) {
       parallaxReducedMotion = reducedMotionOverride;
       return;
@@ -232,11 +259,15 @@
 -->
 <div class="stage-container" bind:this={stageEl}>
   <Canvas>
-    <!-- Camera: owned by CameraRig which adds seated-parallax lean. -->
+    <!-- Camera: owned by CameraRig which adds seated-parallax lean.
+         In fullTable mode use TV camera constants instead of desktop. -->
     <CameraRig
       {stageEl}
       reducedMotion={parallaxReducedMotion || !hasFinePointer}
       ritualActive={director.ritualInProgress}
+      cameraPosition={fullTable ? TV_CAMERA_POSITION : undefined}
+      cameraLookAt={fullTable ? TV_CAMERA_LOOK_AT : undefined}
+      cameraFov={fullTable ? TV_CAMERA_FOV : undefined}
     />
 
     <!-- Ambient fill: warm, intensity driven by director during ritual -->
@@ -320,7 +351,7 @@
   <!-- Nameplate overlay: absolutely positioned on top of the Canvas, pointer-events none -->
   <div class="nameplate-layer" aria-hidden="true">
     <!-- Ritual overlay: displays banners during round-over ceremony -->
-    <RitualOverlay banner={director.banner} names={playerNames} />
+    <RitualOverlay banner={director.banner} names={playerNames} scale={fullTable ? 1.6 : 1} />
 
     {#each opponents as player (player.id)}
       {@const pos = platePosMap[player.id]}
@@ -370,6 +401,7 @@
   </div>
 
   <!-- Emote strip: six emote buttons + mute toggle, sits below the 3D viewport -->
+  {#if showEmoteStrip}
   <div class="emote-strip" role="toolbar" aria-label="Emote buttons">
     {#each EMOTE_LIST as entry (entry.id)}
       <button
@@ -393,6 +425,7 @@
       <span class="emote-label">{tableMuted ? 'Sound off' : 'Sound on'}</span>
     </button>
   </div>
+  {/if}
 </div>
 
 <style>

@@ -4,9 +4,10 @@
   interface Props {
     banner: RitualBanner | null;
     names: Record<string, string>;
+    scale?: number;
   }
 
-  let { banner = null, names = {} }: Props = $props();
+  let { banner = null, names = {}, scale = 1 }: Props = $props();
 
   // Dice glyphs for die faces 1-6
   const diceGlyphs: Record<number, string> = {
@@ -36,7 +37,7 @@
 </script>
 
 {#if banner}
-  <div class="ritual-overlay" aria-hidden="true">
+  <div class="ritual-overlay" style="--ritual-scale: {scale};" aria-hidden="true">
     {#if banner.kind === 'liar-call'}
       <div class="banner-content">
         <div class="stamp">LIAR!</div>
@@ -108,7 +109,7 @@
   /* ─── Stamp styles (liar-call, verdict) ───────────────────────── */
 
   .stamp {
-    font-size: clamp(2.5rem, 6vw, 5rem);
+    font-size: calc(var(--ritual-scale, 1) * clamp(2.5rem, 6vw, 5rem));
     font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.12em;
@@ -135,7 +136,7 @@
   /* ─── Heading styles (showdown) ────────────────────────────────── */
 
   .heading {
-    font-size: clamp(1.5rem, 5vw, 3rem);
+    font-size: calc(var(--ritual-scale, 1) * clamp(1.5rem, 5vw, 3rem));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -150,7 +151,7 @@
   /* ─── Counter styles (tally) ─────────────────────────────────── */
 
   .counter {
-    font-size: clamp(2rem, 5vw, 4rem);
+    font-size: calc(var(--ritual-scale, 1) * clamp(2rem, 5vw, 4rem));
     font-weight: 700;
     font-family: 'Rajdhani', monospace;
     background: rgba(0, 0, 0, 0.72);

@@ -16,10 +16,34 @@
 
 import { deriveTableEvents } from './core/events.js';
 import { buildRitual } from './core/ritual.js';
-import type { LDStateLike, TableEvent } from './core/types.js';
+import type { LDStateLike, TableEvent, BidLike } from './core/types.js';
 import type { ExpressionName } from './core/rig.js';
 import type { RitualCue } from './core/ritual.js';
 import { EMOTE_REGISTRY, type EmoteId } from './core/emotes.js';
+
+// ─── Ritual banner state ──────────────────────────────────────────────────────
+
+export type RitualBanner =
+  | { kind: 'liar-call'; callerId: string; accusedId: string }
+  | { kind: 'showdown'; bid: BidLike; onesWild: boolean }
+  | {
+      kind: 'tally';
+      playerId: string;
+      dice: number[];
+      matchCount: number;
+      runningCount: number;
+      bidCount: number;
+      face: number;
+      onesWild: boolean;
+    }
+  | { kind: 'hold'; runningCount: number; bidCount: number }
+  | {
+      kind: 'verdict';
+      liarCaught: boolean;
+      loserId: string;
+      actualCount: number;
+      bidCount: number;
+    };
 
 // ─── Light state ──────────────────────────────────────────────────────────────
 
@@ -75,6 +99,7 @@ export class TableDirector {
   expressions = $state<Record<string, ExpressionName>>({});
   talkAmplitudes = $state<Record<string, number>>({});
   lights = $state<LightState>({ ...LIGHT_BASELINE });
+  banner = $state<RitualBanner | null>(null);
 
   /**
    * Active emote bubbles keyed by playerId. Layer renders a pop-in glyph
@@ -101,12 +126,14 @@ export class TableDirector {
   // Internal tracking
   #prev: LDStateLike | null = null;
   #reducedMotion = false;
+  onesWild = false;
 
   // Ritual playback
   #activeCues: RitualCue[] = [];
   #ritualElapsed = 0;
   #ritualActive = false;
   #nextCueIndex = 0;
+  #currentBid: BidLike | null = null;
 
   // Per-player timer handles: maps playerId -> { expression, expiresAt ms }
   // We track wall-clock ms via Date.now() for expression timeouts outside ritual
@@ -153,9 +180,13 @@ export class TableDirector {
    * Advances jaw chatter oscillators and ritual timeline.
    */
   tick(delta: number): void {
-    this.#advanceChatter(delta);
+    // Clamp frame delta: after a tab-away the browser suspends rAF and the
+    // first frame back carries seconds of delta, which would fast-forward an
+    // in-flight ritual to its verdict in one jump.
+    const clamped = Math.min(delta, 0.1);
+    this.#advanceChatter(clamped);
     if (this.#ritualActive) {
-      this.#advanceRitual(delta);
+      this.#advanceRitual(clamped);
     }
     this.#tickExpressionTimers();
   }
@@ -167,6 +198,7 @@ export class TableDirector {
     this.#ritualElapsed = 0;
     this.#nextCueIndex = 0;
     this.lights = { ...LIGHT_BASELINE };
+    this.banner = null;
   }
 
   // ── Event dispatch ──────────────────────────────────────────────────────────
@@ -304,7 +336,8 @@ export class TableDirector {
     }
 
     this.cancelRitual();
-    this.#activeCues = buildRitual(result, revealOrder);
+    this.#currentBid = result.bid;
+    this.#activeCues = buildRitual(result, revealOrder, { onesWild: this.onesWild });
     this.#ritualElapsed = 0;
     this.#nextCueIndex = 0;
     this.#ritualActive = true;
@@ -351,11 +384,43 @@ export class TableDirector {
           [c.accusedId]: 'sweat',
           [c.callerId]: 'grin',
         };
+        this.banner = {
+          kind: 'liar-call',
+          callerId: c.callerId,
+          accusedId: c.accusedId,
+        };
+        break;
+
+      case 'SHOWDOWN':
+        this.banner = {
+          kind: 'showdown',
+          bid: c.bid,
+          onesWild: c.onesWild,
+        };
         break;
 
       case 'REVEAL_PULSE':
         // Brief jaw-chatter on the revealed player
         this.#chatterState.set(c.playerId, { elapsed: 0, duration: 0.3 });
+        // Tally banner per reveal step (needs player name; will be passed from layer)
+        this.banner = {
+          kind: 'tally',
+          playerId: c.playerId,
+          dice: c.dice,
+          matchCount: c.matchCount,
+          runningCount: c.runningCount,
+          bidCount: this.#currentBid?.count ?? 0,
+          face: this.#currentBid?.face ?? 1,
+          onesWild: this.onesWild,
+        };
+        break;
+
+      case 'HOLD':
+        this.banner = {
+          kind: 'hold',
+          runningCount: c.runningCount,
+          bidCount: c.bidCount,
+        };
         break;
 
       case 'VERDICT':
@@ -371,12 +436,20 @@ export class TableDirector {
           [c.loserId]: 'shock',
           [c.vindicatedId]: 'laugh',
         };
+        this.banner = {
+          kind: 'verdict',
+          liarCaught: c.liarCaught,
+          loserId: c.loserId,
+          actualCount: c.actualCount,
+          bidCount: c.bidCount,
+        };
         break;
 
       case 'RESTORE':
         this.lights = { ...LIGHT_BASELINE };
         // Expressions will decay naturally via timers; just clear any holds
         this.#expressionTimers.clear();
+        this.banner = null;
         break;
     }
   }

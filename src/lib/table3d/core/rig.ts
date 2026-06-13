@@ -48,13 +48,15 @@ export interface ExpressionPose {
   /** Whether the sweat tremor is active for this expression. */
   sweating: boolean;
   /**
-   * Mouth-line curvature: positive = smile (corners up), negative = frown.
-   * Roughly -1..1; drives the parabolic bend of the mouth tube.
+   * Lower-face curve, roughly -1..1. There is no drawn mouth line: the chin
+   * carries expression. Positive tucks the chin up and widens it (content
+   * closed-mouth smile); negative narrows it and cracks open a dark sliver
+   * (worry/frown).
    */
   mouthCurve: number;
-  /** Mouth-line wiggle 0..1: the cute worried squiggle (w-shaped mouth). */
+  /** Chin tremble 0..1: anxious chatter on the jaw (reduced-motion safe). */
   mouthWave: number;
-  /** Mouth-line skew -1..1: one corner up, the other down (smirk). */
+  /** Chin tilt -1..1: jaw swings to one side (smirk). */
   mouthSkew: number;
 }
 
@@ -257,12 +259,6 @@ export const INNER_EAR_PARAMS: [number, number, number, number] = [0.28, 0.28, 0
 
 /** Eye sphere radius. Solid glossy black ovals, no separate pupil. */
 export const EYE_RADIUS = 0.115;
-
-/** Mouth line: half-width of the deformable tube across the muzzle. */
-export const MOUTH_HALF_WIDTH = 0.17;
-
-/** Mouth line tube radius. */
-export const MOUTH_TUBE_RADIUS = 0.021;
 
 // ─── Muzzle cream colour ─────────────────────────────────────────────────────
 /** Art bible: muzzle and inner ears are cream #F2E3C9. */

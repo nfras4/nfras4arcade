@@ -14,7 +14,6 @@
     EXPR_LERP_FACTOR,
     HEAD_RADIUS, HEAD_SQUASH, FACE_PLATE_RADIUS, MUZZLE_RADIUS,
     EAR_PARAMS, INNER_EAR_PARAMS, EYE_RADIUS,
-    MOUTH_HALF_WIDTH, MOUTH_TUBE_RADIUS,
     CREAM_COLOUR,
     type ExpressionName, type HatId,
   } from './core/rig.js';
@@ -52,8 +51,6 @@
   function mat(color: string | number, roughness = 1, flat = true): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({ color, flatShading: flat, roughness, metalness: 0 });
   }
-
-  const DARK_BROWN = 0x3b2314;
 
   // ── Build the full rig hierarchy ─────────────────────────────────────────────
   // All objects built once; $effect handles reactive updates to colour and hats.
@@ -164,43 +161,6 @@
   muzzleMesh.position.set(0, -0.24, 0.42);
   headGroup.add(muzzleMesh);
 
-  // ── Mouth line: deformable dark tube on the muzzle front. ────────────────────
-  // A straight tube along X whose ring vertices are displaced each frame by
-  // three lerped params: curve (smile/frown parabola), wave (worried squiggle),
-  // skew (one-sided smirk). This is what gives the mouth its dimensionality
-  // beyond the jaw flap.
-  const mouthMat = mat(DARK_BROWN, 0.85, false);
-  const mouthGeo = new THREE.TubeGeometry(
-    new THREE.LineCurve3(
-      new THREE.Vector3(-MOUTH_HALF_WIDTH, 0, 0),
-      new THREE.Vector3(MOUTH_HALF_WIDTH, 0, 0)
-    ),
-    32, MOUTH_TUBE_RADIUS, 5, false
-  );
-  mouthGeo.attributes.position.setUsage(THREE.DynamicDrawUsage);
-  const mouthBasePos = (mouthGeo.attributes.position.array as Float32Array).slice();
-  const mouthMesh = new THREE.Mesh(mouthGeo, mouthMat);
-  mouthMesh.name = 'MouthLine';
-  mouthMesh.position.set(0, -0.285, 0.633);
-  headGroup.add(mouthMesh);
-
-  function updateMouthShape(curve: number, wave: number, skew: number): void {
-    const pos = mouthGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const bx = mouthBasePos[i * 3];
-      const by = mouthBasePos[i * 3 + 1];
-      const bz = mouthBasePos[i * 3 + 2];
-      const t = (bx + MOUTH_HALF_WIDTH) / (2 * MOUTH_HALF_WIDTH); // 0..1 across mouth
-      const c = 2 * t - 1;                                        // -1..1
-      let dy = curve * 0.10 * (c * c - 0.5);      // parabola: ends up, centre down
-      dy += wave * 0.020 * Math.sin(t * Math.PI * 3); // w-shaped wiggle
-      dy += skew * 0.045 * c;                     // linear tilt: smirk
-      const dz = -0.02 * c * c;                   // ends tuck back to hug the muzzle
-      pos.setXYZ(i, bx, by + dy, bz + dz);
-    }
-    pos.needsUpdate = true;
-  }
-
   // ── Dark mouth cavity: revealed when the jaw swings open. ────────────────────
   const mouthCavityMat = mat(0x140f0c);
   const mouthCavity    = new THREE.Mesh(
@@ -215,7 +175,8 @@
   const jawGroup = new THREE.Group();
   jawGroup.name = NODE_JAW;
   // Hinge sits deep behind the muzzle: more chin drop per radian of jaw open.
-  jawGroup.position.set(0, -0.355, 0.16);
+  const JAW_BASE_Y = -0.355;
+  jawGroup.position.set(0, JAW_BASE_Y, 0.16);
   headGroup.add(jawGroup);
 
   const jawMat = mat(CREAM_COLOUR);
@@ -419,9 +380,6 @@
   let curMouthSkew  = 0;
   let elapsed       = 0;
 
-  // Force the first updateMouthShape call even if the pose targets are zero.
-  let mouthDirty = true;
-
   // ── Frame loop ────────────────────────────────────────────────────────────────
   useTask((delta) => {
     elapsed += delta;
@@ -442,7 +400,6 @@
       curMouthCurve = pose.mouthCurve;
       curMouthWave  = pose.mouthWave;
       curMouthSkew  = pose.mouthSkew;
-      mouthDirty    = true;
     } else {
       curJaw        += (jawTarget          - curJaw)        * JAW_LERP_FACTOR;
       curEyeScale   += (pose.eyeScale      - curEyeScale)   * EXPR_LERP_FACTOR;
@@ -452,23 +409,25 @@
       curHeadPitch  += (pose.headPitchDeg  - curHeadPitch)  * EXPR_LERP_FACTOR;
       curHeadPull   += (pose.headPullBack  - curHeadPull)   * EXPR_LERP_FACTOR;
 
-      const dCurve = (pose.mouthCurve - curMouthCurve) * EXPR_LERP_FACTOR;
-      const dWave  = (pose.mouthWave  - curMouthWave)  * EXPR_LERP_FACTOR;
-      const dSkew  = (pose.mouthSkew  - curMouthSkew)  * EXPR_LERP_FACTOR;
-      if (Math.abs(dCurve) > 1e-4 || Math.abs(dWave) > 1e-4 || Math.abs(dSkew) > 1e-4) {
-        curMouthCurve += dCurve;
-        curMouthWave  += dWave;
-        curMouthSkew  += dSkew;
-        mouthDirty = true;
-      }
+      curMouthCurve += (pose.mouthCurve - curMouthCurve) * EXPR_LERP_FACTOR;
+      curMouthWave  += (pose.mouthWave  - curMouthWave)  * EXPR_LERP_FACTOR;
+      curMouthSkew  += (pose.mouthSkew  - curMouthSkew)  * EXPR_LERP_FACTOR;
     }
 
-    if (mouthDirty) {
-      updateMouthShape(curMouthCurve, curMouthWave, curMouthSkew);
-      mouthDirty = false;
+    // The lower face IS the mouth: the chin carries expression.
+    //  curve > 0: chin tucks up and widens (content closed-mouth smile)
+    //  curve < 0: chin narrows and cracks open a dark sliver (worry/frown)
+    //  skew: chin tilts to one side (smirk)
+    //  wave: chin tremble (anxious chatter), suppressed under reduced motion
+    const frown = Math.max(0, -curMouthCurve);
+    jawGroup.rotation.x = curJaw + frown * 0.20;
+    jawGroup.position.y = JAW_BASE_Y + Math.max(0, curMouthCurve) * 0.03;
+    jawGroup.scale.x    = 1 + curMouthCurve * 0.10;
+    let chinTilt = -curMouthSkew * 0.12;
+    if (!reducedMotion && curMouthWave > 0.02) {
+      chinTilt += Math.sin(elapsed * 7 * Math.PI * 2) * curMouthWave * 0.02;
     }
-
-    jawGroup.rotation.x = curJaw;
+    jawGroup.rotation.z = chinTilt;
 
     eyeLGroup.scale.set(1, 1.3 * curEyeScale, 0.55);
     eyeRGroup.scale.set(1, 1.3 * curEyeScale, 0.55);

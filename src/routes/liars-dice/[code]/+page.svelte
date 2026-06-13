@@ -11,9 +11,13 @@
   import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
   import { createShakeDetector } from '$lib/table3d/shake.js';
+  import { voiceParamsFor } from '$lib/table3d/core/chatVoice.js';
+  import { furColourFor } from '$lib/table3d/core/seats.js';
+  import { playChatBlips } from '$lib/table3d/chatAudio.js';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
   import type { EmoteId } from '$lib/table3d/core/emotes.js';
+  import type { VoiceParams } from '$lib/table3d/core/chatVoice.js';
   import type { LayerHandle } from '$lib/table3d/LiarsDiceTableLayer.svelte';
 
   const code = $page.params.code!;
@@ -99,6 +103,8 @@
     state: LDStateLike;
     onemote?: (emoteId: EmoteId) => void;
     onready?: (handle: LayerHandle) => void;
+    chatBubbles?: ChatBubbleEntry[];
+    onchatbubbledone?: (id: number) => void;
   };
   // $state.raw: prevents Svelte deep-clone/snapshot on Component constructor.
   let LayerComp = $state.raw<Component<LayerProps> | null>(null);
@@ -119,6 +125,20 @@
 
   function handleLayerEmote(emoteId: EmoteId): void {
     socket.send({ type: 'emote', emoteId });
+  }
+
+  function handleSendChat(): void {
+    const now = Date.now();
+    if (now < chatCooldownUntil) return;
+    if (!chatInput.trim()) return;
+
+    socket.send({ type: 'chat', text: chatInput });
+    chatInput = '';
+    chatCooldownUntil = now + 1500;
+  }
+
+  function handleChatBubbleDone(id: number): void {
+    chatBubbles = chatBubbles.filter((b) => b.id !== id);
   }
 
   interface PlayerView {
@@ -165,6 +185,21 @@
   const gameState = writable<LDState | null>(null);
   const myPlayerId = writable<string | null>(null);
   const errorMsg = writable<string | null>(null);
+
+  // ── Chat state ─────────────────────────────────────────────────────────────
+  interface ChatBubbleEntry {
+    id: number;
+    playerId: string;
+    text: string;
+    ts: number;
+    voice: VoiceParams;
+  }
+
+  let chatBubbles = $state<ChatBubbleEntry[]>([]);
+  let chatLog = $state<ChatBubbleEntry[]>([]);
+  let chatInput = $state('');
+  let chatCooldownUntil = $state(0);
+  let nextChatBubbleId = 0;
 
   // ── Controller view initialization ─────────────────────────────────────────
   // Resolves the default exactly once per tablePresent=true session.
@@ -400,6 +435,27 @@
         errorTimeout = setTimeout(() => errorMsg.set(null), 4000);
       } else if (msg.type === 'player_emote') {
         layerHandle?.handleRemoteEmote(msg.playerId, msg.emoteId);
+      } else if (msg.type === 'player_chat') {
+        // Derive voice params from the player's fur colour
+        const s = $gameState;
+        if (s) {
+          const player = s.players.find((p) => p.id === msg.playerId);
+          if (player) {
+            const furColour = furColourFor(msg.playerId, player.isBot, new Map());
+            const voice = voiceParamsFor(furColour);
+            const entry: ChatBubbleEntry = {
+              id: nextChatBubbleId++,
+              playerId: msg.playerId,
+              text: msg.text,
+              ts: msg.ts,
+              voice,
+            };
+            // Add to floating bubbles (table view)
+            chatBubbles = [...chatBubbles, entry];
+            // Add to chat log (classic view, capped at 12 entries)
+            chatLog = [...chatLog, entry].slice(-12);
+          }
+        }
       }
       dispatchRelayMessages(msg);
     });
@@ -442,6 +498,29 @@
       const ceiling = s.players.reduce((sum, p) => sum + (p.eliminated ? 0 : p.diceCount), 0);
       if (ceiling > 0 && bidCount > ceiling) bidCount = ceiling;
     }
+  });
+
+  // ── Chat audio: play blips once per new chatLog entry (all views) ──────────
+  // Audio is centralised here so no double-play occurs when both bubble and
+  // chat log are active. The bubble is purely visual; this effect is the
+  // single audio source for all views (table, controller, classic).
+  // Concurrent chats from different players are allowed to overlap (each has
+  // a different voice pitch); the rate limit caps a single player to one
+  // message per 1500ms so same-voice overlap is naturally rare.
+  let lastProcessedChatId = -1;
+  const pendingBlipCancels = new Set<() => void>();
+  $effect(() => {
+    const newEntries = chatLog.filter((e) => e.id > lastProcessedChatId);
+    if (newEntries.length === 0) return;
+    for (const entry of newEntries) {
+      if (entry.id > lastProcessedChatId) lastProcessedChatId = entry.id;
+      const cancel = playChatBlips(entry.text, entry.voice);
+      pendingBlipCancels.add(cancel);
+    }
+    return () => {
+      for (const cancel of pendingBlipCancels) cancel();
+      pendingBlipCancels.clear();
+    };
   });
 
   // Cleanup timers on destroy
@@ -629,6 +708,8 @@
             onready={handleLayerReady}
             fullTable={isTv || selfSeat}
             showEmoteStrip={!isTv}
+            chatBubbles={chatBubbles}
+            onchatbubbledone={handleChatBubbleDone}
           />
         {:else if layerLoadError}
           <p class="stage-error">{layerLoadError}</p>
@@ -739,6 +820,24 @@
         {/key}
       {/each}
     </section>
+
+    <!-- Chat log: visible in every player view (table, classic, controller); hidden on TV.
+         Bubbles handle the same content above each seated speaker's monkey when seats are
+         available; the log is the universal fallback when the speaker has no seat (e.g. the
+         local player in non-selfseat desktop mode) and is also handy on phones. -->
+    {#if !isTv && chatLog.length > 0}
+      <section class="chat-log">
+        <div class="chat-log-title">Chat</div>
+        <div class="chat-log-entries">
+          {#each chatLog as entry (entry.id)}
+            <div class="chat-log-entry">
+              <span class="chat-log-name">{state.players.find((p) => p.id === entry.playerId)?.name ?? 'Unknown'}:</span>
+              <span class="chat-log-text">{entry.text}</span>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
     {/if}
 
     <!-- Phase: lobby -->
@@ -894,6 +993,29 @@
                 Call Liar
               </button>
             </div>
+          </div>
+        {/if}
+
+        <!-- Chat compose input (all phases except game_over) -->
+        {#if state.phase !== 'game_over' && !isTv}
+          <div class="chat-compose">
+            <input
+              type="text"
+              maxlength="140"
+              placeholder="Say something..."
+              bind:value={chatInput}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') handleSendChat();
+              }}
+              class="chat-input"
+            />
+            <button
+              class="btn-small"
+              onclick={handleSendChat}
+              disabled={!chatInput.trim() || Date.now() < chatCooldownUntil}
+            >
+              Send
+            </button>
           </div>
         {/if}
       </section>
@@ -1907,5 +2029,78 @@
     color: var(--text-muted, #a8b8c4);
     word-break: break-all;
     text-align: center;
+  }
+
+  /* ─── Chat styling ─────────────────────────────────────────────────────────── */
+
+  .chat-compose {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .chat-input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid var(--border, #4a6278);
+    border-radius: 4px;
+    background-color: var(--bg-input, #1a2f4a);
+    color: var(--text, #ffffff);
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+
+  .chat-input::placeholder {
+    color: var(--text-muted, #a8b8c4);
+  }
+
+  .chat-input:focus {
+    outline: none;
+    border-color: var(--accent, #4db8ff);
+  }
+
+  .chat-log {
+    margin-top: 1rem;
+    border: 1px solid var(--border, #4a6278);
+    border-radius: 4px;
+    background-color: var(--bg-panel, #1a2f4a);
+    padding: 0.75rem;
+    max-height: 6.5rem;
+    overflow-y: auto;
+  }
+
+  .chat-log-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted, #a8b8c4);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .chat-log-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .chat-log-entry {
+    font-size: 0.8rem;
+    color: var(--text, #ffffff);
+    line-height: 1.2;
+    word-wrap: break-word;
+  }
+
+  .chat-log-name {
+    font-weight: 600;
+    color: var(--accent, #4db8ff);
+  }
+
+  .chat-log-text {
+    color: var(--text, #ffffff);
+    margin-left: 0.25rem;
+  }
+
+  .chat-bubble-positioner {
+    pointer-events: none;
   }
 </style>

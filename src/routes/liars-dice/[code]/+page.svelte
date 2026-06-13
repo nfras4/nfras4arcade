@@ -207,6 +207,34 @@
   let mesh: InstanceType<typeof import('$lib/table3d/MeshController.js').MeshController> | null = null;
   let prevPeerSet = new Set<string>();
 
+  // ── Voice state (Stage C: media + audio) ────────────────────────────────────
+  let voiceState = $state<'off' | 'requesting' | 'joined' | 'denied' | 'unsupported'>('off');
+  let localStream = $state<MediaStream | null>(null);
+  let selfMuted = $state(false);
+  let remoteStreams = $state<Record<string, MediaStream>>({});
+  let remoteAudioRefs = $state<Record<string, HTMLAudioElement>>({});
+  let remoteMutes = $state<Record<string, boolean>>({});
+  const REMOTE_MUTES_KEY = 'ld-remote-mute';
+
+  // Load remote mutes from localStorage on mount
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    const stored = localStorage.getItem(REMOTE_MUTES_KEY);
+    if (stored) {
+      try {
+        remoteMutes = JSON.parse(stored) as Record<string, boolean>;
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  });
+
+  // Persist remote mutes on change
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(REMOTE_MUTES_KEY, JSON.stringify(remoteMutes));
+  });
+
   // ── Controller view initialization ─────────────────────────────────────────
   // Resolves the default exactly once per tablePresent=true session.
   // After that, only the toggle (which also writes localStorage) changes useControllerView.
@@ -567,6 +595,20 @@
                 console.log('[mesh]', peerId, state);
               }
             },
+            onRemoteStream: (peerId: string, stream: MediaStream) => {
+              remoteStreams = { ...remoteStreams, [peerId]: stream };
+              if (!remoteAudioRefs[peerId]) {
+                // Audio element will be created by the template and bound via bind:this
+              }
+            },
+            onPeerRemoved: (peerId: string) => {
+              remoteStreams = { ...remoteStreams };
+              delete remoteStreams[peerId];
+              remoteAudioRefs = { ...remoteAudioRefs };
+              delete remoteAudioRefs[peerId];
+              remoteMutes = { ...remoteMutes };
+              delete remoteMutes[peerId];
+            },
           });
         }
       });
@@ -750,6 +792,102 @@
       ? `${window.location.origin}/liars-dice/${code}?role=table`
       : ''
   );
+
+  // ── Voice handlers ─────────────────────────────────────────────────────────
+
+  async function joinVoice(): Promise<void> {
+    // Check for platform support
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+      voiceState = 'unsupported';
+      return;
+    }
+
+    voiceState = 'requesting';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStream = stream;
+      if (mesh) {
+        mesh.attachLocalStream(stream);
+      }
+      voiceState = 'joined';
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        voiceState = 'denied';
+      } else if (err.name === 'NotFoundError') {
+        voiceState = 'unsupported';
+      } else {
+        voiceState = 'unsupported';
+        if (import.meta.env.DEV) {
+          console.error('[voice] getUserMedia failed:', err);
+        }
+      }
+    }
+  }
+
+  async function leaveVoice(): Promise<void> {
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+      localStream = null;
+    }
+    if (mesh) {
+      mesh.detachLocalStream();
+    }
+    selfMuted = false;
+    voiceState = 'off';
+  }
+
+  function toggleSelfMute(): void {
+    if (!localStream) return;
+    selfMuted = !selfMuted;
+    localStream.getAudioTracks().forEach((t) => {
+      t.enabled = !selfMuted;
+    });
+  }
+
+  function toggleRemoteMute(peerId: string): void {
+    remoteMutes = {
+      ...remoteMutes,
+      [peerId]: !remoteMutes[peerId],
+    };
+  }
+
+  // ── Voice cleanup on unmount ───────────────────────────────────────────────
+  $effect(() => {
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
+        localStream = null;
+      }
+    };
+  });
+
+  // ── Mesh callbacks for remote streams ───────────────────────────────────────
+  function wireVoiceCallbacks(): void {
+    if (!mesh) return;
+
+    // Already wired in the mesh construction, but here for clarity
+    // See: mesh = new MeshController({ ..., onRemoteStream, onPeerRemoved })
+  }
+
+  // ── Apply remote mute state ────────────────────────────────────────────────
+  $effect(() => {
+    for (const [peerId, audioEl] of Object.entries(remoteAudioRefs)) {
+      if (audioEl) {
+        audioEl.muted = remoteMutes[peerId] ?? false;
+      }
+    }
+  });
+
+  // ── Apply remote streams to audio elements ──────────────────────────────────
+  $effect(() => {
+    for (const [peerId, stream] of Object.entries(remoteStreams)) {
+      const audioEl = remoteAudioRefs[peerId];
+      if (audioEl && stream) {
+        audioEl.srcObject = stream;
+      }
+    }
+  });
+
 </script>
 
 {#if $errorMsg}
@@ -1078,6 +1216,68 @@
             </button>
           </div>
         {/if}
+
+        <!-- Voice section -->
+        <section class="voice-section">
+          <div class="voice-status">
+            {#if voiceState === 'off'}
+              Voice off
+            {:else if voiceState === 'requesting'}
+              Requesting mic...
+            {:else if voiceState === 'joined'}
+              Voice on ({Object.keys(remoteStreams).length} connected)
+            {:else if voiceState === 'denied'}
+              Microphone denied
+            {:else}
+              Microphone unavailable
+            {/if}
+          </div>
+
+          <button
+            class="btn-small"
+            onclick={voiceState === 'joined' ? leaveVoice : joinVoice}
+            disabled={voiceState === 'requesting' || (voiceState === 'unsupported' && navigator?.mediaDevices === undefined)}
+          >
+            {voiceState === 'joined' ? 'Leave voice' : 'Join voice'}
+          </button>
+
+          {#if voiceState === 'joined'}
+            <button
+              class="btn-small"
+              onclick={toggleSelfMute}
+              aria-pressed={selfMuted}
+              class:muted={selfMuted}
+            >
+              {selfMuted ? 'Unmute mic' : 'Mute mic'}
+            </button>
+          {/if}
+
+          {#if voiceState === 'joined' && Object.keys(remoteStreams).length > 0}
+            <div class="remote-mute-list">
+              {#each state.players as p (p.id)}
+                {#if remoteStreams[p.id]}
+                  <button
+                    class="btn-remote-mute"
+                    onclick={() => toggleRemoteMute(p.id)}
+                    aria-pressed={remoteMutes[p.id] ?? false}
+                    class:muted={remoteMutes[p.id] ?? false}
+                    title="{p.name}: {remoteMutes[p.id] ? 'unmute' : 'mute'}"
+                  >
+                    {p.name} {remoteMutes[p.id] ? '(muted)' : ''}
+                  </button>
+                {/if}
+              {/each}
+            </div>
+          {/if}
+        </section>
+
+        <!-- Remote audio elements -->
+        {#each Object.keys(remoteStreams) as peerId (peerId)}
+          <audio
+            autoplay
+            bind:this={remoteAudioRefs[peerId]}
+          />
+        {/each}
       </section>
     {/if}
 
@@ -2162,5 +2362,78 @@
 
   .chat-bubble-positioner {
     pointer-events: none;
+  }
+
+  /* ── Voice Section Styling ───────────────────────────────────────────────────── */
+
+  .voice-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    background-color: var(--panel-bg, #1a1f24);
+    border: 1px solid var(--border-color, #2d3a42);
+    border-radius: 0.5rem;
+  }
+
+  .voice-status {
+    font-size: 0.85rem;
+    color: var(--text-muted, #a8b8c4);
+    padding: 0.25rem 0;
+  }
+
+  .btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    background-color: var(--button-bg, #2d3a42);
+    color: var(--text, #ffffff);
+    border: 1px solid var(--border-color, #3d4a52);
+    border-radius: 0.3rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-small:hover:not(:disabled) {
+    background-color: var(--button-hover, #3d4a52);
+  }
+
+  .btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-small.muted {
+    background-color: var(--danger-bg-deep, #6b1f1f);
+    border-color: var(--danger-border-mid, #8a3030);
+    color: var(--danger-text-pale, #f5d2d2);
+  }
+
+  .remote-mute-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+  }
+
+  .btn-remote-mute {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
+    background-color: var(--button-bg, #2d3a42);
+    color: var(--text, #ffffff);
+    border: 1px solid var(--border-color, #3d4a52);
+    border-radius: 0.3rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-remote-mute:hover {
+    background-color: var(--button-hover, #3d4a52);
+  }
+
+  .btn-remote-mute.muted {
+    background-color: var(--danger-bg-deep, #6b1f1f);
+    border-color: var(--danger-border-mid, #8a3030);
+    color: var(--danger-text-pale, #f5d2d2);
   }
 </style>

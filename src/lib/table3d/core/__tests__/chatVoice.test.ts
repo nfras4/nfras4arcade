@@ -149,4 +149,43 @@ describe('revealSchedule', () => {
     // At same index, fast reveal should have smaller delay
     expect(fast[2]!).toBeLessThan(slow[2]!);
   });
+
+  it('pauses longer at spaces than between letters', () => {
+    const { delaysMs } = revealSchedule('ab c', 30);
+    const letterStep = delaysMs[1]! - delaysMs[0]!;        // a -> b
+    const spaceStep = delaysMs[3]! - delaysMs[2]!;          // ' ' -> c (interval AFTER space)
+    expect(spaceStep).toBeGreaterThan(letterStep);
+  });
+
+  it('pauses longer at commas than spaces', () => {
+    const { delaysMs } = revealSchedule('a, b', 30);
+    // Index 1 is ',', index 2 is ' '. The interval AFTER the comma is the comma pause.
+    const commaPause = delaysMs[2]! - delaysMs[1]!;
+    const spacePause = delaysMs[3]! - delaysMs[2]!;
+    expect(commaPause).toBeGreaterThan(spacePause);
+  });
+
+  it('pauses longest at full stops', () => {
+    const { delaysMs } = revealSchedule('a. b', 30);
+    const fullStopPause = delaysMs[2]! - delaysMs[1]!;     // pause AFTER '.'
+    const spacePause = delaysMs[3]! - delaysMs[2]!;
+    expect(fullStopPause).toBeGreaterThan(spacePause);
+  });
+
+  it('treats !, ?, ; and : as expected', () => {
+    const tests = [
+      ['a!b', 'fullStop'],
+      ['a?b', 'fullStop'],
+      ['a;b', 'comma'],
+      ['a:b', 'comma'],
+    ] as const;
+    const { delaysMs: ref } = revealSchedule('aab', 30);
+    const letterStep = ref[1]! - ref[0]!;
+    for (const [text, kind] of tests) {
+      const { delaysMs } = revealSchedule(text, 30);
+      const pause = delaysMs[2]! - delaysMs[1]!;
+      if (kind === 'fullStop') expect(pause).toBeCloseTo(letterStep * 8, 1);
+      if (kind === 'comma') expect(pause).toBeCloseTo(letterStep * 5, 1);
+    }
+  });
 });

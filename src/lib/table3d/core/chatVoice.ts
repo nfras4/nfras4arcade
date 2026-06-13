@@ -114,11 +114,42 @@ export function buildBlipRecipe(
 // ─── Typewriter reveal schedule ────────────────────────────────────────────
 
 /**
- * Compute the reveal schedule for typewriter effect.
+ * Per-character interval multipliers relative to the letter interval.
+ * Calibrated so chat reads with a natural reading rhythm: word breaks pause,
+ * commas pause longer, sentence-ends pause longer still. Letters drive the
+ * underlying `charsPerSec` rate; the other kinds are scaled off it so the
+ * relative feel holds at any reveal speed.
+ */
+const PAUSE_MULTIPLIER = {
+  letter: 1,
+  space: 2.5,
+  comma: 5,
+  fullStop: 8,
+  newline: 8,
+} as const;
+
+type CharKind = keyof typeof PAUSE_MULTIPLIER;
+
+function charKind(c: string): CharKind {
+  if (c === ' ' || c === '\t') return 'space';
+  if (c === ',' || c === ';' || c === ':') return 'comma';
+  if (c === '.' || c === '!' || c === '?') return 'fullStop';
+  if (c === '\n' || c === '\r') return 'newline';
+  return 'letter';
+}
+
+/**
+ * Compute the reveal schedule for typewriter effect with natural cadence.
+ *
+ * Letters reveal at `charsPerSec`; spaces add a brief word-pause; commas
+ * (and `;`/`:`) add a mid-sentence pause; full stops, `!`, `?`, and newlines
+ * pause longest. The audio path keeps emitting one blip per non-space char
+ * via `buildBlipRecipe`; the visual and audio both consume this schedule so
+ * they stay in sync.
  *
  * @param text          The message text.
- * @param charsPerSec   Reveal speed (default 30 chars/sec).
- *                      Consumers currently pass 18 CPS for slower, more readable reveal.
+ * @param charsPerSec   Letter reveal speed (default 30 chars/sec).
+ *                      Consumers currently pass 18 CPS for a comfortable read.
  * @returns             { delaysMs, totalMs }
  *                      - delaysMs[i] = offset from t=0 at which char i is revealed
  *                      - totalMs = total reveal duration
@@ -127,14 +158,19 @@ export function revealSchedule(
   text: string,
   charsPerSec: number = 30,
 ): { delaysMs: number[]; totalMs: number } {
-  const intervalMs = 1000 / charsPerSec;
+  const letterMs = 1000 / charsPerSec;
   const delaysMs: number[] = [];
 
+  let t = 0;
   for (let i = 0; i < text.length; i++) {
-    delaysMs.push(i * intervalMs);
+    delaysMs.push(t);
+    t += letterMs * PAUSE_MULTIPLIER[charKind(text[i])];
   }
 
-  const totalMs = text.length > 0 ? (text.length - 1) * intervalMs + 1 : 0;
+  // `t` is now where the next char WOULD reveal; subtract one letter-step so
+  // totalMs reflects the moment the last char appears, plus 1ms for the empty
+  // string case.
+  const totalMs = text.length > 0 ? t - letterMs * PAUSE_MULTIPLIER[charKind(text[text.length - 1])] + 1 : 0;
 
   return { delaysMs, totalMs };
 }

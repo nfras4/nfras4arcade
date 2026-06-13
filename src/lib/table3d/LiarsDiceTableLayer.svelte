@@ -506,7 +506,6 @@
     gap: 0;
     background: rgba(8, 10, 12, 0.82);
     border-top: 1px solid rgba(90, 138, 90, 0.14);
-    backdrop-filter: blur(6px);
     z-index: 10;
     /* Strip height auto from buttons; ~44px min tap target */
   }

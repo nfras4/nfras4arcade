@@ -59,7 +59,16 @@ worker_default.fetch = async function(req, env, ctx) {
     // accepted from any origin (SameSite=Lax does not cover WebSockets).
     const origin = req.headers.get('Origin');
     const ALLOWED_ORIGINS = ['https://arcade.nickwfraser.dev'];
-    if (origin && !ALLOWED_ORIGINS.includes(origin) && !origin.endsWith('.workers.dev')) {
+    // Local dev (wrangler dev): accept localhost origins ONLY when the request
+    // itself is served from localhost, so production posture is unchanged.
+    // String ops, not regex: this code is emitted through a string literal in
+    // patch-worker.ts, where backslash escapes get consumed.
+    const isLocalDev =
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      origin !== null &&
+      (origin === 'http://localhost' || origin.startsWith('http://localhost:') ||
+       origin === 'http://127.0.0.1' || origin.startsWith('http://127.0.0.1:'));
+    if (origin && !isLocalDev && !ALLOWED_ORIGINS.includes(origin) && !origin.endsWith('.workers.dev')) {
       return new Response('Forbidden origin', { status: 403 });
     }
 

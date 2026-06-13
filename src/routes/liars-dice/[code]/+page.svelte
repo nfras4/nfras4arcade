@@ -458,6 +458,24 @@
 
 {#if state}
   <div class="game" class:table-mode={tableView} style={tableFeltStyle}>
+    <!-- 3D stage band: only rendered in table view; fully unmounted otherwise (no hidden canvas burning frames) -->
+    {#if tableView && ldStateLike}
+      <div class="stage-band">
+        {#if LayerComp}
+          <LayerComp
+            state={ldStateLike}
+            onemote={handleLayerEmote}
+            onready={handleLayerReady}
+          />
+        {:else if layerLoadError}
+          <p class="stage-error">{layerLoadError}</p>
+        {:else}
+          <p class="stage-loading">Loading 3D scene...</p>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="table-rail">
     <header class="header">
       <div class="room-code">
         Room <strong>{state.code}</strong>
@@ -493,23 +511,6 @@
         {tableView ? 'Classic view' : 'Table view'}
       </button>
     </header>
-
-    <!-- 3D stage band: only rendered in table view; fully unmounted otherwise (no hidden canvas burning frames) -->
-    {#if tableView && ldStateLike}
-      <div class="stage-band">
-        {#if LayerComp}
-          <LayerComp
-            state={ldStateLike}
-            onemote={handleLayerEmote}
-            onready={handleLayerReady}
-          />
-        {:else if layerLoadError}
-          <p class="stage-error">{layerLoadError}</p>
-        {:else}
-          <p class="stage-loading">Loading 3D scene...</p>
-        {/if}
-      </div>
-    {/if}
 
     <!-- Player table: hidden in table view (monkeys + nameplates replace it) -->
     <section class="players">
@@ -751,6 +752,7 @@
     <div class="footer">
       <button class="btn-ghost" onclick={() => goto('/liars-dice')}>Leave</button>
     </div>
+    </div><!-- /.table-rail -->
   </div>
 {:else if reconnecting}
   <div class="loading">Connecting...</div>
@@ -1326,8 +1328,18 @@
   /* All selectors are gated behind .table-mode so classic view stays
      pixel-identical. No existing selectors are modified. */
 
+  /* .table-rail is an invisible passthrough wrapper in classic / narrow view */
+  .table-rail {
+    display: contents;
+  }
+
   .table-mode {
     max-width: 1100px;
+  }
+
+  /* In table-mode suppress idle breathe animation on bid controls */
+  .table-mode .bid-controls {
+    animation: none;
   }
 
   /* In table-mode the .players tile grid is hidden: monkeys + nameplates
@@ -1352,10 +1364,101 @@
     width: 100%;
   }
 
-  /* Stage band stretches to the full 1100px column; break out of
-     the narrow content max-width by pulling full-bleed within the .game wrapper. */
+  /* Stage band stretches to the full column width */
   .table-mode .stage-band {
     width: 100%;
-    /* Stage fills the widened column already via .game max-width: 1100px */
+  }
+
+  /* ── 900-1199px: stacked, compact to fit 100vh ──────────────────────────── */
+  @media (min-width: 900px) and (max-width: 1199px) {
+    .table-mode {
+      max-width: 900px;
+      padding-top: 1rem;
+    }
+
+    .table-mode .stage-band {
+      height: clamp(240px, 38vh, 420px) !important;
+    }
+
+    .table-mode .panel {
+      padding: 0.65rem 0.8rem 0.75rem;
+      gap: 0.5rem;
+    }
+
+    .table-mode .header {
+      padding-bottom: 0.5rem;
+    }
+
+    .table-mode .bid-display {
+      padding: 0.2rem 0;
+    }
+
+    .table-mode .bid-value {
+      font-size: 1.4rem;
+    }
+
+    .table-mode .die {
+      font-size: 1.6rem;
+      padding: 0.15rem 0.3rem;
+    }
+
+    .table-mode .footer {
+      padding-top: 0.25rem;
+    }
+
+    .table-mode .my-dice {
+      max-width: none;
+      margin: 0;
+    }
+  }
+
+  /* ── >= 1200px: side-rail layout, one viewport, zero page scroll ────────── */
+  @media (min-width: 1200px) {
+    .table-mode {
+      max-width: none;
+      width: 100%;
+      padding: 0;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      height: calc(100vh - 3.25rem);
+      overflow: hidden;
+      gap: 0;
+      align-items: start;
+    }
+
+    /* Stage band: left column, full height */
+    .table-mode .stage-band {
+      grid-column: 1;
+      grid-row: 1;
+      height: 100% !important;
+      width: 100%;
+    }
+
+    /* Right rail: flex column, scrollable */
+    .table-mode .table-rail {
+      display: flex;
+      flex-direction: column;
+      grid-column: 2;
+      grid-row: 1;
+      overflow-y: auto;
+      height: 100%;
+      background: var(--bg-base, #0d1117);
+      border-left: 1px solid var(--border);
+      padding: 1rem;
+      gap: 1rem;
+    }
+
+    /* Remove extra centering on panels inside the rail */
+    .table-mode .panel {
+      max-width: none;
+      margin: 0;
+      width: 100%;
+    }
+
+    .table-mode .my-dice {
+      max-width: none;
+      margin: 0;
+      width: 100%;
+    }
   }
 </style>

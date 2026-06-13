@@ -63,6 +63,7 @@ Theatrical staging: one warm key spotlight above table centre, low ambient fill,
 
 - Nothing moves linearly. Cartoon timing: tiny anticipation (about 50ms), fast action (about 150ms), settle with a 1.05 to 1.1 overshoot.
 - `prefers-reduced-motion`: expressions become instant swaps, no tremor, no head bob, no idle motion.
+- **Idle UI is static (Nick, 2026-06-12: pulsing grey highlight and blur "too much, tone down a lot").** Motion belongs to events (bids, slams, rituals, confetti), never to ambience. No breathing/pulsing affordances on controls at rest, no glow loops, no backdrop-filter blur on persistent bars or overlays; persistent surfaces use solid dark backgrounds. The 3D monkeys may idle (that is presence); the 2D chrome may not.
 
 ## Performance budget
 

@@ -23,6 +23,9 @@
     stageEl,
     reducedMotion = false,
     ritualActive  = false,
+    cameraPosition,
+    cameraLookAt,
+    cameraFov,
   }: {
     /** The stage container element – pointermove is bound here, not window. */
     stageEl: HTMLElement | null;
@@ -30,6 +33,12 @@
     reducedMotion?: boolean;
     /** True while a ritual is playing; rig eases back to centre. */
     ritualActive?: boolean;
+    /** Optional camera position override (e.g. TV mode). */
+    cameraPosition?: [number, number, number];
+    /** Optional camera lookAt point override (e.g. TV mode). */
+    cameraLookAt?: [number, number, number];
+    /** Optional camera FOV override (e.g. TV mode). */
+    cameraFov?: number;
   } = $props();
 
   // ─── Fine-pointer detection ───────────────────────────────────────────────────
@@ -42,8 +51,8 @@
   // ─── Camera authored framing ──────────────────────────────────────────────────
   // Compute the authored heading so we can offset around it.
   const authored = (() => {
-    const pos = new THREE.Vector3(...CAM_POSITION);
-    const look = new THREE.Vector3(...CAM_LOOK_AT);
+    const pos = new THREE.Vector3(...(cameraPosition ?? CAM_POSITION));
+    const look = new THREE.Vector3(...(cameraLookAt ?? CAM_LOOK_AT));
     const dir  = new THREE.Vector3().subVectors(look, pos).normalize();
     // Authored yaw (Y-rotation) and pitch (X-rotation) from the direction vector.
     const yaw   = Math.atan2(dir.x, dir.z);   // radians, around Y
@@ -87,9 +96,9 @@
   });
 
   // ─── Camera object (imperative) ──────────────────────────────────────────────
-  const camera = new THREE.PerspectiveCamera(CAM_FOV, 1, 0.1, 50);
-  camera.position.set(...CAM_POSITION);
-  camera.lookAt(...CAM_LOOK_AT);
+  const camera = new THREE.PerspectiveCamera(cameraFov ?? CAM_FOV, 1, 0.1, 50);
+  camera.position.set(...(cameraPosition ?? CAM_POSITION));
+  camera.lookAt(...(cameraLookAt ?? CAM_LOOK_AT));
 
   const { renderer, size } = useThrelte();
 

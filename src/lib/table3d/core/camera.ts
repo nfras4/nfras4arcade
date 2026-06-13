@@ -10,14 +10,27 @@
 
 // ─── Authored framing (from art bible staging datum) ─────────────────────────
 
-/** Camera world position. */
+/** Camera world position (desktop, 5-seat view). */
 export const CAM_POSITION: [number, number, number] = [0, 1.5, 3.6];
 
-/** Camera lookAt point. */
+/** Camera lookAt point (desktop, 5-seat view). */
 export const CAM_LOOK_AT: [number, number, number] = [0, 0.2, -0.6];
 
-/** Camera FOV in degrees. */
+/** Camera FOV in degrees (desktop, 5-seat view). */
 export const CAM_FOV = 42;
+
+// ─── TV mode framing (6-seat FULL_TABLE_ARC, 16:9 landscape) ──────────────────
+
+/** TV camera world position. Frames the 6-seat FULL_TABLE_ARC for far-field viewing. */
+export const TV_CAMERA_POSITION: [number, number, number] = [0, 1.9, 4.6];
+
+/** TV camera lookAt point. Slightly elevated to clear the table's sight line. */
+export const TV_CAMERA_LOOK_AT: [number, number, number] = [0, 0.2, -0.5];
+
+/** TV camera FOV in degrees. Tuned for 16:9 aspect ratio and spectator distance. */
+export const TV_CAMERA_FOV = 46;
+
+// Note: TV constants are PROVISIONAL pending art director tuning for final show framing.
 
 // ─── Parallax feel constants ──────────────────────────────────────────────────
 

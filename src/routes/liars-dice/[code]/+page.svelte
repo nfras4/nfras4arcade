@@ -6,9 +6,11 @@
   import { writable } from 'svelte/store';
   import { currentUser } from '$lib/auth';
   import NameFrame from '$lib/components/NameFrame.svelte';
+  import QRDisplay from '$lib/components/pairing/QRDisplay.svelte';
   import FloatUp from '$lib/vfx/FloatUp.svelte';
   import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
+  import { createShakeDetector } from '$lib/table3d/shake.js';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
   import type { EmoteId } from '$lib/table3d/core/emotes.js';
@@ -17,10 +19,39 @@
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/liars-dice');
 
+  // ── TV mode detection ──────────────────────────────────────────────────────
+  // role=table in the URL query indicates a display-only TV view.
+  const isTv = $page.url.searchParams.get('role') === 'table';
+
+  // ── Self-seat mode toggle ──────────────────────────────────────────────────
+  // ?selfseat=1 shows the local player at the table on desktop.
+  // Persists to localStorage key 'ld-self-seat'. TV mode ignores this.
+  const SELF_SEAT_KEY = 'ld-self-seat';
+
+  function resolveSelfSeatDefault(): boolean {
+    const param = $page.url.searchParams.get('selfseat');
+    if (param === '1') return true;
+    if (param === '0') return false;
+    // No param: check localStorage
+    if (typeof localStorage === 'undefined') return false;
+    const stored = localStorage.getItem(SELF_SEAT_KEY);
+    return stored === '1';
+  }
+
+  let selfSeat = $state(resolveSelfSeatDefault());
+
+  // Write-back: persist whenever selfseat changes (except in TV mode)
+  $effect(() => {
+    if (!isTv && typeof localStorage !== 'undefined') {
+      localStorage.setItem(SELF_SEAT_KEY, selfSeat ? '1' : '0');
+    }
+  });
+
   // ── Table view toggle ──────────────────────────────────────────────────────
   // localStorage key 'ld-table-view': '1' = on, '0' = off.
   // Default on first visit: on when viewport >= 900px AND WebGL available.
   // A stored key always wins over the default.
+  // TV mode (isTv=true) always uses table view when WebGL is available.
   const TABLE_VIEW_KEY = 'ld-table-view';
 
   function probeWebGL(): boolean {
@@ -33,6 +64,10 @@
   }
 
   function resolveTableViewDefault(): boolean {
+    if (isTv) {
+      // TV mode: always on if WebGL available
+      return probeWebGL();
+    }
     if (typeof localStorage === 'undefined') return false;
     const stored = localStorage.getItem(TABLE_VIEW_KEY);
     if (stored !== null) return stored === '1';
@@ -42,9 +77,19 @@
 
   let tableView = $state(resolveTableViewDefault());
 
-  // Write-back: persist whenever tableView changes
+  // ── Phone controller view ──────────────────────────────────────────────────
+  // When tablePresent=true, default to controller view (no 3D stage).
+  // Controlled by localStorage key 'ld-controller-view': '1' = on (default when tablePresent), '0' = off.
+  const CONTROLLER_VIEW_KEY = 'ld-controller-view';
+
+  let useControllerView = $state(false);
+  // Tracks whether the default has been resolved for the current tablePresent=true session.
+  // Reset when tablePresent goes false so a new TV appearing later re-resolves.
+  let controllerViewResolved = false;
+
+  // Write-back: persist whenever tableView changes (except in TV mode)
   $effect(() => {
-    if (typeof localStorage !== 'undefined') {
+    if (!isTv && typeof localStorage !== 'undefined') {
       localStorage.setItem(TABLE_VIEW_KEY, tableView ? '1' : '0');
     }
   });
@@ -114,11 +159,39 @@
     myDice: number[];
     lastRoundResult: RoundResult | null;
     winnerId: string | null;
+    tablePresent?: boolean;
   }
 
   const gameState = writable<LDState | null>(null);
   const myPlayerId = writable<string | null>(null);
   const errorMsg = writable<string | null>(null);
+
+  // ── Controller view initialization ─────────────────────────────────────────
+  // Resolves the default exactly once per tablePresent=true session.
+  // After that, only the toggle (which also writes localStorage) changes useControllerView.
+  // When tablePresent goes false, both state and the resolved flag are reset.
+  // The TV view (role=table) NEVER enters controller layout: it is a display.
+  $effect(() => {
+    if (isTv) return;
+    const s = $gameState;
+    if (!s) return;
+    const tp = s.tablePresent ?? false;
+    if (!tp) {
+      // TV left (or never appeared): reset so the next TV arrival re-resolves.
+      useControllerView = false;
+      controllerViewResolved = false;
+      return;
+    }
+    // Already resolved for this tablePresent=true session; don't stomp in-session toggles.
+    if (controllerViewResolved) return;
+    // Only seated players can use controller view; spectators/TV sockets skip.
+    const isSeatedPlayer = pid && s.players.some((p) => p.id === pid);
+    if (!isSeatedPlayer) return;
+    // Resolve once: stored key wins; no stored key defaults to on.
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(CONTROLLER_VIEW_KEY) : null;
+    useControllerView = stored !== null ? stored === '1' : true;
+    controllerViewResolved = true;
+  });
 
   let reconnecting = $state(true);
   let bidCount = $state(1);
@@ -126,6 +199,13 @@
   let errorTimeout: ReturnType<typeof setTimeout>;
 
   const ANTE_OPTIONS = [25, 50, 100, 250];
+
+  // ── Shake detector state ───────────────────────────────────────────────────
+  let dicePending = $state(false);
+  let shakePermission = $state<'unknown' | 'granted' | 'denied' | 'unsupported' | 'not-required'>('unknown');
+  let dealCounter = $state(0);
+  let prevDealPhase = '';
+  let shakeDetector: ReturnType<typeof createShakeDetector> | null = null;
 
   // ── VFX state ──────────────────────────────────────────────────────────────
   // bid pop re-trigger
@@ -269,6 +349,41 @@
     prevEliminated = next;
   });
 
+  // Deal detection: increment dealCounter on every lobby/round_over -> playing transition.
+  // Using a counter (not a signature) means dice-count stability across rounds is not a problem.
+  $effect(() => {
+    const s = $gameState;
+    if (!s) return;
+    if (s.phase === 'playing' && prevDealPhase !== 'playing') {
+      if (s.myDice.length > 0) {
+        dealCounter++;
+        dicePending = true;
+      }
+    }
+    prevDealPhase = s.phase;
+  });
+
+  // Shake detector lifecycle — explicit state machine, no cleanup closure.
+  // Branch order: controller off → denied/unsupported → unknown → granted/not-required.
+  $effect(() => {
+    if (!useControllerView) {
+      if (shakeDetector) { shakeDetector.stop(); shakeDetector = null; }
+      return;
+    }
+    if (shakePermission === 'denied' || shakePermission === 'unsupported') {
+      if (shakeDetector) { shakeDetector.stop(); shakeDetector = null; }
+      return;
+    }
+    // Ensure a detector instance exists for all remaining states.
+    if (!shakeDetector) {
+      shakeDetector = createShakeDetector({ onShake: () => { dicePending = false; } });
+    }
+    if (shakePermission === 'granted' || shakePermission === 'not-required') {
+      shakeDetector.start();
+    }
+    // 'unknown': detector created but not started — requestPermission() is reachable.
+  });
+
   // ── Game logic ─────────────────────────────────────────────────────────────
 
   $effect(() => {
@@ -289,7 +404,7 @@
       dispatchRelayMessages(msg);
     });
 
-    socket.connect(code)
+    socket.connect(code, undefined, isTv ? 'table' : undefined)
       .then(() => socket.joinRoom(code))
       .catch(() => goto('/liars-dice'));
 
@@ -339,6 +454,26 @@
 
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
+  let tablePresent = $derived(state?.tablePresent ?? false);
+
+  // Log ldStateLike state transitions for diagnostics
+  let prevPlayersLength = 0;
+  let prevWasNull = true;
+  $effect(() => {
+    const s = $gameState;
+    if (import.meta.env.DEV) {
+      const isNull = s === null;
+      if (isNull !== prevWasNull) {
+        prevWasNull = isNull;
+        console.log(`[route] ldStateLike transitioned: ${isNull ? 'null' : 'non-null'}, players=${s?.players.length ?? 0}`);
+      }
+      const curLength = s?.players.length ?? 0;
+      if (curLength !== prevPlayersLength && curLength > 0 && prevPlayersLength === 0) {
+        console.log(`[route] ldStateLike players: 0 -> ${curLength}`);
+      }
+      prevPlayersLength = curLength;
+    }
+  });
 
   // ── LDStateLike mapping for the table layer ────────────────────────────────
   // Maps the page's LDState + myPlayerId into the engine-agnostic LDStateLike
@@ -410,6 +545,14 @@
     state.lastRoundResult.loserId === state.lastRoundResult.callerId
   );
 
+  function toggleControllerView(): void {
+    const next = !useControllerView;
+    useControllerView = next;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CONTROLLER_VIEW_KEY, next ? '1' : '0');
+    }
+  }
+
   function canPlaceBid(): boolean {
     if (!state || !isMyTurn) return false;
     if (bidCount < 1 || bidCount > totalDice) return false;
@@ -425,11 +568,13 @@
 
   function placeBid() {
     if (!canPlaceBid()) return;
+    dicePending = false;
     socket.send({ type: 'place_bid', count: bidCount, face: bidFace });
   }
 
   function callLiar() {
     if (!state?.currentBid || !isMyTurn) return;
+    dicePending = false;
     socket.send({ type: 'call_liar' });
   }
 
@@ -458,6 +603,14 @@
 
   let tableFeltHex = $derived($currentUser?.tableFelt?.hex ?? null);
   let tableFeltStyle = $derived(tableFeltHex ? `--table-felt-bg: ${tableFeltHex};` : '');
+
+  // ── TV cast URL ────────────────────────────────────────────────────────────
+  // Generate the room URL with role=table query param for TV casting.
+  let tvCastUrl = $derived(
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/liars-dice/${code}?role=table`
+      : ''
+  );
 </script>
 
 {#if $errorMsg}
@@ -465,15 +618,17 @@
 {/if}
 
 {#if state}
-  <div class="game" class:table-mode={tableView} style={tableFeltStyle}>
+  <div class="game" class:table-mode={tableView} class:tv-mode={isTv} class:controller-mode={useControllerView} style={tableFeltStyle}>
     <!-- 3D stage band: only rendered in table view; fully unmounted otherwise (no hidden canvas burning frames) -->
-    {#if tableView && ldStateLike}
+    {#if (tableView || isTv) && ldStateLike && !useControllerView}
       <div class="stage-band">
         {#if LayerComp}
           <LayerComp
             state={ldStateLike}
             onemote={handleLayerEmote}
             onready={handleLayerReady}
+            fullTable={isTv || selfSeat}
+            showEmoteStrip={!isTv}
           />
         {:else if layerLoadError}
           <p class="stage-error">{layerLoadError}</p>
@@ -481,9 +636,24 @@
           <p class="stage-loading">Loading 3D scene...</p>
         {/if}
       </div>
+
+      <!-- TV lower third: current bid and turn info -->
+      {#if isTv}
+        <div class="tv-lower-third">
+          {#if state.phase === 'playing' && state.currentBid}
+            <div class="tv-lower-text">
+              <span class="bid-label">Bid:</span> {state.currentBid.count} {dieFace(state.currentBid.face)} by {bidderName}
+            </div>
+            <div class="tv-lower-turn">
+              {currentTurnName} to act
+            </div>
+          {/if}
+        </div>
+      {/if}
     {/if}
 
     <div class="table-rail">
+    {#if !isTv}
     <header class="header">
       <div class="room-code">
         Room <strong>{state.code}</strong>
@@ -518,9 +688,21 @@
       >
         {tableView ? 'Classic view' : 'Table view'}
       </button>
+      {#if tablePresent}
+        <button
+          class="btn-view-toggle"
+          onclick={toggleControllerView}
+          aria-pressed={useControllerView}
+          title={useControllerView ? 'Switch to full view' : 'Switch to controller view'}
+        >
+          {useControllerView ? 'Full view' : 'Controller view'}
+        </button>
+      {/if}
     </header>
+    {/if}
 
-    <!-- Player table: hidden in table view (monkeys + nameplates replace it) -->
+    <!-- Player table: hidden in table view and TV mode (monkeys + nameplates replace it) -->
+    {#if !useControllerView}
     <section class="players">
       {#each state.players as p (p.id)}
         {#key loserFlashKey}
@@ -557,9 +739,10 @@
         {/key}
       {/each}
     </section>
+    {/if}
 
     <!-- Phase: lobby -->
-    {#if state.phase === 'lobby'}
+    {#if state.phase === 'lobby' && !isTv}
       <section class="panel">
         <h2 class="panel-title">Lobby</h2>
         <p class="panel-hint">Waiting for players. Share code <strong>{state.code}</strong>.</p>
@@ -608,6 +791,18 @@
           <p class="panel-hint">Mode: <strong>{state.gameMode}</strong> / Ante: <strong>{state.ante}</strong> / Wilds: <strong>{state.onesWild ? 'on' : 'off'}</strong></p>
           <p class="panel-hint">Waiting for the host to start.</p>
         {/if}
+
+        <!-- Party Night: cast to TV disclosure -->
+        <details class="cast-disclosure">
+          <summary class="cast-summary">Party Night: cast to TV</summary>
+          <div class="cast-content">
+            <p class="cast-hint">Open this on a TV or laptop. Phones become controllers.</p>
+            <div class="cast-qr">
+              <QRDisplay text={tvCastUrl} size={200} />
+            </div>
+            <p class="cast-url">{tvCastUrl}</p>
+          </div>
+        </details>
       </section>
     {/if}
 
@@ -634,14 +829,34 @@
         <!-- My dice -->
         <div class="my-dice">
           <span class="my-dice-label">Your dice</span>
-          <div class="die-row">
-            {#each state.myDice as d, i (i)}
-              <span class="die">{dieFace(d)}</span>
-            {/each}
-            {#if state.myDice.length === 0}
-              <span class="die-placeholder">No dice left</span>
-            {/if}
-          </div>
+          {#if useControllerView && dicePending && !matchMedia('(prefers-reduced-motion: reduce)').matches}
+            <!-- Shake pending: face-down placeholders -->
+            <div class="die-row">
+              {#each Array(state.myDice.length) as _, i (i)}
+                <span class="die die-facedown">⚂</span>
+              {/each}
+            </div>
+            <div class="dice-pending-controls">
+              <p class="dice-pending-hint">Shake to reveal</p>
+              {#if shakePermission === 'unknown'}
+                <button class="btn-small" onclick={async () => {
+                  const result = await shakeDetector?.requestPermission();
+                  if (result) shakePermission = result;
+                }}>Tap to enable shake</button>
+              {/if}
+              <button class="btn-small btn-reveal" onclick={() => dicePending = false}>Reveal</button>
+            </div>
+          {:else}
+            <!-- Normal: show actual dice faces -->
+            <div class="die-row">
+              {#each state.myDice as d, i (i)}
+                <span class="die">{dieFace(d)}</span>
+              {/each}
+              {#if state.myDice.length === 0}
+                <span class="die-placeholder">No dice left</span>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         {#if isMyTurn && !me?.eliminated}
@@ -1023,6 +1238,55 @@
     font-size: 0.85rem;
     color: var(--text-subtle);
     font-style: italic;
+  }
+
+  .die-facedown {
+    opacity: 0.5;
+  }
+
+  .dice-pending-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.6rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .dice-pending-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    font-style: italic;
+  }
+
+  .btn-small {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.75rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .btn-small:hover {
+    background: var(--accent-faint);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  .btn-reveal {
+    background: var(--accent-faint);
+    border-color: var(--accent-border);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .bid-controls {
@@ -1500,5 +1764,148 @@
       justify-content: center;
       row-gap: 0.4rem;
     }
+  }
+
+  /* ── TV Mode Layout ────────────────────────────────────────────────────────── */
+  /* Full-viewport display: stage fills entire viewport, no controls visible */
+
+  .tv-mode {
+    max-width: 100%;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    gap: 0;
+  }
+
+  .tv-mode .stage-band {
+    flex: 1;
+    height: auto !important;
+    width: 100%;
+    max-width: none;
+  }
+
+  .tv-mode .table-rail {
+    display: none;
+  }
+
+  /* TV lower third: broadcast-style info bar at bottom of stage */
+  .tv-lower-third {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 1rem;
+    border-top: 2px solid var(--accent, #6b9e6b);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 1.1rem;
+    color: var(--text, #d8dce8);
+  }
+
+  .tv-lower-text {
+    flex: 1;
+    letter-spacing: 0.05em;
+  }
+
+  .tv-lower-text .bid-label {
+    font-weight: 700;
+    color: var(--accent, #6b9e6b);
+  }
+
+  .tv-lower-turn {
+    text-align: right;
+    font-size: 0.95rem;
+    color: var(--text-muted, #a8b8c4);
+    font-weight: 500;
+  }
+
+  /* ── Controller View Mode ──────────────────────────────────────────────────── */
+  /* Phone-first layout: controls prominent, no 3D stage, collapsed players list */
+
+  .controller-mode .players {
+    display: none;
+  }
+
+  .controller-mode .stage-band {
+    display: none;
+  }
+
+  .controller-mode .my-dice {
+    order: -1; /* Render before panel controls */
+  }
+
+  /* ── Cast Affordance Styling ───────────────────────────────────────────────── */
+
+  .cast-disclosure {
+    margin-top: 0.5rem;
+  }
+
+  .cast-summary {
+    padding: 0.6rem 0;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted, #a8b8c4);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .cast-summary:hover {
+    color: var(--accent, #6b9e6b);
+  }
+
+  .cast-summary::before {
+    content: '[+]';
+    margin-right: 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .cast-disclosure[open] .cast-summary::before {
+    content: '[\2212]'; /* minus sign */
+  }
+
+  .cast-content {
+    padding: 0.8rem 0;
+    border-top: 1px solid var(--border, #333);
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .cast-hint {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted, #a8b8c4);
+    line-height: 1.4;
+  }
+
+  .cast-qr {
+    display: flex;
+    justify-content: center;
+  }
+
+  .cast-qr :global(img) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .cast-url {
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    background: var(--bg-input, #1a1a1a);
+    border: 1px solid var(--border, #333);
+    border-radius: 4px;
+    font-family: 'Rajdhani', monospace;
+    font-size: 0.7rem;
+    color: var(--text-muted, #a8b8c4);
+    word-break: break-all;
+    text-align: center;
   }
 </style>

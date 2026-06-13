@@ -23,7 +23,7 @@ export interface SeatTransform {
 }
 
 /**
- * One assigned seat: the slot index (0-4 for opponents around the arc),
+ * One assigned seat: the slot index (0-4 or 0-5 depending on layout),
  * the transform, and the resolved fur colour.
  */
 export interface SeatAssignment {
@@ -31,6 +31,18 @@ export interface SeatAssignment {
   slotIndex: number;
   transform: SeatTransform;
   furColour: string;
+}
+
+/**
+ * Seating arc layout variant descriptor.
+ * Defines the radius, half-angle spread, maximum slots, and centre-out
+ * priority order for seat assignment.
+ */
+export interface ArcLayout {
+  arcRadius: number;
+  halfArcDeg: number;
+  maxSlots: number;
+  slotPriority: readonly number[];
 }
 
 // ─── Arc geometry constants ───────────────────────────────────────────────────
@@ -43,12 +55,6 @@ export interface SeatAssignment {
 export const MONKEY_SCALE = 0.62;
 
 /**
- * Radius of the seating arc from the table centre, in scene units.
- * Monkeys sit around the far half of a barrel roughly 2.4 units wide.
- */
-const ARC_RADIUS = 2.30;
-
-/**
  * Y position of monkey Root nodes. Felt surface is at y=0.06 (BarrelTable);
  * root at 0.35 puts the head centre at 0.35 (head spans -0.15 to 0.85), so the
  * jaw sits near felt level and the torso is implied below the table edge.
@@ -56,64 +62,89 @@ const ARC_RADIUS = 2.30;
 const SEAT_Y = 0.35;
 
 /**
- * Half-angle of the seating arc in degrees (total spread = 130 degrees).
+ * Desktop view: 5 opponent seats (local player excluded from rendering).
+ * Radius 2.30, half-arc 65 deg (130 deg total spread).
+ * Centre-out priority: [2, 1, 3, 0, 4].
+ */
+export const DESKTOP_ARC: ArcLayout = {
+  arcRadius: 2.30,
+  halfArcDeg: 65,
+  maxSlots: 5,
+  slotPriority: [2, 1, 3, 0, 4],
+};
+
+/**
+ * TV view: 6 seats including local player (all monkeys rendered for spectator).
+ * Larger radius (2.60) and wider arc (75 deg half-angle = 150 deg total) to
+ * accommodate 6 players with adequate spacing.
  *
- * With HALF_ARC_DEG = 65 and ARC_RADIUS = 2.30:
- *   Slot 0 (far left):   angleDeg = -65, x ~ -2.08, z ~ -0.97
- *   Slot 2 (centre):     angleDeg =   0, x =  0,    z = -2.30
- *   Slot 4 (far right):  angleDeg = +65, x ~ +2.08, z ~ -0.97
- * All seats sit on the far half of the table and inside the horizontal FOV of
- * the authored camera (FOV 42 at [0, 1.5, 3.6]). Wider values clip the end
- * seats at the frame edges; 150 (the original) put them behind the camera.
+ * Clearance math: adjacent chord ~1.35 scene units (2 x 2.60 x sin(150/5/2 deg))
+ * versus scaled head width ~1.28 (head+ears ~2.07 x MONKEY_SCALE).
+ * Centre-out priority: [2, 3, 1, 4, 0, 5] keeps balanced distribution.
+ *
+ * PROVISIONAL: art director tuning pending.
  */
-const HALF_ARC_DEG = 65;
-
-/**
- * Maximum opponent seats. Brief: up to 5 opponents visible (local player is
- * the camera, not rendered). A 6th spectator view is handled externally.
- */
-const MAX_OPPONENT_SLOTS = 5;
-
-/**
- * Centre-out priority order for slot assignment.
- * When N < 5 players join, they claim slots in this order: centre first, then
- * one step left, then one step right, etc. This keeps the table balanced and
- * prevents monkeys from teleporting when new players join (they take the
- * lowest-priority free slot; existing players never move).
- */
-const SLOT_PRIORITY: readonly number[] = [2, 1, 3, 0, 4];
+export const FULL_TABLE_ARC: ArcLayout = {
+  arcRadius: 2.60,
+  halfArcDeg: 75,
+  maxSlots: 6,
+  slotPriority: [2, 3, 1, 4, 0, 5],
+};
 
 // ─── Arc slot positions ───────────────────────────────────────────────────────
 
 /**
- * Pre-compute the 5 arc slot transforms.
- * Slot 0 is leftmost (from camera's perspective), slot 4 is rightmost.
- * Each monkey faces toward the table centre (rotationY points inward).
+ * Cache for arc slot transforms, keyed by layout object.
  */
-const ARC_SLOTS: SeatTransform[] = (() => {
+const arcSlotsCache = new Map<ArcLayout, SeatTransform[]>();
+
+/**
+ * Compute the arc slot transforms for a given layout.
+ * Slot 0 is leftmost (from camera's perspective), slot N-1 is rightmost.
+ * Each monkey faces toward the table centre (rotationY points inward).
+ * Slots spread evenly from -halfArcDeg to +halfArcDeg across maxSlots.
+ *
+ * @param layout - The arc layout descriptor.
+ * @returns An array of SeatTransform, indexed 0 to maxSlots-1.
+ */
+export function arcSlotsFor(layout: ArcLayout): SeatTransform[] {
+  // Return cached result if available.
+  if (arcSlotsCache.has(layout)) {
+    return arcSlotsCache.get(layout)!;
+  }
+
   const slots: SeatTransform[] = [];
-  for (let i = 0; i < MAX_OPPONENT_SLOTS; i++) {
-    const t          = i / (MAX_OPPONENT_SLOTS - 1);               // 0..1
-    const angleDeg   = -HALF_ARC_DEG + t * (HALF_ARC_DEG * 2);    // -85..+85
+  for (let i = 0; i < layout.maxSlots; i++) {
+    const t          = i / (layout.maxSlots - 1);                   // 0..1
+    const angleDeg   = -layout.halfArcDeg + t * (layout.halfArcDeg * 2);
     const angleRad   = (angleDeg * Math.PI) / 180;
-    const x          = Math.sin(angleRad) * ARC_RADIUS;
-    const z          = -Math.cos(angleRad) * ARC_RADIUS;           // negative Z = far side
+    const x          = Math.sin(angleRad) * layout.arcRadius;
+    const z          = -Math.cos(angleRad) * layout.arcRadius;      // negative Z = far side
     // Monkey faces table centre (origin): rotationY is the opposite of the arc angle.
     const rotationY  = -angleRad;
     slots.push({ position: [x, SEAT_Y, z], rotationY });
   }
+
+  // Cache and return.
+  arcSlotsCache.set(layout, slots);
   return slots;
-})();
+}
 
 // ─── Stable seat assignment ───────────────────────────────────────────────────
 
 /**
- * Assign arc slots to opponent players, keyed by playerId for stability across
- * state updates. The local player (myId) is excluded; they occupy the camera seat.
+ * Assign arc slots to players, keyed by playerId for stability across state updates.
+ *
+ * Default behaviour (opts.includeLocal = false): the local player (myId) is
+ * excluded; they occupy the camera seat. Up to 5 opponents seat on DESKTOP_ARC.
+ *
+ * With opts.includeLocal = true: the local player is seated like any other,
+ * and all players (including local) seat on the specified layout arc (default
+ * FULL_TABLE_ARC for TV mode).
  *
  * Stability contract:
  *   - Players present in `prev` KEEP their slotIndex unconditionally.
- *   - New players take the lowest-priority free slot in SLOT_PRIORITY order.
+ *   - New players take the lowest-priority free slot in the layout's slotPriority.
  *   - Removed players vacate their slot (no ghost entry in the result map).
  *
  * The caller must pass the previous map back on every re-derive to preserve
@@ -122,18 +153,29 @@ const ARC_SLOTS: SeatTransform[] = (() => {
  * @param players - All players (including local player if present).
  * @param myId    - The local player's id; pass null or '' for spectators.
  * @param prev    - The previous assignment map; undefined for the initial call.
+ * @param opts    - Optional parameters: { layout?, includeLocal? }
+ *                  layout defaults to DESKTOP_ARC; includeLocal defaults to false.
  */
 export function assignSeats(
   players: ReadonlyArray<{ id: string; name: string; isBot: boolean }>,
   myId: string | null | undefined,
-  prev?: ReadonlyMap<string, SeatAssignment>
+  prev?: ReadonlyMap<string, SeatAssignment>,
+  opts?: { layout?: ArcLayout; includeLocal?: boolean }
 ): Map<string, SeatAssignment> {
-  const opponents = players.filter((p) => p.id !== (myId ?? ''));
+  const layout          = opts?.layout ?? DESKTOP_ARC;
+  const includeLocal    = opts?.includeLocal ?? false;
+  const arcSlots        = arcSlotsFor(layout);
+
+  // Determine which players to seat.
+  const playerList = includeLocal
+    ? players
+    : players.filter((p) => p.id !== (myId ?? ''));
+
   const result    = new Map<string, SeatAssignment>();
 
   // Pass 1: re-seat players that already have a slot in prev.
   const takenSlots = new Set<number>();
-  for (const player of opponents) {
+  for (const player of playerList) {
     const existing = prev?.get(player.id);
     if (existing) {
       // Preserve fur colour and slot; just update the player ref.
@@ -143,13 +185,13 @@ export function assignSeats(
   }
 
   // Pass 2: assign new players (not in prev) to the lowest-priority free slot.
-  for (const player of opponents) {
+  for (const player of playerList) {
     if (result.has(player.id)) continue;
-    if (result.size >= MAX_OPPONENT_SLOTS) break; // no more slots
+    if (result.size >= layout.maxSlots) break; // no more slots
 
     // Find the first free slot in centre-out priority order.
     let slotIndex = -1;
-    for (const candidate of SLOT_PRIORITY) {
+    for (const candidate of layout.slotPriority) {
       if (!takenSlots.has(candidate)) {
         slotIndex = candidate;
         break;
@@ -159,7 +201,7 @@ export function assignSeats(
 
     takenSlots.add(slotIndex);
     const furColour = furColourFor(player.id, player.isBot, result);
-    result.set(player.id, { playerId: player.id, slotIndex, transform: ARC_SLOTS[slotIndex], furColour });
+    result.set(player.id, { playerId: player.id, slotIndex, transform: arcSlots[slotIndex], furColour });
   }
 
   return result;

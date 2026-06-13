@@ -139,6 +139,7 @@ interface ClientState {
   lastRoundResult: RoundResult | null;
   winnerId: string | null;
   spectators?: { id: string; name: string }[];
+  tablePresent?: boolean;
 }
 
 interface ClientMessage {
@@ -190,6 +191,8 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private cosmeticsCache = new CosmeticsCache();
   /** Per-player last emote timestamp (ms). In-memory only; no storage, no alarms. */
   private lastEmoteAt = new Map<string, number>();
+  /** Flag: bot-drop check is scheduled; don't double-schedule */
+  private botDropCheckPending = false;
 
   // --- Persistence ---
 
@@ -472,6 +475,33 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       }
     }
 
+    // Bot-drop grace check: if scheduled and grace window elapsed, drop bots
+    // if still no humans connected. This gives rejoining humans time to
+    // reconnect before the bots are wiped.
+    if (this.botDropCheckPending) {
+      const BOT_DROP_GRACE_MS = 30 * 1000; // Must match scheduleBotDropCheck
+      // Find the earliest disconnect timestamp to use as the reference
+      let earliestDisconnect = Infinity;
+      let hasDisconnected = false;
+      for (const timestamp of this.disconnectTimestamps.values()) {
+        hasDisconnected = true;
+        if (timestamp < earliestDisconnect) {
+          earliestDisconnect = timestamp;
+        }
+      }
+      // If enough time has passed since the first disconnect, drop bots now
+      if (hasDisconnected && now - earliestDisconnect >= BOT_DROP_GRACE_MS) {
+        this.botDropCheckPending = false;
+        this.dropBotsIfNoHumansLeft();
+        this.broadcastState();
+        await this.saveState();
+      } else if (!hasDisconnected) {
+        // Everyone reconnected before the alarm fired. Clear the flag so a
+        // future disconnect can schedule a fresh check.
+        this.botDropCheckPending = false;
+      }
+    }
+
     // Room expiry
     if (now - this.lastActivity >= ROOM_EXPIRY_MS && this.players.size === 0) {
       await this.ctx.storage.deleteAll();
@@ -490,6 +520,8 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       this.cosmeticsCache.invalidate(playerId);
       existing.connected = true;
       this.disconnectTimestamps.delete(playerId);
+      // If a human reconnects, cancel the pending bot-drop check
+      this.botDropCheckPending = false;
       await this.resolveCosmeticsForPlayer(playerId);
       this.sendToWs(ws, { type: 'joined', playerId, state: this.getClientState(playerId, role) });
       this.broadcastState();
@@ -497,7 +529,8 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       return;
     }
 
-    if (this.phase !== 'lobby') {
+    // role=table displays are never seated; always treat as spectators
+    if (this.phase !== 'lobby' || role === 'table') {
       const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
       this.spectators.set(playerId, storedName || 'Spectator');
       this.sendToWs(ws, {
@@ -593,8 +626,14 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       this.scheduleReconnectCheck();
     }
 
-    // If no humans remain, drop bots so the room can expire cleanly
-    this.dropBotsIfNoHumansLeft();
+    // Schedule a delayed bot-drop check (gives rejoining humans a grace window).
+    // Use the same alarm mechanism as reconnect checks, with a shorter grace
+    // window (30s instead of 45s) so bots don't linger too long if human
+    // stays gone.
+    if (!this.botDropCheckPending) {
+      this.botDropCheckPending = true;
+      void this.scheduleBotDropCheck();
+    }
 
     this.broadcastState();
   }
@@ -639,6 +678,15 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private async scheduleReconnectCheck(): Promise<void> {
     const existing = await this.ctx.storage.getAlarm();
     const nextCheck = Date.now() + RECONNECT_TIMEOUT_MS;
+    if (!existing || nextCheck < existing) {
+      await this.ctx.storage.setAlarm(nextCheck);
+    }
+  }
+
+  private async scheduleBotDropCheck(): Promise<void> {
+    const existing = await this.ctx.storage.getAlarm();
+    const BOT_DROP_GRACE_MS = 30 * 1000; // 30-second grace window
+    const nextCheck = Date.now() + BOT_DROP_GRACE_MS;
     if (!existing || nextCheck < existing) {
       await this.ctx.storage.setAlarm(nextCheck);
     }
@@ -1199,6 +1247,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       lastRoundResult: this.lastRoundResult,
       winnerId: this.winnerId,
       spectators: spectatorList,
+      tablePresent: this.isTablePresent(),
     };
   }
 
@@ -1237,6 +1286,15 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     } catch {
       // Socket closed
     }
+  }
+
+  private isTablePresent(): boolean {
+    for (const ws of this.ctx.getWebSockets()) {
+      const tags = this.ctx.getTags(ws);
+      const role = tags[1] as DeviceRole;
+      if (role === 'table') return true;
+    }
+    return false;
   }
 
   // --- Rate limiting ---

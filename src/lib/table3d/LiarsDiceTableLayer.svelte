@@ -112,6 +112,12 @@
       includeLocal: fullTable,
     });
     prevSeatMap = next;
+    if (import.meta.env.DEV) {
+      console.log(`[table3d] seatMap: players=${ldState.players.length}, myId=${ldState.myId}, fullTable=${fullTable}, seated=${next.size}`);
+      if (ldState.players.length > 0 && next.size === 0) {
+        console.warn(`[table3d] SMOKING GUN: players present but seatMap empty!`);
+      }
+    }
     return next;
   });
 
@@ -243,6 +249,14 @@
   // Publish the handle once on mount so the parent can route WS messages in.
   $effect(() => {
     onready?.({ handleRemoteEmote });
+  });
+
+  // Mount/unmount logging for diagnostics
+  $effect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[table3d] Layer mounted');
+      return () => console.log('[table3d] Layer unmounted');
+    }
   });
 
   // ── Baseline light values ─────────────────────────────────────────────────────

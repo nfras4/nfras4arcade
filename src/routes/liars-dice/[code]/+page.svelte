@@ -23,6 +23,30 @@
   // role=table in the URL query indicates a display-only TV view.
   const isTv = $page.url.searchParams.get('role') === 'table';
 
+  // ── Self-seat mode toggle ──────────────────────────────────────────────────
+  // ?selfseat=1 shows the local player at the table on desktop.
+  // Persists to localStorage key 'ld-self-seat'. TV mode ignores this.
+  const SELF_SEAT_KEY = 'ld-self-seat';
+
+  function resolveSelfSeatDefault(): boolean {
+    const param = $page.url.searchParams.get('selfseat');
+    if (param === '1') return true;
+    if (param === '0') return false;
+    // No param: check localStorage
+    if (typeof localStorage === 'undefined') return false;
+    const stored = localStorage.getItem(SELF_SEAT_KEY);
+    return stored === '1';
+  }
+
+  let selfSeat = $state(resolveSelfSeatDefault());
+
+  // Write-back: persist whenever selfseat changes (except in TV mode)
+  $effect(() => {
+    if (!isTv && typeof localStorage !== 'undefined') {
+      localStorage.setItem(SELF_SEAT_KEY, selfSeat ? '1' : '0');
+    }
+  });
+
   // ── Table view toggle ──────────────────────────────────────────────────────
   // localStorage key 'ld-table-view': '1' = on, '0' = off.
   // Default on first visit: on when viewport >= 900px AND WebGL available.
@@ -432,6 +456,25 @@
   let pid = $derived($myPlayerId);
   let tablePresent = $derived(state?.tablePresent ?? false);
 
+  // Log ldStateLike state transitions for diagnostics
+  let prevPlayersLength = 0;
+  let prevWasNull = true;
+  $effect(() => {
+    const s = $gameState;
+    if (import.meta.env.DEV) {
+      const isNull = s === null;
+      if (isNull !== prevWasNull) {
+        prevWasNull = isNull;
+        console.log(`[route] ldStateLike transitioned: ${isNull ? 'null' : 'non-null'}, players=${s?.players.length ?? 0}`);
+      }
+      const curLength = s?.players.length ?? 0;
+      if (curLength !== prevPlayersLength && curLength > 0 && prevPlayersLength === 0) {
+        console.log(`[route] ldStateLike players: 0 -> ${curLength}`);
+      }
+      prevPlayersLength = curLength;
+    }
+  });
+
   // ── LDStateLike mapping for the table layer ────────────────────────────────
   // Maps the page's LDState + myPlayerId into the engine-agnostic LDStateLike
   // shape consumed by LiarsDiceTableLayer. Players are mapped to PlayerViewLike
@@ -584,7 +627,7 @@
             state={ldStateLike}
             onemote={handleLayerEmote}
             onready={handleLayerReady}
-            fullTable={isTv}
+            fullTable={isTv || selfSeat}
             showEmoteStrip={!isTv}
           />
         {:else if layerLoadError}

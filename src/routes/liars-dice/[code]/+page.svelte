@@ -10,6 +10,7 @@
   import FloatUp from '$lib/vfx/FloatUp.svelte';
   import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
+  import { createShakeDetector } from '$lib/table3d/shake.js';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
   import type { EmoteId } from '$lib/table3d/core/emotes.js';
@@ -173,6 +174,13 @@
 
   const ANTE_OPTIONS = [25, 50, 100, 250];
 
+  // ── Shake detector state ───────────────────────────────────────────────────
+  let dicePending = $state(false);
+  let shakePermission = $state<'unknown' | 'granted' | 'denied' | 'unsupported' | 'not-required'>('unknown');
+  let dealCounter = $state(0);
+  let prevDealPhase = '';
+  let shakeDetector: ReturnType<typeof createShakeDetector> | null = null;
+
   // ── VFX state ──────────────────────────────────────────────────────────────
   // bid pop re-trigger
   let bidKey = $state(0);
@@ -313,6 +321,41 @@
       }
     }
     prevEliminated = next;
+  });
+
+  // Deal detection: increment dealCounter on every lobby/round_over -> playing transition.
+  // Using a counter (not a signature) means dice-count stability across rounds is not a problem.
+  $effect(() => {
+    const s = $gameState;
+    if (!s) return;
+    if (s.phase === 'playing' && prevDealPhase !== 'playing') {
+      if (s.myDice.length > 0) {
+        dealCounter++;
+        dicePending = true;
+      }
+    }
+    prevDealPhase = s.phase;
+  });
+
+  // Shake detector lifecycle — explicit state machine, no cleanup closure.
+  // Branch order: controller off → denied/unsupported → unknown → granted/not-required.
+  $effect(() => {
+    if (!useControllerView) {
+      if (shakeDetector) { shakeDetector.stop(); shakeDetector = null; }
+      return;
+    }
+    if (shakePermission === 'denied' || shakePermission === 'unsupported') {
+      if (shakeDetector) { shakeDetector.stop(); shakeDetector = null; }
+      return;
+    }
+    // Ensure a detector instance exists for all remaining states.
+    if (!shakeDetector) {
+      shakeDetector = createShakeDetector({ onShake: () => { dicePending = false; } });
+    }
+    if (shakePermission === 'granted' || shakePermission === 'not-required') {
+      shakeDetector.start();
+    }
+    // 'unknown': detector created but not started — requestPermission() is reachable.
   });
 
   // ── Game logic ─────────────────────────────────────────────────────────────
@@ -480,11 +523,13 @@
 
   function placeBid() {
     if (!canPlaceBid()) return;
+    dicePending = false;
     socket.send({ type: 'place_bid', count: bidCount, face: bidFace });
   }
 
   function callLiar() {
     if (!state?.currentBid || !isMyTurn) return;
+    dicePending = false;
     socket.send({ type: 'call_liar' });
   }
 
@@ -739,14 +784,34 @@
         <!-- My dice -->
         <div class="my-dice">
           <span class="my-dice-label">Your dice</span>
-          <div class="die-row">
-            {#each state.myDice as d, i (i)}
-              <span class="die">{dieFace(d)}</span>
-            {/each}
-            {#if state.myDice.length === 0}
-              <span class="die-placeholder">No dice left</span>
-            {/if}
-          </div>
+          {#if useControllerView && dicePending && !matchMedia('(prefers-reduced-motion: reduce)').matches}
+            <!-- Shake pending: face-down placeholders -->
+            <div class="die-row">
+              {#each Array(state.myDice.length) as _, i (i)}
+                <span class="die die-facedown">⚂</span>
+              {/each}
+            </div>
+            <div class="dice-pending-controls">
+              <p class="dice-pending-hint">Shake to reveal</p>
+              {#if shakePermission === 'unknown'}
+                <button class="btn-small" onclick={async () => {
+                  const result = await shakeDetector?.requestPermission();
+                  if (result) shakePermission = result;
+                }}>Tap to enable shake</button>
+              {/if}
+              <button class="btn-small btn-reveal" onclick={() => dicePending = false}>Reveal</button>
+            </div>
+          {:else}
+            <!-- Normal: show actual dice faces -->
+            <div class="die-row">
+              {#each state.myDice as d, i (i)}
+                <span class="die">{dieFace(d)}</span>
+              {/each}
+              {#if state.myDice.length === 0}
+                <span class="die-placeholder">No dice left</span>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         {#if isMyTurn && !me?.eliminated}
@@ -1128,6 +1193,55 @@
     font-size: 0.85rem;
     color: var(--text-subtle);
     font-style: italic;
+  }
+
+  .die-facedown {
+    opacity: 0.5;
+  }
+
+  .dice-pending-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.6rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .dice-pending-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    font-style: italic;
+  }
+
+  .btn-small {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.75rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+
+  .btn-small:hover {
+    background: var(--accent-faint);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  .btn-reveal {
+    background: var(--accent-faint);
+    border-color: var(--accent-border);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .bid-controls {

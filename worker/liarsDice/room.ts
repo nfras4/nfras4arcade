@@ -139,6 +139,7 @@ interface ClientState {
   lastRoundResult: RoundResult | null;
   winnerId: string | null;
   spectators?: { id: string; name: string }[];
+  tablePresent?: boolean;
 }
 
 interface ClientMessage {
@@ -497,7 +498,8 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       return;
     }
 
-    if (this.phase !== 'lobby') {
+    // role=table displays are never seated; always treat as spectators
+    if (this.phase !== 'lobby' || role === 'table') {
       const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
       this.spectators.set(playerId, storedName || 'Spectator');
       this.sendToWs(ws, {
@@ -1199,6 +1201,7 @@ export class LiarsDiceRoom extends DurableObject<Env> {
       lastRoundResult: this.lastRoundResult,
       winnerId: this.winnerId,
       spectators: spectatorList,
+      tablePresent: this.isTablePresent(),
     };
   }
 
@@ -1237,6 +1240,15 @@ export class LiarsDiceRoom extends DurableObject<Env> {
     } catch {
       // Socket closed
     }
+  }
+
+  private isTablePresent(): boolean {
+    for (const ws of this.ctx.getWebSockets()) {
+      const tags = this.ctx.getTags(ws);
+      const role = tags[1] as DeviceRole;
+      if (role === 'table') return true;
+    }
+    return false;
   }
 
   // --- Rate limiting ---

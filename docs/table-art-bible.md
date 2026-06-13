@@ -98,3 +98,20 @@ These numbers are the approved staging values. Future scenes derive from them; d
 | Key light | 55 candela, pos `[0, 4.2, 1.4]`, angle 0.55 | Warm `#ffe8c0` spotlight |
 | Nameplate anchor | (seat root Y + 0.95) * MONKEY_SCALE | Offset scaled by MONKEY_SCALE; clears crown with margin |
 | Nameplate left clamp | 6% to 94% | Prevents edge-seat plates clipping stage bounds |
+
+## TV full-table arc (provisional)
+
+For Phase 2 TV mode, the 6-seat spectator view uses `FULL_TABLE_ARC` (all players rendered, including local):
+
+| Parameter | Value | Notes |
+|---|---|---|
+| Arc radius | 2.60 | Larger than desktop (2.30) to accommodate 6 players |
+| Half-arc angle | 75 deg | Total spread 150 deg, wider than desktop (130 deg) |
+| Max slots | 6 | Includes local player in rendering |
+| TV camera position | `[0, 1.9, 4.6]` | Frames 6-seat arc for 16:9 landscape viewing |
+| TV camera FOV | 46 deg | Wider than desktop (42 deg) for TV distance |
+| TV camera lookAt | `[0, 0.2, -0.5]` | Slightly elevated sight line |
+
+Clearance maths: adjacent chord ~1.35 scene units (2 x 2.60 x sin(150/5/2 deg)) versus scaled head width ~1.28 (head+ears ~2.07 x MONKEY_SCALE = 0.62).
+
+**Note:** These values are PROVISIONAL, pending art director tuning for final show framing and far-field legibility on actual TV hardware.

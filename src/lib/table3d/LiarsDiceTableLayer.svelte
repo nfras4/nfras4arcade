@@ -9,6 +9,7 @@
   import KeySpotlight from './KeySpotlight.svelte';
   import RitualOverlay from './RitualOverlay.svelte';
   import ChatBubble from './ChatBubble.svelte';
+  import ChatStageLog from './ChatStageLog.svelte';
   import { TableDirector } from './TableDirector.svelte.js';
   import { assignSeats, MONKEY_SCALE, FULL_TABLE_ARC } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
@@ -68,6 +69,19 @@
      * remove the entry from its chatBubbles array.
      */
     onchatbubbledone = undefined as ((id: number) => void) | undefined,
+    /**
+     * Chat log entries for the stage-anchored overlay (ChatStageLog).
+     * Same shape as chatBubbles but represents the full history to display.
+     */
+    chatLogEntries = [] as Array<{ id: number; playerId: string; text: string; voice: VoiceParams; ts: number }>,
+    /**
+     * Player name map for the chat log overlay.
+     */
+    chatLogNames = {} as Record<string, string>,
+    /**
+     * When true, use TV-variant styling (larger font, larger max-width).
+     */
+    chatLogTv = false,
   }: {
     state: LDStateLike;
     reducedMotionOverride?: boolean;
@@ -78,6 +92,9 @@
     showEmoteStrip?: boolean;
     chatBubbles?: Array<{ id: number; playerId: string; text: string; voice: VoiceParams; ts: number }>;
     onchatbubbledone?: (id: number) => void;
+    chatLogEntries?: Array<{ id: number; playerId: string; text: string; voice: VoiceParams; ts: number }>;
+    chatLogNames?: Record<string, string>;
+    chatLogTv?: boolean;
   } = $props();
 
   // ── Director ─────────────────────────────────────────────────────────────────
@@ -387,6 +404,13 @@
       onupdate={handleProjectorUpdate}
     />
   </Canvas>
+
+  <!-- Chat stage log: overlaid on the stage, bottom-left, behind nameplates -->
+  <ChatStageLog
+    entries={chatLogEntries}
+    names={chatLogNames}
+    tv={chatLogTv}
+  />
 
   <!-- Nameplate overlay: absolutely positioned on top of the Canvas, pointer-events none -->
   <div class="nameplate-layer" aria-hidden="true">

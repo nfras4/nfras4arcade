@@ -9,6 +9,12 @@ import { CosmeticsCache, DEFAULT_COSMETICS } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
 import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
 import { xpToLevel } from '../../src/lib/xp';
+import {
+  isValidEmoteId,
+  isEmoteRateLimited,
+  isEmotePhaseAllowed,
+  recordEmote,
+} from '../../src/lib/table3d/core/emoteRelay';
 
 // --- Constants ---
 
@@ -99,7 +105,8 @@ type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'pong' }
   | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] }
-  | { type: 'xp_gained'; amount: number; newXp: number };
+  | { type: 'xp_gained'; amount: number; newXp: number }
+  | { type: 'player_emote'; playerId: string; emoteId: string };
 
 interface ClientState {
   code: string;
@@ -181,6 +188,8 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private disconnectTimestamps = new Map<string, number>();
   private rateLimits = new Map<string, number[]>();
   private cosmeticsCache = new CosmeticsCache();
+  /** Per-player last emote timestamp (ms). In-memory only; no storage, no alarms. */
+  private lastEmoteAt = new Map<string, number>();
 
   // --- Persistence ---
 
@@ -790,8 +799,30 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         this.broadcastState();
         break;
       }
+      case 'emote': {
+        // Validate emote id against canonical list
+        if (!isValidEmoteId(msg.emoteId)) break;
+        // Only seated players may emote (not spectators)
+        if (!this.players.has(playerId)) break;
+        // Phase gate: lobby, playing, round_over only
+        if (!isEmotePhaseAllowed(this.phase)) break;
+        // Per-player rate limit: 1 emote per 2 seconds (in-memory, no storage writes)
+        const now = Date.now();
+        if (isEmoteRateLimited(this.lastEmoteAt, playerId, now)) break;
+        recordEmote(this.lastEmoteAt, playerId, now);
+        // Broadcast to all sockets including sender; no state change
+        this.broadcastEmote(playerId, msg.emoteId as string);
+        break;
+      }
       default:
         break;
+    }
+  }
+
+  private broadcastEmote(playerId: string, emoteId: string): void {
+    const msg: ServerMessage = { type: 'player_emote', playerId, emoteId };
+    for (const ws of this.ctx.getWebSockets()) {
+      this.sendToWs(ws, msg);
     }
   }
 

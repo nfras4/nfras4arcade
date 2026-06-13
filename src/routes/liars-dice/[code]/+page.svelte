@@ -146,7 +146,9 @@
   // Resolves the default exactly once per tablePresent=true session.
   // After that, only the toggle (which also writes localStorage) changes useControllerView.
   // When tablePresent goes false, both state and the resolved flag are reset.
+  // The TV view (role=table) NEVER enters controller layout: it is a display.
   $effect(() => {
+    if (isTv) return;
     const s = $gameState;
     if (!s) return;
     const tp = s.tablePresent ?? false;

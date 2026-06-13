@@ -34,6 +34,13 @@ describe('rms', () => {
     expect(result).toBeGreaterThanOrEqual(0);
     expect(result).toBeLessThanOrEqual(1);
   });
+
+  it('returns 0 for empty input (no NaN from divide-by-zero)', () => {
+    const samples = new Uint8Array(0);
+    const result = rms(samples);
+    expect(result).toBe(0);
+    expect(Number.isNaN(result)).toBe(false);
+  });
 });
 
 // ─── Bandpass RMS ─────────────────────────────────────────────────────────────
@@ -144,5 +151,68 @@ describe('createEnvelope', () => {
 
     expect(mid).toBeLessThan(high);
     expect(low).toBeLessThan(mid);
+  });
+
+  it('NaN input is sanitised to 0 and recovers on next valid input', () => {
+    const env = createEnvelope({ attack: 0.4, release: 0.15 });
+    // Build up some current first
+    env.update(0.5);
+    env.update(0.5);
+    const before = env.update(0.5);
+    expect(before).toBeGreaterThan(0);
+
+    // NaN must not poison the accumulator
+    const onNaN = env.update(NaN);
+    expect(Number.isFinite(onNaN)).toBe(true);
+    expect(Number.isNaN(onNaN)).toBe(false);
+    expect(onNaN).toBeGreaterThanOrEqual(0);
+    expect(onNaN).toBeLessThanOrEqual(1);
+
+    // Next valid input recovers normally (envelope is still tracking)
+    const recovered = env.update(0.5);
+    expect(Number.isFinite(recovered)).toBe(true);
+    expect(recovered).toBeGreaterThan(onNaN);
+  });
+
+  it('Infinity input is sanitised and output stays clamped in [0, 1]', () => {
+    const env = createEnvelope({ attack: 1.0, release: 0.15 });
+    const result = env.update(Infinity);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBeGreaterThanOrEqual(0);
+    expect(result).toBeLessThanOrEqual(1);
+  });
+
+  it('reducedMotion approaches 0.6 smoothly with no kink', () => {
+    // With reducedMotion, the cap is applied to the TARGET (before the lerp),
+    // so the envelope should approach 0.6 asymptotically rather than overshoot
+    // and then get clipped (which would produce a kink in the trajectory).
+    const env = createEnvelope({ attack: 0.4, release: 0.15, reducedMotion: true });
+    const samples: number[] = [];
+    for (let i = 0; i < 30; i++) {
+      samples.push(env.update(1.0));
+    }
+
+    // Every sample must respect the cap
+    for (const v of samples) {
+      expect(v).toBeLessThanOrEqual(0.6 + 1e-9);
+    }
+
+    // Trajectory must be monotonically non-decreasing (no kink/dip)
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i]).toBeGreaterThanOrEqual(samples[i - 1]! - 1e-9);
+    }
+
+    // Should converge close to 0.6
+    expect(samples[samples.length - 1]).toBeCloseTo(0.6, 2);
+  });
+
+  it('final output never exceeds 1.0 even with attack > 1', () => {
+    // Out-of-range attack coefficient could overshoot without the final clamp.
+    const env = createEnvelope({ attack: 2.5, release: 0.15 });
+    for (let i = 0; i < 20; i++) {
+      const v = env.update(1.0);
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThanOrEqual(1);
+    }
   });
 });

@@ -16,6 +16,7 @@
   import { playChatBlips } from '$lib/table3d/chatAudio.js';
   import { derivePeerSet, diffPeerSet } from '$lib/table3d/core/mesh.js';
   import { bandpassRms, createEnvelope } from '$lib/table3d/core/audioMeter.js';
+  import { getSharedAudioContext, resumeSharedAudioContext } from '$lib/table3d/sharedAudioContext.js';
   import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
@@ -397,6 +398,17 @@
       }
     }
 
+    // Drain stale chat bubbles when leaving round_over. The bubbles' own
+    // dwell timers fire onDone individually, but if a round ended fast (or
+    // the round_over banner was cut short) bubbles can still be in-flight
+    // when the next round starts; flush them so the table doesn't carry
+    // chatter across rounds.
+    if (prevPhase === 'round_over' && (phase === 'playing' || phase === 'lobby')) {
+      if (chatBubbles.length > 0) {
+        chatBubbles = [];
+      }
+    }
+
     prevPhase = phase;
   });
 
@@ -604,12 +616,19 @@
   // Self-portrait amplitude: voice-driven
   // Runs an AnalyserNode on the local mic stream whenever voice is joined and
   // unmuted. Matches the remote-jaw driver maths (bandpassRms + createEnvelope).
+  // Previously this created a fresh `new AudioContext()` on every effect run
+  // (mute toggle, voice join, etc.); now it uses the shared singleton and a
+  // requestAnimationFrame loop so it pauses with the tab.
   $effect(() => {
     if (voiceState !== 'joined' || selfMuted || !localStream) {
       voiceSelfAmp = 0;
       return;
     }
-    const ctx = new AudioContext();
+    const ctx = getSharedAudioContext();
+    if (!ctx) {
+      voiceSelfAmp = 0;
+      return;
+    }
     const source = ctx.createMediaStreamSource(localStream);
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
@@ -617,17 +636,38 @@
     source.connect(analyser);
     const buf = new Uint8Array(analyser.frequencyBinCount);
     const env = createEnvelope({ attack: 0.4, release: 0.15 });
-    const id = setInterval(() => {
+    let rafId: number | null = null;
+    const loop = () => {
       analyser.getByteFrequencyData(buf);
       const r = bandpassRms(buf, ctx.sampleRate, 512, 250, 3500);
       voiceSelfAmp = env.update(r);
-    }, 10);
+      rafId = window.requestAnimationFrame(loop);
+    };
+    rafId = window.requestAnimationFrame(loop);
     return () => {
-      clearInterval(id);
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       try { source.disconnect(); } catch { /* ignore */ }
-      try { ctx.close(); } catch { /* ignore */ }
+      // Do NOT close the shared AudioContext here; the singleton is owned by
+      // the module and may still be feeding remote-jaw analysers.
       voiceSelfAmp = 0;
     };
+  });
+
+  // Single visibilitychange listener: resume the shared AudioContext whenever
+  // the tab returns to the foreground. Browsers auto-suspend contexts in
+  // background tabs; without this the jaw-flap stays at 0 after un-hiding.
+  $effect(() => {
+    if (typeof document === 'undefined') return;
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        resumeSharedAudioContext().catch(() => { /* ignore */ });
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   });
 
   // Cleanup timers on destroy
@@ -773,6 +813,10 @@
       : null
   );
   let me = $derived(state?.players.find((p) => p.id === pid) ?? null);
+  // True only when we have a confirmed seat in the room. Spectators (`pid` set
+  // but not in players[]) and TV mode (no `pid`) both evaluate false. Gates the
+  // voice section + joinVoice so a spectator can't open a peer connection.
+  let isSeatedPlayer = $derived(!!(pid && state && state.players.some((p) => p.id === pid)));
   let isHost = $derived(me?.isHost ?? false);
   let isMyTurn = $derived(state?.currentTurnId === pid);
   let currentTurnName = $derived(
@@ -884,6 +928,11 @@
   // ── Voice handlers ─────────────────────────────────────────────────────────
 
   async function joinVoice(): Promise<void> {
+    // Defensive: voice section is gated on `!isTv && isSeatedPlayer`, but the
+    // gate is presentation-layer; a stale handler reference (or future caller)
+    // must not be able to open a peer connection from TV or spectator context.
+    if (isTv || !isSeatedPlayer) return;
+
     // Check for platform support
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
       voiceState = 'unsupported';
@@ -938,6 +987,21 @@
       [peerId]: !remoteMutes[peerId],
     };
   }
+
+  // ── Socket reconnect → ICE restart ─────────────────────────────────────────
+  // When the signalling websocket reconnects after a network blip, existing
+  // RTCPeerConnections may still be holding stale ICE candidates (NAT
+  // mapping expired). pc.restartIce() requests fresh candidates without
+  // tearing down media. We only do this when voice is actually joined and
+  // the mesh exists; spectators / TV have no peers to restart.
+  $effect(() => {
+    const unregister = socket.onReconnect(() => {
+      if (voiceState === 'joined' && mesh) {
+        mesh.restartAllIce();
+      }
+    });
+    return unregister;
+  });
 
   // ── Voice cleanup on unmount ───────────────────────────────────────────────
   $effect(() => {
@@ -1303,7 +1367,11 @@
           </div>
         {/if}
 
-        <!-- Voice section -->
+        <!-- Voice section: seated players only.
+             Spectators (no seat) and TV mode (no pid) must never see the
+             mic toggle; allowing a spectator to joinVoice opens an unwanted
+             peer connection and confuses the mesh. -->
+        {#if !isTv && isSeatedPlayer}
         <section class="voice-section">
           <div class="voice-status">
             {#if voiceState === 'off'}
@@ -1356,6 +1424,7 @@
             </div>
           {/if}
         </section>
+        {/if}
 
         <!-- Remote audio elements -->
         {#each Object.keys(remoteStreams) as peerId (peerId)}

@@ -12,6 +12,7 @@
  * @returns RMS in the range [0, 1]
  */
 export function rms(samples: Uint8Array): number {
+  if (samples.length === 0) return 0;
   let sum = 0;
   for (let i = 0; i < samples.length; i++) {
     const val = samples[i] / 255;
@@ -63,7 +64,8 @@ export function bandpassRms(
 export interface Envelope {
   /**
    * Update the envelope with a new RMS value.
-   * Returns the smoothed amplitude (0..1, clamped at 0.6 if reducedMotion).
+   * Non-finite inputs (NaN/Infinity) are sanitised to 0. The returned value is
+   * always within [0, 1] (and within [0, 0.6] if reducedMotion).
    */
   update(rms: number): number;
 
@@ -90,15 +92,26 @@ export function createEnvelope(opts: {
 
   return {
     update(rms: number): number {
-      if (rms > current) {
-        current = current + (rms - current) * attack;
+      // Sanitise non-finite inputs to prevent NaN poisoning of the accumulator.
+      // NaN -> 0 (no signal); +/-Infinity -> 0 then clamped by the final output stage.
+      // A non-finite accumulator (defensive, should not occur) is reset to 0.
+      if (!Number.isFinite(rms)) rms = 0;
+      if (!Number.isFinite(current)) current = 0;
+
+      // Cap the target before the lerp so reducedMotion produces a smooth approach to 0.6
+      // instead of a kink from post-lerp clipping.
+      const target = reducedMotion ? Math.min(rms, 0.6) : rms;
+
+      if (target > current) {
+        current = current + (target - current) * attack;
       } else {
-        current = current + (rms - current) * release;
+        current = current + (target - current) * release;
       }
 
-      if (reducedMotion) {
-        current = Math.min(current, 0.6);
-      }
+      // Final clamp to documented [0, 1] range so out-of-range attack/release coefficients
+      // cannot leak overshoot/undershoot to callers.
+      if (current < 0) current = 0;
+      else if (current > 1) current = 1;
 
       return current;
     },

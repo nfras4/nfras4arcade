@@ -1,10 +1,11 @@
 /**
  * VoiceJawDriver: polls remote audio streams and drives jaw-flap animation.
  * Browser-only: instantiates AudioContext and AnalyserNode on demand.
- * Feeds amplitude values into TableDirector.talkAmplitudes via callback.
+ * Feeds amplitude values into TableDirector.voiceAmplitudes via callback.
  */
 
 import { bandpassRms, createEnvelope, type Envelope } from './core/audioMeter.js';
+import { getSharedAudioContext } from './sharedAudioContext.js';
 
 export interface VoiceJawDriverOpts {
   /** Called with (peerId, amplitude) when a new frame is polled. */
@@ -26,7 +27,7 @@ interface AnalyserEntry {
  *
  * Usage:
  *  const driver = new VoiceJawDriver({
- *    setAmplitude: (peerId, value) => director.talkAmplitudes = {...},
+ *    setAmplitude: (peerId, value) => director.voiceAmplitudes = {...},
  *    reducedMotion: prefersReducedMotion(),
  *  });
  *  driver.attach(peerId, mediaStream);
@@ -37,7 +38,13 @@ interface AnalyserEntry {
 export class VoiceJawDriver {
   private audioContext: AudioContext | null = null;
   private entries = new Map<string, AnalyserEntry>();
-  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  /**
+   * requestAnimationFrame id for the active poll loop. Null when idle.
+   * Note: previously a setInterval(10ms) loop ran in the background even when
+   * the tab was hidden, burning CPU + amplifying browser AudioContext caps.
+   * rAF naturally pauses with the tab and gives us a free ~60Hz tick instead.
+   */
+  private rafId: number | null = null;
   private setAmplitudeCallback: (peerId: string, value: number) => void;
   private reducedMotion: boolean;
 
@@ -55,13 +62,16 @@ export class VoiceJawDriver {
       return; // already attached
     }
 
-    // Lazy-create the AudioContext
+    // Use the shared singleton AudioContext (lazy-initialised in the module).
+    // Avoids stacking multiple devices and lets the visibilitychange listener
+    // wake every analyser at once on tab focus.
     if (!this.audioContext) {
-      if (typeof window === 'undefined' || !window.AudioContext) {
+      const ctxShared = getSharedAudioContext();
+      if (!ctxShared) {
         console.warn('[VoiceJawDriver] AudioContext not available');
         return;
       }
-      this.audioContext = new window.AudioContext();
+      this.audioContext = ctxShared;
     }
 
     const ctx = this.audioContext;
@@ -131,33 +141,42 @@ export class VoiceJawDriver {
       this.detach(peerId);
     }
 
-    // Close the AudioContext if it exists and no peers remain
-    if (this.audioContext && this.entries.size === 0) {
-      this.audioContext.close().catch(() => {
-        // Ignore close errors (some contexts may already be closed)
-      });
-      this.audioContext = null;
-    }
+    // Drop our reference; do NOT close the shared singleton, the page (or
+    // any other driver) may still need it. The shared context closes on
+    // page unload via the browser.
+    this.audioContext = null;
   }
 
   /**
-   * Start the polling interval (100Hz, 10ms per frame).
+   * Start the rAF poll loop. Was setInterval(10ms); now driven by
+   * requestAnimationFrame so it naturally pauses with the tab.
    */
   private startPolling(): void {
-    if (this.pollInterval !== null) return;
+    if (this.rafId !== null) return;
+    if (typeof window === 'undefined' || !window.requestAnimationFrame) return;
 
-    this.pollInterval = setInterval(() => {
+    const loop = () => {
       this.tick();
-    }, 10);
+      // Re-check rafId so a stop mid-tick doesn't leave a stray frame
+      // requested after detach() drained the entries map.
+      if (this.entries.size > 0) {
+        this.rafId = window.requestAnimationFrame(loop);
+      } else {
+        this.rafId = null;
+      }
+    };
+    this.rafId = window.requestAnimationFrame(loop);
   }
 
   /**
-   * Stop the polling interval.
+   * Stop the rAF poll loop.
    */
   private stopPolling(): void {
-    if (this.pollInterval !== null) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
+    if (this.rafId !== null) {
+      if (typeof window !== 'undefined' && window.cancelAnimationFrame) {
+        window.cancelAnimationFrame(this.rafId);
+      }
+      this.rafId = null;
     }
   }
 

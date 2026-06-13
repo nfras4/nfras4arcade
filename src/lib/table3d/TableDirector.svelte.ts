@@ -97,7 +97,18 @@ export interface EmoteBubble {
 export class TableDirector {
   // Reactive output consumed by the layer
   expressions = $state<Record<string, ExpressionName>>({});
-  talkAmplitudes = $state<Record<string, number>>({});
+  /**
+   * Chatter-driven jaw amplitudes (written by #advanceChatter on each tick).
+   * Decays via entry deletion so it never clobbers an active voice value at
+   * the moment chatter expires. Read via `?? 0` fallback.
+   */
+  chatterAmplitudes = $state<Record<string, number>>({});
+  /**
+   * Voice-driven jaw amplitudes (written by setRemoteAmplitude from the
+   * audio-driven VoiceJawDriver). Kept separate from chatterAmplitudes so the
+   * two systems do not write-clobber each other. Layer takes max() of both.
+   */
+  voiceAmplitudes = $state<Record<string, number>>({});
   lights = $state<LightState>({ ...LIGHT_BASELINE });
   banner = $state<RitualBanner | null>(null);
 
@@ -465,7 +476,9 @@ export class TableDirector {
       const newElapsed = state.elapsed + delta;
       if (newElapsed >= state.duration) {
         toDelete.push(playerId);
-        updates[playerId] = 0;
+        // Don't write 0 here. Deletion below removes the entry so the
+        // reader's `?? 0` fallback handles it. Writing 0 would clobber an
+        // active voice value during the same tick (cross-system contention).
       } else {
         // Two-sine jaw chatter shape from the art bible
         const t = newElapsed;
@@ -480,8 +493,12 @@ export class TableDirector {
 
     for (const id of toDelete) this.#chatterState.delete(id);
 
-    if (Object.keys(updates).length > 0) {
-      this.talkAmplitudes = { ...this.talkAmplitudes, ...updates };
+    // Apply chatter updates and remove expired entries (rather than zeroing
+    // them) so a concurrent voice amplitude on the same player is preserved.
+    if (Object.keys(updates).length > 0 || toDelete.length > 0) {
+      const next = { ...this.chatterAmplitudes, ...updates };
+      for (const id of toDelete) delete next[id];
+      this.chatterAmplitudes = next;
     }
   }
 

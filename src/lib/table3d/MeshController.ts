@@ -36,7 +36,27 @@ interface PeerConnection {
    * Drained after setRemoteDescription resolves; cleared after drain.
    */
   pendingCandidates: RTCIceCandidateInit[];
+  /**
+   * Per-peer serial queue for handleSignal. Concurrent signals for the same
+   * peer (e.g. an offer arriving while an earlier offer is mid-await on
+   * setRemoteDescription) would otherwise interleave at await points and
+   * corrupt the signalling state-machine. Each incoming signal chains onto
+   * this promise so processing is strictly serial per peer.
+   */
+  signalQueue: Promise<void>;
+  /**
+   * Last remote stream seen via pc.ontrack. Used to decide whether a new
+   * ontrack event corresponds to a fresh stream (after detach + re-attach)
+   * and should re-fire onRemoteStream.
+   */
+  lastStream: MediaStream | null;
+  /**
+   * Interval id for the keepalive data-channel ping. Cleared in closePeer.
+   */
+  keepaliveInterval?: ReturnType<typeof setInterval>;
 }
+
+const UNKNOWN_PEER_BUFFER_TTL_MS = 3000;
 
 export class MeshController {
   private selfId: string;
@@ -52,8 +72,12 @@ export class MeshController {
   /** Local media stream for audio/video */
   private localStream: MediaStream | null = null;
 
-  /** Tracks which peers have already fired onRemoteStream (one per peer) */
-  private gotStreamFromPeer = new Set<string>();
+  /**
+   * Short-TTL buffer for signals that arrive for a peer we don't yet track
+   * (createPeer hasn't run, or there was a brief remove+re-add churn).
+   * Entries older than UNKNOWN_PEER_BUFFER_TTL_MS are discarded when drained.
+   */
+  private unknownPeerBuffer = new Map<string, Array<{ payload: SignalPayload; ts: number }>>();
 
   constructor(opts: MeshControllerOpts) {
     this.selfId = opts.selfId;
@@ -87,11 +111,35 @@ export class MeshController {
   }
 
   /**
-   * Handle incoming SDP or candidate.
+   * Handle incoming SDP or candidate. Serialised per peer via signalQueue so
+   * concurrent signals can't interleave inside the async body (fix #24).
    */
-  async handleSignal(from: string, payload: SignalPayload): Promise<void> {
+  handleSignal(from: string, payload: SignalPayload): Promise<void> {
     const peer = this.peers.get(from);
-    if (!peer) return; // Peer not tracked
+    if (!peer) {
+      // Buffer for unknown peers (fix #25) so signals that race ahead of
+      // createPeer aren't silently dropped. Drained when the peer is added.
+      let bucket = this.unknownPeerBuffer.get(from);
+      if (!bucket) {
+        bucket = [];
+        this.unknownPeerBuffer.set(from, bucket);
+      }
+      bucket.push({ payload, ts: Date.now() });
+      return Promise.resolve();
+    }
+
+    const next = peer.signalQueue.then(() => this._handleSignalUnsafe(from, payload)).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.error('[mesh] signal error', from, err);
+      }
+    });
+    peer.signalQueue = next;
+    return next;
+  }
+
+  private async _handleSignalUnsafe(from: string, payload: SignalPayload): Promise<void> {
+    const peer = this.peers.get(from);
+    if (!peer) return; // Peer may have been removed while queued
 
     if (payload.sdp) {
       // Offer or answer
@@ -148,7 +196,8 @@ export class MeshController {
   /**
    * Attach a local media stream to all existing peer connections.
    * Newly-created peers will also receive the local stream.
-   * Triggers renegotiation for initiator role (selfId < peerId).
+   * Renegotiates symmetrically from whichever side called attach (fix #22):
+   * the deterministic-initiator rule only governs the INITIAL connection.
    */
   attachLocalStream(stream: MediaStream): void {
     this.localStream = stream;
@@ -159,17 +208,17 @@ export class MeshController {
         peer.pc.addTrack(track, stream);
       }
 
-      // Renegotiate if we're the initiator
-      if (this.selfId < peerId) {
-        void this.negotiate(peerId);
-      }
+      // Renegotiate unconditionally so the remote side learns about the
+      // new tracks regardless of which side called attach.
+      void this.negotiate(peerId);
     }
   }
 
   /**
    * Detach the local media stream from all peer connections.
    * Removes all senders associated with the prior local stream.
-   * Triggers renegotiation for initiator role (selfId < peerId).
+   * Renegotiates symmetrically (fix #22) so the remote side stops receiving
+   * an inactive track even when selfId > peerId.
    * Caller is responsible for stopping the underlying MediaStreamTrack objects.
    */
   detachLocalStream(): void {
@@ -186,10 +235,8 @@ export class MeshController {
         }
       }
 
-      // Renegotiate if we're the initiator
-      if (this.selfId < peerId) {
-        void this.negotiate(peerId);
-      }
+      // Renegotiate unconditionally (symmetrical detach).
+      void this.negotiate(peerId);
     }
   }
 
@@ -229,6 +276,7 @@ export class MeshController {
     for (const peerId of Array.from(this.peers.keys())) {
       this.closePeer(peerId);
     }
+    this.unknownPeerBuffer.clear();
   }
 
   // ─ Private helpers ──────────────────────────────────────────────────────────
@@ -281,23 +329,54 @@ export class MeshController {
       }
     };
 
-    // Wire up remote track handler (for onRemoteStream callback)
+    // Wire up remote track handler. Fires onRemoteStream whenever a NEW
+    // stream object arrives (fix #22): after detach + re-attach the stream
+    // identity changes, so we must re-emit. The prior boolean gate kept the
+    // UI stuck on the dead stream.
     pc.ontrack = (ev) => {
-      if (ev.streams && ev.streams.length > 0 && !this.gotStreamFromPeer.has(peerId)) {
-        this.gotStreamFromPeer.add(peerId);
-        this.onRemoteStream?.(peerId, ev.streams[0]);
+      if (!ev.streams || ev.streams.length === 0) return;
+      const stream = ev.streams[0];
+      const entry = this.peers.get(peerId);
+      if (!entry) return;
+      if (entry.lastStream !== stream) {
+        entry.lastStream = stream;
+        this.onRemoteStream?.(peerId, stream);
       }
     };
 
     // Create a data channel for keepalive BEFORE createOffer
     // so the SDP has at least one m-line (modern browsers reject empty offers).
     const dc = pc.createDataChannel('keepalive');
-    dc.onopen = () => {
-      // Optionally ping to keep the connection alive
-    };
 
-    const peerConn: PeerConnection = { pc, dataChannel: dc, pendingCandidates: [] };
+    const peerConn: PeerConnection = {
+      pc,
+      dataChannel: dc,
+      pendingCandidates: [],
+      signalQueue: Promise.resolve(),
+      lastStream: null,
+    };
     this.peers.set(peerId, peerConn);
+
+    dc.onopen = () => {
+      // Keepalive ping (fix #50): periodically send a small payload so middle
+      // boxes don't drop the underlying transport. Guarded against close so a
+      // late firing after closePeer doesn't throw on a dead channel.
+      const interval = setInterval(() => {
+        try {
+          dc.send('ping');
+        } catch {
+          // Channel closed; closePeer should have cleared this interval but
+          // swallow defensively in case of races.
+        }
+      }, 15000);
+      // Re-resolve entry in case closePeer ran between createPeer and onopen.
+      const entry = this.peers.get(peerId);
+      if (entry && entry.dataChannel === dc) {
+        entry.keepaliveInterval = interval;
+      } else {
+        clearInterval(interval);
+      }
+    };
 
     // Add local stream tracks if available
     if (this.localStream) {
@@ -306,9 +385,31 @@ export class MeshController {
       }
     }
 
-    // If we're the initiator (selfId < peerId), create and send offer
+    // If we're the initiator (selfId < peerId), create and send offer.
+    // The deterministic-initiator rule only governs the INITIAL connection.
     if (this.selfId < peerId) {
       void this.negotiate(peerId);
+    }
+
+    // Drain any buffered signals that arrived before this peer was created
+    // (fix #25). Stale entries beyond TTL are discarded.
+    this.drainUnknownPeerBuffer(peerId);
+  }
+
+  /**
+   * Drain buffered signals for a peer that was just created. Entries older
+   * than UNKNOWN_PEER_BUFFER_TTL_MS are dropped; survivors are re-queued
+   * through handleSignal so they pass through the per-peer signal queue.
+   */
+  private drainUnknownPeerBuffer(peerId: string): void {
+    const bucket = this.unknownPeerBuffer.get(peerId);
+    if (!bucket) return;
+    this.unknownPeerBuffer.delete(peerId);
+    const now = Date.now();
+    for (const entry of bucket) {
+      if (now - entry.ts <= UNKNOWN_PEER_BUFFER_TTL_MS) {
+        void this.handleSignal(peerId, entry.payload);
+      }
     }
   }
 
@@ -348,13 +449,15 @@ export class MeshController {
     const peer = this.peers.get(peerId);
     if (!peer) return;
 
+    if (peer.keepaliveInterval !== undefined) {
+      clearInterval(peer.keepaliveInterval);
+    }
     if (peer.dataChannel) {
       peer.dataChannel.close();
     }
     peer.pc.close();
 
     this.peers.delete(peerId);
-    this.gotStreamFromPeer.delete(peerId);
     this.onPeerRemoved?.(peerId);
   }
 }

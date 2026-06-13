@@ -88,7 +88,12 @@ export function createEnvelope(opts: {
   reducedMotion?: boolean;
 }): Envelope {
   let current = 0;
-  const { attack, release, reducedMotion = false } = opts;
+  // Clamp attack/release to (0, 1] at construction: 0 would freeze the envelope
+  // (lerp factor of 0 never moves toward the target) and >1 overshoots
+  // (audit fix #34).
+  const attack = Math.max(0.001, Math.min(1, opts.attack));
+  const release = Math.max(0.001, Math.min(1, opts.release));
+  const { reducedMotion = false } = opts;
 
   return {
     update(rms: number): number {

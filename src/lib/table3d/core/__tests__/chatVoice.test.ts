@@ -66,6 +66,45 @@ describe('buildBlipRecipe', () => {
     expect(recipe.voices).toHaveLength(0);
   });
 
+  it('produces an empty voices array for tab and newline whitespace (audit #27, #54)', () => {
+    const tab = buildBlipRecipe('\t', voice, 0);
+    const lf = buildBlipRecipe('\n', voice, 1);
+    const cr = buildBlipRecipe('\r', voice, 2);
+    expect(tab.voices).toHaveLength(0);
+    expect(lf.voices).toHaveLength(0);
+    expect(cr.voices).toHaveLength(0);
+  });
+
+  it('produces ONE blip for a single astral emoji (audit #8)', () => {
+    // '🎲' is a surrogate pair (U+1F3B2). Caller passes the full code point.
+    const recipe = buildBlipRecipe('🎲', voice, 0);
+    expect(recipe.voices).toHaveLength(1);
+    // Frequency should be derived from the code point (~127922), not from
+    // either surrogate half, so a finite, positive freq is produced.
+    expect(recipe.voices[0]?.freqStartHz).toBeGreaterThan(0);
+    expect(Number.isFinite(recipe.voices[0]?.freqStartHz)).toBe(true);
+  });
+
+  it('detune offset is two-sided: at least one input produces freqStartHz < voice.baseHz (audit #51)', () => {
+    // Sweep code points and indices; with the centred offset spanning [-1, 1),
+    // negative detune is expected for roughly half the inputs.
+    let foundNegative = false;
+    for (let cp = 32; cp < 128; cp++) {
+      const ch = String.fromCodePoint(cp);
+      if (/\s/.test(ch)) continue;
+      for (let idx = 0; idx < 8; idx++) {
+        const recipe = buildBlipRecipe(ch, voice, idx);
+        const v = recipe.voices[0];
+        if (v && v.freqStartHz < voice.baseHz) {
+          foundNegative = true;
+          break;
+        }
+      }
+      if (foundNegative) break;
+    }
+    expect(foundNegative).toBe(true);
+  });
+
   it('is deterministic (same char, voice, index → same recipe)', () => {
     const recipe1 = buildBlipRecipe('x', voice, 5);
     const recipe2 = buildBlipRecipe('x', voice, 5);
@@ -140,6 +179,12 @@ describe('revealSchedule', () => {
     expect(delaysMs).toHaveLength(1);
     expect(delaysMs[0]).toBe(0);
     expect(totalMs).toBe(1); // one char takes 1 ms minimum
+  });
+
+  it('counts a surrogate-pair emoji as ONE reveal step, not two (audit #8)', () => {
+    // '🎲a' is 3 UTF-16 code units but 2 code points.
+    const { delaysMs } = revealSchedule('🎲a', 30);
+    expect(delaysMs).toHaveLength(2);
   });
 
   it('respects custom charsPerSec', () => {

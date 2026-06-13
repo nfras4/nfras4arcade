@@ -22,18 +22,29 @@ const REVEAL_SPEED_CPS = 18;
  * @param voice  Voice params for the sender (from voiceParamsFor).
  * @returns      A cancel function that clears all pending timeouts.
  */
-export function playChatBlips(text: string, voice: VoiceParams): () => void {
+export function playChatBlips(text: string, voice: VoiceParams, startTs?: number): () => void {
   const { delaysMs } = revealSchedule(text, REVEAL_SPEED_CPS);
   const ids: ReturnType<typeof setTimeout>[] = [];
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (char === ' ') continue; // spaces produce no blip
+  // Audit fix #28: if startTs is provided, treat the schedule as anchored to
+  // that wall-clock moment. Blips whose delay has already passed are skipped
+  // (already audible to whoever was on the page); remaining ones fire at
+  // delaysMs[i] - offsetMs. Without startTs we preserve the old behaviour.
+  const offsetMs = startTs != null ? Math.max(0, Date.now() - startTs) : 0;
+
+  // Iterate by Unicode code points so astral-plane emoji fire one blip,
+  // not two (audit fix #8). Skip any whitespace (space, tab, newline)
+  // so tab/newline don't produce audible square waves (audit fix #27).
+  const codePoints = Array.from(text);
+  for (let i = 0; i < codePoints.length; i++) {
+    const char = codePoints[i];
+    if (/\s/.test(char)) continue; // all whitespace is silent
+    if (delaysMs[i] <= offsetMs) continue; // already past
 
     const id = setTimeout(() => {
       const recipe = buildBlipRecipe(char, voice, i);
       playSting(recipe);
-    }, delaysMs[i]);
+    }, delaysMs[i] - offsetMs);
 
     ids.push(id);
   }

@@ -280,10 +280,207 @@ describe('MeshController media methods', () => {
       }
     });
 
-    // TODO: connectionState recovery (#6) — requires triggering
+    // TODO: connectionState recovery (#6) - requires triggering
     // onconnectionstatechange with state="failed" / "disconnected" on the
     // FakePC and asserting closePeer / restartIce side effects. The minimal
     // mock above supports this but the test is left as a follow-up to keep
     // this commit narrowly scoped to the queue + stale-pc surfaces.
+  });
+
+  describe('signal robustness (audit #22/#24/#25/#50)', () => {
+    type MockPC = {
+      remoteDescription: RTCSessionDescription | null;
+      signalingState: RTCSignalingState;
+      connectionState: RTCPeerConnectionState;
+      addIceCandidateCalls: RTCIceCandidateInit[];
+      setRemoteDescriptionCalls: RTCSessionDescriptionInit[];
+      onconnectionstatechange: (() => void) | null;
+      onicecandidate: ((ev: { candidate: RTCIceCandidate | null }) => void) | null;
+      ontrack: ((ev: { streams: MediaStream[] }) => void) | null;
+      createOffer: () => Promise<RTCSessionDescriptionInit>;
+      createAnswer: () => Promise<RTCSessionDescriptionInit>;
+      setLocalDescription: (desc: RTCSessionDescriptionInit) => Promise<void>;
+      setRemoteDescription: (desc: RTCSessionDescriptionInit) => Promise<void>;
+      addIceCandidate: (c: RTCIceCandidateInit) => Promise<void>;
+      addTrack: () => void;
+      getSenders: () => RTCRtpSender[];
+      removeTrack: () => void;
+      createDataChannel: () => { onopen: null; close: () => void; send: () => void };
+      close: () => void;
+      restartIce: () => void;
+      __srdDelayMs?: number;
+    };
+
+    function installRtcMocks(opts?: { srdDelayMs?: number }): {
+      instances: MockPC[];
+      restore: () => void;
+      srdOrder: string[];
+    } {
+      const instances: MockPC[] = [];
+      const srdOrder: string[] = [];
+      const origPC = (globalThis as { RTCPeerConnection?: unknown }).RTCPeerConnection;
+      const origSD = (globalThis as { RTCSessionDescription?: unknown }).RTCSessionDescription;
+      const origIC = (globalThis as { RTCIceCandidate?: unknown }).RTCIceCandidate;
+
+      class FakePC {
+        remoteDescription: RTCSessionDescription | null = null;
+        signalingState: RTCSignalingState = 'stable';
+        connectionState: RTCPeerConnectionState = 'new';
+        addIceCandidateCalls: RTCIceCandidateInit[] = [];
+        setRemoteDescriptionCalls: RTCSessionDescriptionInit[] = [];
+        onconnectionstatechange: (() => void) | null = null;
+        onicecandidate: ((ev: { candidate: RTCIceCandidate | null }) => void) | null = null;
+        ontrack: ((ev: { streams: MediaStream[] }) => void) | null = null;
+        __srdDelayMs = opts?.srdDelayMs ?? 0;
+        constructor() {
+          instances.push(this as unknown as MockPC);
+        }
+        async createOffer() {
+          return { type: 'offer' as const, sdp: 'mock-offer' };
+        }
+        async createAnswer() {
+          return { type: 'answer' as const, sdp: 'mock-answer' };
+        }
+        async setLocalDescription() {
+          /* no-op */
+        }
+        async setRemoteDescription(desc: RTCSessionDescriptionInit) {
+          const tag = (desc.sdp as string) ?? desc.type;
+          srdOrder.push(`enter:${tag}`);
+          if (this.__srdDelayMs > 0) {
+            await new Promise((r) => setTimeout(r, this.__srdDelayMs));
+          }
+          this.remoteDescription = desc as unknown as RTCSessionDescription;
+          this.setRemoteDescriptionCalls.push(desc);
+          srdOrder.push(`exit:${tag}`);
+        }
+        async addIceCandidate(c: RTCIceCandidateInit) {
+          this.addIceCandidateCalls.push(c);
+        }
+        addTrack() {
+          /* no-op */
+        }
+        getSenders() {
+          return [];
+        }
+        removeTrack() {
+          /* no-op */
+        }
+        createDataChannel() {
+          return { onopen: null, close: () => {}, send: () => {} };
+        }
+        close() {
+          /* no-op */
+        }
+        restartIce() {
+          /* no-op */
+        }
+      }
+
+      (globalThis as { RTCPeerConnection: unknown }).RTCPeerConnection = FakePC;
+      (globalThis as { RTCSessionDescription: unknown }).RTCSessionDescription = class {
+        constructor(public init: RTCSessionDescriptionInit) {
+          Object.assign(this, init);
+        }
+      };
+      (globalThis as { RTCIceCandidate: unknown }).RTCIceCandidate = class {
+        constructor(public init: RTCIceCandidateInit) {
+          Object.assign(this, init);
+        }
+      };
+
+      return {
+        instances,
+        srdOrder,
+        restore: () => {
+          (globalThis as { RTCPeerConnection?: unknown }).RTCPeerConnection = origPC;
+          (globalThis as { RTCSessionDescription?: unknown }).RTCSessionDescription = origSD;
+          (globalThis as { RTCIceCandidate?: unknown }).RTCIceCandidate = origIC;
+        },
+      };
+    }
+
+    it('serialises concurrent handleSignal calls for the same peer (fix #24)', async () => {
+      const { instances, srdOrder, restore } = installRtcMocks({ srdDelayMs: 20 });
+      try {
+        controller.updatePeers(['bob']);
+        const pc = instances[0];
+        expect(pc).toBeDefined();
+
+        // Fire two SDP signals back-to-back without awaiting the first.
+        const p1 = controller.handleSignal('bob', { sdp: { type: 'answer', sdp: 'sdp-A' } });
+        const p2 = controller.handleSignal('bob', { sdp: { type: 'answer', sdp: 'sdp-B' } });
+
+        await Promise.all([p1, p2]);
+
+        // If processing were interleaved we'd see enter:A, enter:B, exit:A, exit:B
+        // (or similar overlap). With serialisation it must be strictly nested:
+        // enter:A, exit:A, enter:B, exit:B.
+        expect(srdOrder).toEqual(['enter:sdp-A', 'exit:sdp-A', 'enter:sdp-B', 'exit:sdp-B']);
+        expect(pc.setRemoteDescriptionCalls).toHaveLength(2);
+      } finally {
+        restore();
+      }
+    });
+
+    it('buffers signals for unknown peers and replays them after createPeer (fix #25)', async () => {
+      const { instances, restore } = installRtcMocks();
+      try {
+        // Signals arrive BEFORE the peer is tracked.
+        await controller.handleSignal('bob', { sdp: { type: 'answer', sdp: 'buffered-sdp' } });
+        await controller.handleSignal('bob', {
+          candidate: { candidate: 'buffered-cand', sdpMid: '0' },
+        });
+
+        // No peer yet, so no pc exists.
+        expect(instances).toHaveLength(0);
+
+        // Now the peer is added.
+        controller.updatePeers(['bob']);
+        const pc = instances[0];
+        expect(pc).toBeDefined();
+
+        // Flush microtasks so buffered signals (drained via handleSignal which
+        // enqueues onto the per-peer queue) get a chance to run.
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+
+        // The buffered SDP should have been applied, and the candidate that
+        // arrived afterwards should have been queued + drained.
+        expect(pc.setRemoteDescriptionCalls).toHaveLength(1);
+        expect(pc.setRemoteDescriptionCalls[0].sdp).toBe('buffered-sdp');
+        expect(pc.addIceCandidateCalls).toHaveLength(1);
+        expect(pc.addIceCandidateCalls[0].candidate).toBe('buffered-cand');
+      } finally {
+        restore();
+      }
+    });
+
+    it('discards buffered signals older than the TTL (fix #25)', async () => {
+      const { instances, restore } = installRtcMocks();
+      const origNow = Date.now;
+      try {
+        let fakeNow = 1_000_000;
+        Date.now = () => fakeNow;
+
+        // Buffer a signal at t=0.
+        await controller.handleSignal('bob', { sdp: { type: 'answer', sdp: 'stale-sdp' } });
+
+        // Advance fake clock beyond the 3000 ms TTL.
+        fakeNow += 5000;
+
+        // Now create the peer.
+        controller.updatePeers(['bob']);
+        const pc = instances[0];
+        expect(pc).toBeDefined();
+
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+
+        // The stale signal must NOT have been applied.
+        expect(pc.setRemoteDescriptionCalls).toHaveLength(0);
+      } finally {
+        Date.now = origNow;
+        restore();
+      }
+    });
   });
 });

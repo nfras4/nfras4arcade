@@ -80,7 +80,11 @@ export class VoiceJawDriver {
     const source = ctx.createMediaStreamSource(stream);
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
-    analyser.smoothingTimeConstant = 0.4;
+    // Audit #16: createEnvelope() below already does asymmetric attack/release
+    // smoothing. Stacking the analyser's symmetric IIR (0.4) on top erases the
+    // asymmetry and makes mouths feel laggy on attack. Disable analyser
+    // smoothing so the envelope is the single source of truth.
+    analyser.smoothingTimeConstant = 0;
 
     source.connect(analyser);
 

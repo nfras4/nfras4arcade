@@ -66,8 +66,18 @@ export function voiceParamsFor(furColour: string): VoiceParams {
 /**
  * Build a blip recipe for a single character in a message.
  *
+ * `char` is a full Unicode code point (a 1-2 UTF-16 code unit string from
+ * `Array.from(text)`), so astral-plane emoji are treated as one character
+ * and produce a single blip rather than two surrogate-half blips
+ * (audit fix #8).
+ *
  * Per-character frequency is detuned by:
- *   (charCode * 1.3 + indexInMessage * 0.7) % 100 / 100 * voice.charDetuneCents
+ *   ((codePoint * 1.3 + indexInMessage * 0.7) % 200) / 100 - 1   // in [-1, 1)
+ *   * voice.charDetuneCents
+ *
+ * The %200/100-1 form centres the detune offset around zero so the applied
+ * detune spans both positive and negative cents instead of being one-sided
+ * (audit fix #51).
  *
  * Converted to a multiplicative frequency factor:
  *   factor = 2^(cents / 1200)
@@ -75,22 +85,27 @@ export function voiceParamsFor(furColour: string): VoiceParams {
  * Produces a square wave at voice.baseHz * factor, detuned slightly down to
  * 92% of the base at the end (small glide-down for musicality).
  *
- * Spaces produce a recipe with an empty voices array (silent placeholder;
- * consumer skips calling playSting()).
+ * Whitespace (space, tab, newline, carriage return, etc.) produces a recipe
+ * with an empty voices array (silent placeholder; consumer skips calling
+ * playSting()). This covers tab/newline as well as plain space
+ * (audit fix #27).
  */
 export function buildBlipRecipe(
   char: string,
   voice: VoiceParams,
   indexInMessage: number,
 ): StingRecipe {
-  // Spaces are silent (but still consume time in the reveal schedule)
-  if (char === ' ') {
+  // Any whitespace is silent (but still consumes time in the reveal schedule).
+  // \s covers space, tab, newline, carriage return, vertical tab, and form feed.
+  if (/\s/.test(char)) {
     return { voices: [] };
   }
 
-  // Compute per-char detune offset
-  const charCode = char.charCodeAt(0);
-  const detuneOffset = ((charCode * 1.3 + indexInMessage * 0.7) % 100) / 100;
+  // Use the full Unicode code point (handles astral-plane emoji).
+  const codePoint = char.codePointAt(0) ?? 0;
+
+  // Centre the detune offset around zero so detune is two-sided (audit fix #51).
+  const detuneOffset = ((codePoint * 1.3 + indexInMessage * 0.7) % 200) / 100 - 1;
   const appliedDetuneCents = detuneOffset * voice.charDetuneCents;
 
   // Convert cents to frequency multiplier: 2^(cents/1200)
@@ -116,11 +131,15 @@ export function buildBlipRecipe(
 /**
  * Compute the reveal schedule for typewriter effect.
  *
+ * Iterates the message by Unicode code points (via `Array.from`) so an astral
+ * emoji counts as one reveal step rather than two surrogate halves
+ * (audit fix #8).
+ *
  * @param text          The message text.
  * @param charsPerSec   Reveal speed (default 30 chars/sec).
  *                      Consumers currently pass 18 CPS for slower, more readable reveal.
  * @returns             { delaysMs, totalMs }
- *                      - delaysMs[i] = offset from t=0 at which char i is revealed
+ *                      - delaysMs[i] = offset from t=0 at which code point i is revealed
  *                      - totalMs = total reveal duration
  */
 export function revealSchedule(
@@ -128,13 +147,14 @@ export function revealSchedule(
   charsPerSec: number = 30,
 ): { delaysMs: number[]; totalMs: number } {
   const intervalMs = 1000 / charsPerSec;
+  const codePoints = Array.from(text);
   const delaysMs: number[] = [];
 
-  for (let i = 0; i < text.length; i++) {
+  for (let i = 0; i < codePoints.length; i++) {
     delaysMs.push(i * intervalMs);
   }
 
-  const totalMs = text.length > 0 ? (text.length - 1) * intervalMs + 1 : 0;
+  const totalMs = codePoints.length > 0 ? (codePoints.length - 1) * intervalMs + 1 : 0;
 
   return { delaysMs, totalMs };
 }

@@ -442,11 +442,12 @@ export class TableDirector {
           callerSpotTarget: null,
           accusedSpotTarget: null,
         };
-        this.expressions = {
-          ...this.expressions,
-          [c.loserId]: 'shock',
-          [c.vindicatedId]: 'laugh',
-        };
+        // Audit fix #67: route through #setExpression so the expression timer
+        // tracks the verdict face. A direct write skipped #expressionTimers,
+        // so a subsequent emote would clobber the verdict face. Use the same
+        // 2000ms hold as the reduced-motion verdict path for consistency.
+        this.#setExpression(c.loserId, 'shock', 2000);
+        this.#setExpression(c.vindicatedId, 'laugh', 2000);
         this.banner = {
           kind: 'verdict',
           liarCaught: c.liarCaught,

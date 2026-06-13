@@ -206,6 +206,24 @@ describe('createEnvelope', () => {
     expect(samples[samples.length - 1]).toBeCloseTo(0.6, 2);
   });
 
+  it('attack=0 does not freeze the envelope (audit #34)', () => {
+    // attack=0 would mean lerp factor of 0 (envelope never moves toward target).
+    // createEnvelope clamps attack to (0, 1] so motion is preserved.
+    const env = createEnvelope({ attack: 0, release: 0.15 });
+    env.update(1.0);
+    const after = env.update(1.0);
+    expect(after).toBeGreaterThan(0);
+  });
+
+  it('release=0 does not freeze the envelope on decay (audit #34)', () => {
+    const env = createEnvelope({ attack: 1.0, release: 0 });
+    env.update(1.0); // ramp up
+    const peak = env.update(1.0);
+    const after = env.update(0); // try to decay
+    // With clamp, release is >0 so envelope must move below the peak.
+    expect(after).toBeLessThan(peak);
+  });
+
   it('final output never exceeds 1.0 even with attack > 1', () => {
     // Out-of-range attack coefficient could overshoot without the final clamp.
     const env = createEnvelope({ attack: 2.5, release: 0.15 });

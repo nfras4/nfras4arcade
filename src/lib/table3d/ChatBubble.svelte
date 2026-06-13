@@ -9,7 +9,7 @@
     reducedMotion?: boolean;
   }
 
-  let { text, voice: _voice, startTs: _startTs, onDone, reducedMotion = false }: Props = $props();
+  let { text, voice: _voice, startTs, onDone, reducedMotion = false }: Props = $props();
 
   let revealedCount = $state(0);
   let isDwelling = $state(false);
@@ -18,7 +18,10 @@
   const DWELL_MS = 4000;
   const REVEAL_SPEED_CPS = 18;
 
-  // Compute reveal schedule on mount
+  // Compute reveal schedule on mount.
+  // Iterate by Unicode code points so astral emoji reveal as one character,
+  // not two surrogate halves (audit fix #8).
+  const codePoints = Array.from(text);
   const { delaysMs } = revealSchedule(text, REVEAL_SPEED_CPS);
 
   // State machine: reveal characters, then dwell, then call onDone.
@@ -33,35 +36,64 @@
       timeoutIds = [];
     };
 
+    // Audit fix #28: when the bubble mounts LATE (view switch, slow render)
+    // relative to the audio path (which fires on chatLog append), the
+    // typewriter would lag the blips. Compute an offset from the canonical
+    // startTs and (a) instantly reveal characters whose delay has already
+    // passed, (b) schedule remaining ones at delaysMs[i] - offsetMs.
+    const offsetMs = Math.max(0, Date.now() - startTs);
+
     if (reducedMotion) {
       // Under reduced-motion: show all text immediately, dwell, then done
-      revealedCount = text.length;
+      revealedCount = codePoints.length;
       isDwelling = true;
 
       const dwellTimeout = setTimeout(() => {
         onDone?.();
-      }, DWELL_MS);
+      }, Math.max(0, DWELL_MS - Math.max(0, offsetMs - (delaysMs[delaysMs.length - 1] ?? 0))));
 
       timeoutIds.push(dwellTimeout);
     } else {
-      // Normal mode: typewriter reveal character-by-character
-      for (let i = 0; i < text.length; i++) {
-        const delayMs = delaysMs[i];
+      // Normal mode: typewriter reveal code-point-by-code-point.
+      // Skip-ahead any chars whose scheduled delay is already in the past.
+      let firstFutureIndex = 0;
+      for (let i = 0; i < codePoints.length; i++) {
+        if (delaysMs[i] <= offsetMs) {
+          firstFutureIndex = i + 1;
+        } else {
+          break;
+        }
+      }
+      if (firstFutureIndex > 0) {
+        revealedCount = firstFutureIndex;
+      }
 
-        const revealTimeout = setTimeout(() => {
-          revealedCount = i + 1;
+      if (firstFutureIndex >= codePoints.length) {
+        // Entire reveal already in the past: jump to dwell.
+        isDwelling = true;
+        const dwellTimeout = setTimeout(() => {
+          onDone?.();
+        }, DWELL_MS);
+        timeoutIds.push(dwellTimeout);
+      } else {
+        for (let i = firstFutureIndex; i < codePoints.length; i++) {
+          const delayMs = Math.max(0, delaysMs[i] - offsetMs);
 
-          // After the last character, enter dwell phase
-          if (i === text.length - 1) {
-            isDwelling = true;
-            const dwellTimeout = setTimeout(() => {
-              onDone?.();
-            }, DWELL_MS);
-            timeoutIds.push(dwellTimeout);
-          }
-        }, delayMs);
+          const revealTimeout = setTimeout(() => {
+            revealedCount = i + 1;
 
-        timeoutIds.push(revealTimeout);
+            // After the last character, enter dwell phase
+            if (i === codePoints.length - 1) {
+              isDwelling = true;
+              const dwellTimeout = setTimeout(() => {
+                onDone?.();
+              }, DWELL_MS);
+              timeoutIds.push(dwellTimeout);
+            }
+          }, delayMs);
+
+          timeoutIds.push(revealTimeout);
+        }
       }
     }
 
@@ -71,7 +103,7 @@
 
 <div class="bubble">
   <div class="content">
-    {text.slice(0, revealedCount)}{#if !isDwelling && revealedCount < text.length}_
+    {codePoints.slice(0, revealedCount).join('')}{#if !isDwelling && revealedCount < codePoints.length}_
     {/if}
   </div>
 </div>

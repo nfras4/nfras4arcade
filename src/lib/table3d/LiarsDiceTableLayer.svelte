@@ -23,6 +23,12 @@
   export interface LayerHandle {
     handleRemoteEmote(playerId: string, emoteId: string): void;
     setRemoteAmplitude(peerId: string, value: number): void;
+    /**
+     * Audit fixes #36 + #39: direct director reference so the route can read
+     * `director.expressions[pid]` and `director.ritualInProgress` reactively
+     * inside its own $derived blocks (TableDirector exposes them as $state).
+     */
+    director: TableDirector;
   }
 
   // ── Props ────────────────────────────────────────────────────────────────────
@@ -291,7 +297,11 @@
 
   // Publish the handle once on mount so the parent can route WS messages in.
   $effect(() => {
-    onready?.({ handleRemoteEmote, setRemoteAmplitude });
+    onready?.({
+      handleRemoteEmote,
+      setRemoteAmplitude,
+      director,
+    });
   });
 
   // Mount/unmount logging for diagnostics
@@ -431,6 +441,7 @@
       {@const visible = pos?.visible === true}
       <div
         class="chat-bubble-positioner"
+        class:dim-during-ritual={director.ritualInProgress}
         style={visible
           ? `position: absolute; left: ${pos!.left}; top: calc(${pos!.top} - 4rem);`
           : 'position: absolute; display: none;'}
@@ -598,6 +609,19 @@
   .badge.away {
     background: rgba(70, 70, 70, 0.60);
     color: #aaaaaa;
+  }
+
+  /* ── Chat bubble positioner ─────────────────────────────────────────────
+     Audit fix #36: during a ritual (LIAR/SHOWDOWN/VERDICT), fade existing
+     chat bubbles to ~0.25 so the ceremony owns the stage. RitualOverlay
+     already sits at z-index 50; the positioner is left implicit so the
+     overlay stacks above. */
+  .chat-bubble-positioner {
+    transition: opacity 0.25s ease-out;
+    opacity: 1;
+  }
+  .chat-bubble-positioner.dim-during-ritual {
+    opacity: 0.25;
   }
 
   /* ── Emote bubbles ────────────────────────────────────────────────────── */

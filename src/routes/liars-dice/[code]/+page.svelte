@@ -125,7 +125,13 @@
 
   function handleLayerReady(handle: LayerHandle): void {
     layerHandle = handle;
+    layerDirector = handle.director;
   }
+
+  // Audit fix #39: track the layer's director so the self-portrait can read
+  // `director.expressions[pid]` reactively. Held as $state so the $derived
+  // below re-evaluates when the layer mounts. Declared here, consumed below.
+  let layerDirector = $state<import('$lib/table3d/TableDirector.svelte.js').TableDirector | null>(null);
 
   function handleLayerEmote(emoteId: EmoteId): void {
     socket.send({ type: 'emote', emoteId });
@@ -206,9 +212,26 @@
   let nextChatBubbleId = 0;
 
   // ── Self-portrait amplitude (chat + voice driven) ──────────────────────────
+  // chatSelfAmp is the raw target (0 or 0.5); smoothedChatAmp is the envelope-
+  // followed value that feeds the composite (audit fix #30 — eliminates the
+  // visible lurch when chat amp toggles mid-speech).
   let chatSelfAmp = $state(0);
+  let smoothedChatAmp = $state(0);
   let voiceSelfAmp = $state(0);
-  const selfAmp = $derived(Math.max(chatSelfAmp, voiceSelfAmp));
+  const selfAmp = $derived(Math.max(smoothedChatAmp, voiceSelfAmp));
+
+  // Reduced-motion preference, read once. Audit fix #29: under reduced-motion,
+  // the binary chat amp 0->0.5 still snaps the portrait jaw; suppress the
+  // chat-only path so only voice (which is envelope-capped at 0.6) drives jaw.
+  let reducedMotion = $state(false);
+  $effect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotion = mq.matches;
+    const onChange = () => { reducedMotion = mq.matches; };
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  });
 
   // ── WebRTC Mesh Controller (Stage B: signaling only, no media) ──────────────
   let MeshController: typeof import('$lib/table3d/MeshController.js').MeshController | null = null;
@@ -265,8 +288,12 @@
     // Already resolved for this tablePresent=true session; don't stomp in-session toggles.
     if (controllerViewResolved) return;
     // Only seated players can use controller view; spectators/TV sockets skip.
-    const isSeatedPlayer = pid && s.players.some((p) => p.id === pid);
-    if (!isSeatedPlayer) return;
+    // Audit #63: inline check kept here because this $effect reads `$gameState`
+    // directly (snapshot `s`), not the derived `state`. The shared
+    // `isSeatedPlayer` derived (which lives off `state`) would lag this branch
+    // by one tick on first seating, breaking the once-per-session resolve.
+    const seated = pid && s.players.some((p) => p.id === pid);
+    if (!seated) return;
     // Resolve once: stored key wins; no stored key defaults to on.
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(CONTROLLER_VIEW_KEY) : null;
     useControllerView = stored !== null ? stored === '1' : true;
@@ -575,7 +602,7 @@
     if (newEntries.length === 0) return;
     for (const entry of newEntries) {
       if (entry.id > lastProcessedChatId) lastProcessedChatId = entry.id;
-      const cancel = playChatBlips(entry.text, entry.voice);
+      const cancel = playChatBlips(entry.text, entry.voice, entry.ts);
       pendingBlipCancels.add(cancel);
     }
     return () => {
@@ -586,31 +613,58 @@
 
   // ── Self-portrait: fur colour and amplitude ──────────────────────────────────
   // Compute the local player's assigned fur colour (mirroring layer seat assignment).
-  // We maintain a seat map to match the layer's own colour assignment logic.
-  let selfPortraitFurColour = $state('#8B5E3C'); // fallback
-  let selfSeatMap = new Map<string, { furColour: string }>();
-
-  $effect(() => {
-    if (!state) return;
-    // Recompute seat map: assign fur colours to all players
-    const newSeatMap = new Map<string, { furColour: string }>();
-    for (const player of state.players) {
-      const colour = furColourFor(player.id, player.isBot, newSeatMap);
-      newSeatMap.set(player.id, { furColour: colour });
+  // Audit #12: previously a $effect read `state` directly and recomputed the seat
+  // map on every game-state broadcast (~30/s in chatty rooms). Re-key on a
+  // stable player-set signature so the seat map only rebuilds when the seating
+  // actually changes (player joins/leaves or human/bot flips).
+  let playerSetSignature = $derived(
+    state ? state.players.map((p) => p.id + (p.isBot ? 'b' : 'h')).join('|') : ''
+  );
+  let selfPortraitFurColour = $derived.by(() => {
+    // Touch the signature so Svelte tracks it as the sole dependency. The body
+    // intentionally re-reads state.players to compute colours; without the
+    // signature reference, replacing `state` with an identically-shaped
+    // snapshot would still retrigger via deep reactivity.
+    playerSetSignature;
+    if (!state || !pid) return '#8B5E3C';
+    const seatMap = new Map<string, { furColour: string }>();
+    for (const p of state.players) {
+      const c = furColourFor(p.id, p.isBot, seatMap);
+      seatMap.set(p.id, { furColour: c });
     }
-    selfSeatMap = newSeatMap;
-
-    // Extract the local player's fur colour
-    if (pid && newSeatMap.has(pid)) {
-      selfPortraitFurColour = newSeatMap.get(pid)?.furColour ?? '#8B5E3C';
-    }
+    return seatMap.get(pid)?.furColour ?? '#8B5E3C';
   });
 
   // Self-portrait amplitude: chat-driven
   // When the local player has an active chat bubble, raise chatSelfAmp.
+  // Audit fix #29: under reduced-motion, force chatSelfAmp to 0 so the binary
+  // 0->0.5 step does not snap the jaw. Voice path still drives jaw via its
+  // envelope cap at 0.6.
   $effect(() => {
+    if (reducedMotion) {
+      chatSelfAmp = 0;
+      return;
+    }
     const localPlayerBubble = chatBubbles.some((b) => b.playerId === pid);
     chatSelfAmp = localPlayerBubble ? 0.5 : 0;
+  });
+
+  // Audit fix #30: smooth chatSelfAmp via createEnvelope(attack 0.3, release
+  // 0.18) on a rAF loop so the 0->0.5->0 step does not produce a visible
+  // lurch when it coincides with mid-speech voiceSelfAmp. The composite
+  // `selfAmp = max(smoothedChatAmp, voiceSelfAmp)` now has no step.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    const env = createEnvelope({ attack: 0.3, release: 0.18 });
+    let rafId: number | null = null;
+    const loop = () => {
+      smoothedChatAmp = env.update(chatSelfAmp);
+      rafId = window.requestAnimationFrame(loop);
+    };
+    rafId = window.requestAnimationFrame(loop);
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
   });
 
   // Self-portrait amplitude: voice-driven
@@ -629,10 +683,28 @@
       voiceSelfAmp = 0;
       return;
     }
-    const source = ctx.createMediaStreamSource(localStream);
+    // Audit #64: a previously-suspended shared AudioContext (tab hidden, then
+    // user joined voice while still backgrounded) would never wake on its own
+    // because the visibilitychange listener only resumes on visibilitychange,
+    // not on a fresh join. Resume here so the rAF tick sees non-zero RMS.
+    resumeSharedAudioContext().catch(() => { /* ignore */ });
+    // Audit #21: createMediaStreamSource throws on Firefox if the stream has
+    // no audio tracks. joinVoice() already filters zero-track streams, but
+    // belt-and-braces here so a future racey assignment can't crash the rAF.
+    let source: MediaStreamAudioSourceNode;
+    try {
+      source = ctx.createMediaStreamSource(localStream);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.error('[voice] createMediaStreamSource failed:', e);
+      }
+      voiceSelfAmp = 0;
+      return;
+    }
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
-    analyser.smoothingTimeConstant = 0.4;
+    // Audit #16: analyser smoothing off; createEnvelope handles attack/release.
+    analyser.smoothingTimeConstant = 0;
     source.connect(analyser);
     const buf = new Uint8Array(analyser.frequencyBinCount);
     const env = createEnvelope({ attack: 0.4, release: 0.15 });
@@ -684,8 +756,9 @@
   $effect(() => {
     if (isTv) return;
     if (!state || !pid) return;
-    // Only seated players use the mesh
-    const isSeatedPlayer = state.players.some((p) => p.id === pid);
+    // Audit #63: use the shared `isSeatedPlayer` derived rather than re-deriving
+    // here. Keeps gating consistent across the voice section, joinVoice(), and
+    // mesh init. Spectators (pid set but not in players[]) skip.
     if (!isSeatedPlayer) return;
 
     if (!MeshController) {
@@ -724,6 +797,15 @@
               jawDriver?.attach(peerId, stream);
             },
             onPeerRemoved: (peerId: string) => {
+              // Audit #40: explicitly null the audio element's srcObject before
+              // we drop the ref. Otherwise the <audio> retains a live reference
+              // to the MediaStream and GC can't collect it, so the per-peer
+              // stream keeps consuming memory + a decoded audio pipeline until
+              // the page reloads.
+              const audioEl = remoteAudioRefs[peerId];
+              if (audioEl) {
+                try { audioEl.srcObject = null; } catch { /* ignore */ }
+              }
               remoteStreams = { ...remoteStreams };
               delete remoteStreams[peerId];
               remoteAudioRefs = { ...remoteAudioRefs };
@@ -750,6 +832,29 @@
     };
   });
 
+  // ── Voice/mesh attach race (audit fix #38) ─────────────────────────────────
+  // joinVoice may resolve BEFORE the lazy MeshController import completes.
+  // The inline `if (mesh) mesh.attachLocalStream(...)` in joinVoice silently
+  // skips attach when mesh is still null. Mirror it here: as soon as all
+  // three signals (mesh, localStream, voiceState='joined') are true, attach
+  // the stream. A boolean guards against double-attach.
+  let voiceMeshAttached = false;
+  $effect(() => {
+    if (!mesh || !localStream || voiceState !== 'joined') {
+      voiceMeshAttached = false;
+      return;
+    }
+    if (voiceMeshAttached) return;
+    try {
+      mesh.attachLocalStream(localStream);
+      voiceMeshAttached = true;
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        console.error('[voice] deferred mesh.attachLocalStream failed:', e);
+      }
+    }
+  });
+
   // ── Peer set tracking: update mesh whenever peer list changes ──────────────
   $effect(() => {
     if (!mesh || !state) return;
@@ -764,6 +869,13 @@
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
   let tablePresent = $derived(state?.tablePresent ?? false);
+
+  // Audit fix #39: self-portrait expression follows the director's per-player
+  // map so emotes/ritual flip the local player's face. Falls back to
+  // 'neutral' before the layer mounts or for unknown players.
+  let selfPortraitExpression = $derived(
+    layerDirector && pid ? (layerDirector.expressions[pid] ?? 'neutral') : 'neutral'
+  );
 
   // Log ldStateLike state transitions for diagnostics
   let prevPlayersLength = 0;
@@ -927,11 +1039,23 @@
 
   // ── Voice handlers ─────────────────────────────────────────────────────────
 
+  // Audit #19: monotonic epoch counter for joinVoice. Each invocation bumps
+  // joinVoiceEpoch; when the getUserMedia promise resolves we compare the
+  // captured epoch against the current one. A mismatch means the user double-
+  // tapped or pressed Leave mid-request, so the resolved stream is orphaned
+  // and must be torn down before it leaks tracks / mic indicator.
+  let joinVoiceEpoch = 0;
+
   async function joinVoice(): Promise<void> {
     // Defensive: voice section is gated on `!isTv && isSeatedPlayer`, but the
     // gate is presentation-layer; a stale handler reference (or future caller)
     // must not be able to open a peer connection from TV or spectator context.
     if (isTv || !isSeatedPlayer) return;
+
+    // Audit #19: re-entry guard. A second click during 'requesting' would
+    // otherwise spawn a parallel getUserMedia and the later resolution would
+    // stomp localStream, leaking the earlier MediaStream (mic stays hot).
+    if (voiceState === 'requesting' || voiceState === 'joined') return;
 
     // Check for platform support
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
@@ -939,15 +1063,58 @@
       return;
     }
 
+    const myEpoch = ++joinVoiceEpoch;
     voiceState = 'requesting';
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+      // Audit #19: if voiceState transitioned away from 'requesting' (user hit
+      // Leave, or another join attempt won the race) before this promise
+      // resolved, drop the stream on the floor.
+      if (myEpoch !== joinVoiceEpoch || voiceState !== 'requesting') {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+
+      // Audit #21: some virtual devices return a MediaStream with zero audio
+      // tracks (e.g. blocked input on certain Linux setups). Treat as
+      // unsupported so the UI doesn't sit on a permanently-silent 'joined'.
+      if (stream.getAudioTracks().length === 0) {
+        stream.getTracks().forEach((t) => t.stop());
+        voiceState = 'unsupported';
+        return;
+      }
+
+      // Audit #60: when the OS revokes the mic mid-call (unplug, permission
+      // pull, browser tab refresh on parent) the track fires `ended` but
+      // voiceState stays 'joined' and the mute UI lies. Hook onended to
+      // leaveVoice so the machine returns to 'off' cleanly.
+      const firstTrack = stream.getAudioTracks()[0];
+      if (firstTrack) {
+        firstTrack.onended = () => {
+          // Avoid recursion if leaveVoice itself stopped the track.
+          if (voiceState === 'joined') leaveVoice();
+        };
+      }
+
       localStream = stream;
       if (mesh) {
-        mesh.attachLocalStream(stream);
+        // Audit #21: createMediaStreamSource throws on Firefox if the stream
+        // has no audio (already filtered above, but mesh.attachLocalStream
+        // may transitively touch it). Defensive try/catch.
+        try {
+          mesh.attachLocalStream(stream);
+        } catch (e) {
+          if (import.meta.env.DEV) {
+            console.error('[voice] mesh.attachLocalStream failed:', e);
+          }
+        }
       }
       voiceState = 'joined';
     } catch (err: any) {
+      // Same epoch check on error path; if a leave already happened we've
+      // already cleaned up, do not regress voiceState.
+      if (myEpoch !== joinVoiceEpoch) return;
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         voiceState = 'denied';
       } else if (err.name === 'NotFoundError') {
@@ -962,7 +1129,14 @@
   }
 
   async function leaveVoice(): Promise<void> {
+    // Audit #19: bump the epoch so any in-flight joinVoice() promise that
+    // resolves after this call recognises the race and stops its stream.
+    joinVoiceEpoch++;
     if (localStream) {
+      // Audit #60: clear onended before stop() so the leaveVoice -> stop ->
+      // ended -> leaveVoice recursion can't fire when the user hits Leave
+      // before the OS revokes the device.
+      localStream.getAudioTracks().forEach((t) => { t.onended = null; });
       localStream.getTracks().forEach((t) => t.stop());
       localStream = null;
     }
@@ -1071,11 +1245,11 @@
         {/if}
 
         <!-- Self-portrait: show the local player's own monkey in bottom-right -->
-        {#if !isTv && pid && state.players.some((p) => p.id === pid)}
+        {#if !isTv && isSeatedPlayer}
           <div class="self-portrait-wrapper">
             <SelfMonkeyPortrait
               furColour={selfPortraitFurColour}
-              expression="neutral"
+              expression={selfPortraitExpression}
               talkAmplitude={selfAmp}
               playerName={state.players.find((p) => p.id === pid)?.name ?? 'You'}
             />

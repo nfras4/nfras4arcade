@@ -1313,7 +1313,13 @@
             {:else if voiceState === 'requesting'}
               Requesting mic...
             {:else if voiceState === 'joined'}
-              Voice on ({Object.keys(remoteStreams).length} connected)
+              {#if Object.keys(remoteStreams).length === 0}
+                Voice on. No one else is on voice yet.
+              {:else if Object.keys(remoteStreams).length === 1}
+                Voice on. Talking to 1 player.
+              {:else}
+                Voice on. Talking to {Object.keys(remoteStreams).length} players.
+              {/if}
             {:else if voiceState === 'denied'}
               Microphone denied
             {:else}

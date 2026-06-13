@@ -50,6 +50,17 @@ describe('derivePeerSet', () => {
     const peers = derivePeerSet(players, 'a');
     expect(peers).toEqual(new Set([]));
   });
+
+  it('excludes bots from the peer set', () => {
+    const players: LDStateLike['players'] = [
+      { id: 'a', name: 'Alice', connected: true, isBot: false, diceCount: 5, eliminated: false, chips: 1000 },
+      { id: 'bot1', name: 'Bot 1', connected: true, isBot: true, diceCount: 5, eliminated: false, chips: 1000 },
+      { id: 'bot2', name: 'Bot 2', connected: true, isBot: true, diceCount: 5, eliminated: false, chips: 1000 },
+      { id: 'c', name: 'Charlie', connected: true, isBot: false, diceCount: 5, eliminated: false, chips: 1000 },
+    ];
+    const peers = derivePeerSet(players, 'a');
+    expect(peers).toEqual(new Set(['c']));
+  });
 });
 
 // ─── diffPeerSet ──────────────────────────────────────────────────────────────

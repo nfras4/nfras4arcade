@@ -7,8 +7,10 @@ import type { LDStateLike } from './types.js';
 
 /**
  * Derive the set of peer player IDs for a given player.
- * Peers are seated, non-eliminated, non-self players.
- * Connected/disconnected status is ignored (peers can reconnect).
+ * Peers are seated, non-eliminated, non-self, NON-BOT players. Bots have no
+ * WebSocket and cannot establish WebRTC peer connections; including them
+ * would silently burn RTCPeerConnections that never receive any signal back.
+ * Connected/disconnected status is ignored (humans can reconnect).
  */
 export function derivePeerSet(players: LDStateLike['players'], myId: string): Set<string> {
   const peers = new Set<string>();
@@ -17,7 +19,9 @@ export function derivePeerSet(players: LDStateLike['players'], myId: string): Se
     if (player.id === myId) continue;
     // Skip eliminated
     if (player.eliminated) continue;
-    // Include all other seated players
+    // Skip bots - they have no socket and cannot WebRTC
+    if (player.isBot) continue;
+    // Include all other seated human players
     peers.add(player.id);
   }
   return peers;

@@ -34,6 +34,8 @@ export class CardGameSocket {
   private wsPath: string;
   private currentRole: string | undefined = undefined;
   private isSpectateMode = false;
+  private hasEverConnected = false;
+  private reconnectCallbacks: Array<() => void> = [];
 
   constructor(wsPath: string) {
     this.wsPath = wsPath;
@@ -61,6 +63,18 @@ export class CardGameSocket {
           this.send({ type: 'join', code: roomCode });
           this.pendingJoin = false;
         }
+        // Fire reconnect callbacks only on actual reconnects, not the first
+        // connect of this instance. The join send above has already gone out
+        // (pendingJoin is set by scheduleReconnect), so consumers can safely
+        // assume the room rejoin is in flight.
+        if (this.hasEverConnected) {
+          for (const cb of this.reconnectCallbacks) {
+            try {
+              cb();
+            } catch {}
+          }
+        }
+        this.hasEverConnected = true;
         resolve();
       };
 
@@ -95,6 +109,19 @@ export class CardGameSocket {
   onMessage(handler: MessageHandler): () => void {
     this.handlers.add(handler);
     return () => this.handlers.delete(handler);
+  }
+
+  /**
+   * Register a callback fired after a successful reconnect (i.e. after the new
+   * WebSocket opens and the rejoin send has been dispatched). Does NOT fire on
+   * the very first connect of this instance. Returns an unregister function.
+   */
+  onReconnect(cb: () => void): () => void {
+    this.reconnectCallbacks.push(cb);
+    return () => {
+      const idx = this.reconnectCallbacks.indexOf(cb);
+      if (idx >= 0) this.reconnectCallbacks.splice(idx, 1);
+    };
   }
 
   joinRoom(code: string): void {

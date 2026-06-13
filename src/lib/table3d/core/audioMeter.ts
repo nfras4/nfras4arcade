@@ -12,6 +12,7 @@
  * @returns RMS in the range [0, 1]
  */
 export function rms(samples: Uint8Array): number {
+  if (samples.length === 0) return 0;
   let sum = 0;
   for (let i = 0; i < samples.length; i++) {
     const val = samples[i] / 255;
@@ -63,7 +64,8 @@ export function bandpassRms(
 export interface Envelope {
   /**
    * Update the envelope with a new RMS value.
-   * Returns the smoothed amplitude (0..1, clamped at 0.6 if reducedMotion).
+   * Non-finite inputs (NaN/Infinity) are sanitised to 0. The returned value is
+   * always within [0, 1] (and within [0, 0.6] if reducedMotion).
    */
   update(rms: number): number;
 
@@ -95,10 +97,19 @@ export function createEnvelope(opts: {
 
   return {
     update(rms: number): number {
-      // Apply gain and clamp to [0, 1] BEFORE the lerp so the envelope
-      // smooths the already-amplified target. Anything above 1 saturates
-      // (the jaw maths only consumes 0..1 anyway).
-      const target = Math.max(0, Math.min(1, rms * gain));
+      // Sanitise non-finite inputs first so gain + reducedMotion maths cannot
+      // be poisoned by NaN/Infinity (NaN propagates through every arithmetic
+      // op below; a non-finite accumulator is reset defensively).
+      if (!Number.isFinite(rms)) rms = 0;
+      if (!Number.isFinite(current)) current = 0;
+
+      // Apply gain BEFORE the lerp so the envelope smooths the already-amplified
+      // target. The ceiling is 0.6 under reducedMotion (smooth approach with no
+      // post-lerp kink), 1.0 otherwise. Anything above the ceiling saturates.
+      const ceiling = reducedMotion ? 0.6 : 1;
+      let target = rms * gain;
+      if (target < 0) target = 0;
+      else if (target > ceiling) target = ceiling;
 
       if (target > current) {
         current = current + (target - current) * attack;
@@ -106,9 +117,10 @@ export function createEnvelope(opts: {
         current = current + (target - current) * release;
       }
 
-      if (reducedMotion) {
-        current = Math.min(current, 0.6);
-      }
+      // Final clamp to documented [0, 1] range so out-of-range attack/release coefficients
+      // cannot leak overshoot/undershoot to callers.
+      if (current < 0) current = 0;
+      else if (current > 1) current = 1;
 
       return current;
     },

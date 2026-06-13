@@ -283,8 +283,8 @@
    * Called by VoiceJawDriver when polling audio streams.
    */
   function setRemoteAmplitude(peerId: string, value: number): void {
-    director.talkAmplitudes = {
-      ...director.talkAmplitudes,
+    director.voiceAmplitudes = {
+      ...director.voiceAmplitudes,
       [peerId]: value,
     };
   }
@@ -386,7 +386,10 @@
           <PlaceholderMonkey
             furColor={seat.furColour}
             expression={director.expressions[player.id] ?? 'neutral'}
-            talkAmplitude={director.talkAmplitudes[player.id] ?? 0}
+            talkAmplitude={Math.max(
+              director.chatterAmplitudes[player.id] ?? 0,
+              director.voiceAmplitudes[player.id] ?? 0,
+            )}
             hat="none"
           />
         </T.Group>
@@ -417,23 +420,29 @@
     <!-- Ritual overlay: displays banners during round-over ceremony -->
     <RitualOverlay banner={director.banner} names={playerNames} scale={fullTable ? 1.6 : 1} />
 
-    <!-- Chat bubbles: each positioned 4rem above its speaker's nameplate -->
+    <!-- Chat bubbles: each positioned 4rem above its speaker's nameplate.
+         Render UNCONDITIONALLY (do not gate the <ChatBubble> on pos.visible)
+         so the bubble's internal dwell timer always runs to completion and
+         onDone fires. If the speaker is offscreen/missing we hide the
+         positioner via display:none instead of unmounting; that keeps the
+         bubble component alive and the route's chatBubbles state in sync. -->
     {#each chatBubbles as bubble (bubble.id)}
       {@const pos = platePosMap[bubble.playerId]}
-      {#if pos?.visible}
-        <div
-          class="chat-bubble-positioner"
-          style="position: absolute; left: {pos.left}; top: calc({pos.top} - 4rem);"
-        >
-          <ChatBubble
-            text={bubble.text}
-            voice={bubble.voice}
-            startTs={bubble.ts}
-            onDone={() => onchatbubbledone?.(bubble.id)}
-            reducedMotion={window.matchMedia('(prefers-reduced-motion: reduce)').matches}
-          />
-        </div>
-      {/if}
+      {@const visible = pos?.visible === true}
+      <div
+        class="chat-bubble-positioner"
+        style={visible
+          ? `position: absolute; left: ${pos!.left}; top: calc(${pos!.top} - 4rem);`
+          : 'position: absolute; display: none;'}
+      >
+        <ChatBubble
+          text={bubble.text}
+          voice={bubble.voice}
+          startTs={bubble.ts}
+          onDone={() => onchatbubbledone?.(bubble.id)}
+          reducedMotion={window.matchMedia('(prefers-reduced-motion: reduce)').matches}
+        />
+      </div>
     {/each}
 
     {#each opponents as player (player.id)}

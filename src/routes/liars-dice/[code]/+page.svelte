@@ -15,6 +15,8 @@
   import { furColourFor } from '$lib/table3d/core/seats.js';
   import { playChatBlips } from '$lib/table3d/chatAudio.js';
   import { derivePeerSet, diffPeerSet } from '$lib/table3d/core/mesh.js';
+  import { bandpassRms, createEnvelope } from '$lib/table3d/core/audioMeter.js';
+  import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
   import type { EmoteId } from '$lib/table3d/core/emotes.js';
@@ -201,6 +203,11 @@
   let chatInput = $state('');
   let chatCooldownUntil = $state(0);
   let nextChatBubbleId = 0;
+
+  // ── Self-portrait amplitude (chat + voice driven) ──────────────────────────
+  let chatSelfAmp = $state(0);
+  let voiceSelfAmp = $state(0);
+  const selfAmp = $derived(Math.max(chatSelfAmp, voiceSelfAmp));
 
   // ── WebRTC Mesh Controller (Stage B: signaling only, no media) ──────────────
   let MeshController: typeof import('$lib/table3d/MeshController.js').MeshController | null = null;
@@ -562,6 +569,64 @@
     return () => {
       for (const cancel of pendingBlipCancels) cancel();
       pendingBlipCancels.clear();
+    };
+  });
+
+  // ── Self-portrait: fur colour and amplitude ──────────────────────────────────
+  // Compute the local player's assigned fur colour (mirroring layer seat assignment).
+  // We maintain a seat map to match the layer's own colour assignment logic.
+  let selfPortraitFurColour = $state('#8B5E3C'); // fallback
+  let selfSeatMap = new Map<string, { furColour: string }>();
+
+  $effect(() => {
+    if (!state) return;
+    // Recompute seat map: assign fur colours to all players
+    const newSeatMap = new Map<string, { furColour: string }>();
+    for (const player of state.players) {
+      const colour = furColourFor(player.id, player.isBot, newSeatMap);
+      newSeatMap.set(player.id, { furColour: colour });
+    }
+    selfSeatMap = newSeatMap;
+
+    // Extract the local player's fur colour
+    if (pid && newSeatMap.has(pid)) {
+      selfPortraitFurColour = newSeatMap.get(pid)?.furColour ?? '#8B5E3C';
+    }
+  });
+
+  // Self-portrait amplitude: chat-driven
+  // When the local player has an active chat bubble, raise chatSelfAmp.
+  $effect(() => {
+    const localPlayerBubble = chatBubbles.some((b) => b.playerId === pid);
+    chatSelfAmp = localPlayerBubble ? 0.5 : 0;
+  });
+
+  // Self-portrait amplitude: voice-driven
+  // Runs an AnalyserNode on the local mic stream whenever voice is joined and
+  // unmuted. Matches the remote-jaw driver maths (bandpassRms + createEnvelope).
+  $effect(() => {
+    if (voiceState !== 'joined' || selfMuted || !localStream) {
+      voiceSelfAmp = 0;
+      return;
+    }
+    const ctx = new AudioContext();
+    const source = ctx.createMediaStreamSource(localStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.4;
+    source.connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    const env = createEnvelope({ attack: 0.4, release: 0.15 });
+    const id = setInterval(() => {
+      analyser.getByteFrequencyData(buf);
+      const r = bandpassRms(buf, ctx.sampleRate, 512, 250, 3500);
+      voiceSelfAmp = env.update(r);
+    }, 10);
+    return () => {
+      clearInterval(id);
+      try { source.disconnect(); } catch { /* ignore */ }
+      try { ctx.close(); } catch { /* ignore */ }
+      voiceSelfAmp = 0;
     };
   });
 
@@ -931,11 +996,26 @@
             showEmoteStrip={!isTv}
             chatBubbles={chatBubbles}
             onchatbubbledone={handleChatBubbleDone}
+            chatLogEntries={chatLog}
+            chatLogNames={Object.fromEntries(state.players.map(p => [p.id, p.name]))}
+            chatLogTv={isTv}
           />
         {:else if layerLoadError}
           <p class="stage-error">{layerLoadError}</p>
         {:else}
           <p class="stage-loading">Loading 3D scene...</p>
+        {/if}
+
+        <!-- Self-portrait: show the local player's own monkey in bottom-right -->
+        {#if !isTv && pid && state.players.some((p) => p.id === pid)}
+          <div class="self-portrait-wrapper">
+            <SelfMonkeyPortrait
+              furColour={selfPortraitFurColour}
+              expression="neutral"
+              talkAmplitude={selfAmp}
+              playerName={state.players.find((p) => p.id === pid)?.name ?? 'You'}
+            />
+          </div>
         {/if}
       </div>
 
@@ -1042,23 +1122,6 @@
       {/each}
     </section>
 
-    <!-- Chat log: visible in every player view (table, classic, controller); hidden on TV.
-         Bubbles handle the same content above each seated speaker's monkey when seats are
-         available; the log is the universal fallback when the speaker has no seat (e.g. the
-         local player in non-selfseat desktop mode) and is also handy on phones. -->
-    {#if !isTv && chatLog.length > 0}
-      <section class="chat-log">
-        <div class="chat-log-title">Chat</div>
-        <div class="chat-log-entries">
-          {#each chatLog as entry (entry.id)}
-            <div class="chat-log-entry">
-              <span class="chat-log-name">{state.players.find((p) => p.id === entry.playerId)?.name ?? 'Unknown'}:</span>
-              <span class="chat-log-text">{entry.text}</span>
-            </div>
-          {/each}
-        </div>
-      </section>
-    {/if}
     {/if}
 
     <!-- Phase: lobby -->
@@ -2244,6 +2307,15 @@
     order: -1; /* Render before panel controls */
   }
 
+  /* ── Self-Portrait Wrapper ────────────────────────────────────────────────── */
+
+  .self-portrait-wrapper {
+    position: absolute;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 25;
+  }
+
   /* ── Cast Affordance Styling ───────────────────────────────────────────────── */
 
   .cast-disclosure {
@@ -2340,47 +2412,6 @@
   .chat-input:focus {
     outline: none;
     border-color: var(--accent, #4db8ff);
-  }
-
-  .chat-log {
-    margin-top: 1rem;
-    border: 1px solid var(--border, #4a6278);
-    border-radius: 4px;
-    background-color: var(--bg-panel, #1a2f4a);
-    padding: 0.75rem;
-    max-height: 6.5rem;
-    overflow-y: auto;
-  }
-
-  .chat-log-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-muted, #a8b8c4);
-    margin-bottom: 0.5rem;
-    text-transform: uppercase;
-  }
-
-  .chat-log-entries {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .chat-log-entry {
-    font-size: 0.8rem;
-    color: var(--text, #ffffff);
-    line-height: 1.2;
-    word-wrap: break-word;
-  }
-
-  .chat-log-name {
-    font-weight: 600;
-    color: var(--accent, #4db8ff);
-  }
-
-  .chat-log-text {
-    color: var(--text, #ffffff);
-    margin-left: 0.25rem;
   }
 
   .chat-bubble-positioner {

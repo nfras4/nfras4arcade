@@ -118,6 +118,7 @@ export function buildBlipRecipe(
  *
  * @param text          The message text.
  * @param charsPerSec   Reveal speed (default 30 chars/sec).
+ *                      Consumers currently pass 18 CPS for slower, more readable reveal.
  * @returns             { delaysMs, totalMs }
  *                      - delaysMs[i] = offset from t=0 at which char i is revealed
  *                      - totalMs = total reveal duration

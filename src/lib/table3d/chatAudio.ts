@@ -11,7 +11,7 @@
 import { playSting } from './audio.js';
 import { buildBlipRecipe, revealSchedule, type VoiceParams } from './core/chatVoice.js';
 
-const REVEAL_SPEED_CPS = 30;
+const REVEAL_SPEED_CPS = 18;
 
 /**
  * Play the Undertale-style blip sequence for a chat message.

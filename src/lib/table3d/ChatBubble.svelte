@@ -16,7 +16,7 @@
 
   // Constants
   const DWELL_MS = 4000;
-  const REVEAL_SPEED_CPS = 30;
+  const REVEAL_SPEED_CPS = 18;
 
   // Compute reveal schedule on mount
   const { delaysMs } = revealSchedule(text, REVEAL_SPEED_CPS);

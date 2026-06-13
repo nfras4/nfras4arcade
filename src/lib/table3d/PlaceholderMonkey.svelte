@@ -154,23 +154,15 @@
   headGroup.add(spiralR);
 
   // ── Muzzle: cream ellipsoid protruding at mouth level. ───────────────────────
-  const muzzleMat = mat(CREAM_COLOUR);
-  const muzzleGeo = new THREE.SphereGeometry(MUZZLE_RADIUS, 10, 8);
+  // Smooth-shaded (no facets, no nostrils): flat shading here put distracting
+  // seam lines around the nose; the muzzle should read as one soft cream mass.
+  const muzzleMat = mat(CREAM_COLOUR, 1, false);
+  const muzzleGeo = new THREE.SphereGeometry(MUZZLE_RADIUS, 12, 9);
   muzzleGeo.scale(1.25, 0.72, 0.75);
   const muzzleMesh = new THREE.Mesh(muzzleGeo, muzzleMat);
   muzzleMesh.name = 'MuzzleUpper';
   muzzleMesh.position.set(0, -0.24, 0.42);
   headGroup.add(muzzleMesh);
-
-  // Nostrils: two small dark dots on the muzzle bridge.
-  const nostrilMat = mat(DARK_BROWN, 0.8, false);
-  const nostrilGeo = new THREE.SphereGeometry(0.022, 8, 6);
-  const nostrilL = new THREE.Mesh(nostrilGeo, nostrilMat);
-  nostrilL.position.set(-0.075, -0.16, 0.63);
-  headGroup.add(nostrilL);
-  const nostrilR = new THREE.Mesh(nostrilGeo.clone(), nostrilMat.clone());
-  nostrilR.position.set(0.075, -0.16, 0.63);
-  headGroup.add(nostrilR);
 
   // ── Mouth line: deformable dark tube on the muzzle front. ────────────────────
   // A straight tube along X whose ring vertices are displaced each frame by

@@ -321,6 +321,11 @@
     } else {
       if (bidCount < 1) bidCount = 1;
       if (bidFace < 1 || bidFace > 6) bidFace = 2;
+      // Clamp a stale count when totalDice shrank between rounds; otherwise
+      // the opener can be left with no legal action (count stuck above the
+      // ceiling, raise disabled, nothing to call liar on).
+      const ceiling = s.players.reduce((sum, p) => sum + (p.eliminated ? 0 : p.diceCount), 0);
+      if (ceiling > 0 && bidCount > ceiling) bidCount = ceiling;
     }
   });
 
@@ -439,7 +444,10 @@
 
   function bumpCount(delta: number) {
     const next = bidCount + delta;
-    if (next < 1 || next > totalDice) return;
+    if (next < 1) return;
+    // Increments respect the ceiling; decrements are always allowed so a
+    // stale count above a shrunken totalDice can step back into range.
+    if (delta > 0 && next > totalDice) return;
     bidCount = next;
   }
 
@@ -1364,6 +1372,33 @@
     width: 100%;
   }
 
+  .table-mode .my-dice .die-row {
+    justify-content: center;
+    row-gap: 0.4rem;
+  }
+
+  /* Face picker: shrink buttons so all 6 fit in the 290px rail content row.
+     The global button padding (0.75rem 1.5rem) puts a 49.6px border-box floor
+     under each button, which both overflows the rail and defeats max-width;
+     zero the horizontal padding here so flex sizing can actually compress. */
+  .table-mode .face-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .table-mode .face-picker button {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    max-width: 2.6rem;
+    padding: 0.25rem 0;
+  }
+
+  /* Safety: allow label + picker to wrap if still too tight */
+  .table-mode .control-row {
+    flex-wrap: wrap;
+  }
+
   /* Stage band stretches to the full column width */
   .table-mode .stage-band {
     width: 100%;
@@ -1459,6 +1494,11 @@
       max-width: none;
       margin: 0;
       width: 100%;
+    }
+
+    .table-mode .my-dice .die-row {
+      justify-content: center;
+      row-gap: 0.4rem;
     }
   }
 </style>

@@ -124,6 +124,28 @@ describe('createEnvelope', () => {
     expect(result).toBeLessThanOrEqual(0.6);
   });
 
+  it('gain amplifies input before clamping', () => {
+    const plain = createEnvelope({ attack: 1.0, release: 0.15 });
+    const amped = createEnvelope({ attack: 1.0, release: 0.15, gain: 2.5 });
+    // Same modest RMS input
+    plain.update(0.25);
+    amped.update(0.25);
+    const plainSteady = plain.update(0.25);
+    const ampedSteady = amped.update(0.25);
+    // With gain 2.5, target = 0.625; plain target = 0.25
+    expect(ampedSteady).toBeGreaterThan(plainSteady);
+    expect(ampedSteady).toBeCloseTo(0.625, 1);
+    expect(plainSteady).toBeCloseTo(0.25, 1);
+  });
+
+  it('gain saturates at 1.0 even when product exceeds it', () => {
+    const env = createEnvelope({ attack: 1.0, release: 0.15, gain: 4.0 });
+    env.update(0.5);   // target = 4.0 * 0.5 = 2.0, clamped to 1.0
+    const result = env.update(0.5);
+    expect(result).toBeLessThanOrEqual(1.0);
+    expect(result).toBeCloseTo(1.0, 1);
+  });
+
   it('reset returns to 0', () => {
     const env = createEnvelope({ attack: 0.4, release: 0.15 });
     env.update(1.0);

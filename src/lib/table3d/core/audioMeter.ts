@@ -77,23 +77,33 @@ export interface Envelope {
  * @param opts Configuration options
  * @param opts.attack Lerp factor when rms > current (0..1, e.g. 0.4)
  * @param opts.release Lerp factor when rms < current (0..1, e.g. 0.15)
+ * @param opts.gain Multiplier applied to the rms input before clamping
+ *                  (default 1.0). Voice paths typically pass 2.5 so a
+ *                  normal speech RMS of 0.15-0.35 maps to a jaw-opening
+ *                  amplitude of 0.38-0.88 instead of barely flickering.
  * @param opts.reducedMotion When true, clamp output to 0..0.6
  * @returns Envelope object with update() and reset() methods
  */
 export function createEnvelope(opts: {
   attack: number;
   release: number;
+  gain?: number;
   reducedMotion?: boolean;
 }): Envelope {
   let current = 0;
-  const { attack, release, reducedMotion = false } = opts;
+  const { attack, release, gain = 1, reducedMotion = false } = opts;
 
   return {
     update(rms: number): number {
-      if (rms > current) {
-        current = current + (rms - current) * attack;
+      // Apply gain and clamp to [0, 1] BEFORE the lerp so the envelope
+      // smooths the already-amplified target. Anything above 1 saturates
+      // (the jaw maths only consumes 0..1 anyway).
+      const target = Math.max(0, Math.min(1, rms * gain));
+
+      if (target > current) {
+        current = current + (target - current) * attack;
       } else {
-        current = current + (rms - current) * release;
+        current = current + (target - current) * release;
       }
 
       if (reducedMotion) {

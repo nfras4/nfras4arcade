@@ -74,10 +74,14 @@ export class VoiceJawDriver {
 
     source.connect(analyser);
 
-    // Create envelope for smooth response
+    // Create envelope for smooth response. gain=2.5 lifts typical speech
+    // RMS (0.15-0.35) into a visible jaw-opening amplitude (0.38-0.88);
+    // the envelope post-clamp keeps things capped at 1.0 (or 0.6 under
+    // reduced motion).
     const envelope = createEnvelope({
       attack: 0.4,
       release: 0.15,
+      gain: 2.5,
       reducedMotion: this.reducedMotion,
     });
 

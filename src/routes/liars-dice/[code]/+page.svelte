@@ -616,7 +616,9 @@
     analyser.smoothingTimeConstant = 0.4;
     source.connect(analyser);
     const buf = new Uint8Array(analyser.frequencyBinCount);
-    const env = createEnvelope({ attack: 0.4, release: 0.15 });
+    // gain matches voiceJawDriver so the self-portrait jaw and remote jaws
+    // move at the same sensitivity for the same speaking energy.
+    const env = createEnvelope({ attack: 0.4, release: 0.15, gain: 2.5 });
     const id = setInterval(() => {
       analyser.getByteFrequencyData(buf);
       const r = bandpassRms(buf, ctx.sampleRate, 512, 250, 3500);

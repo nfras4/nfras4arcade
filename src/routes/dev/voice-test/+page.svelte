@@ -128,6 +128,7 @@
       micEnvelope = createEnvelope({
         attack: 0.4,
         release: 0.15,
+        gain: 2.5,
         reducedMotion,
       });
 

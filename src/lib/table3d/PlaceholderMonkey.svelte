@@ -326,6 +326,54 @@
   alertGroup.scale.set(0, 0, 0);
   anchorCrown.add(alertGroup);
 
+  // ── Zzz sleep-effect props ────────────────────────────────────────────────────
+  // Three staggered Z letters that drift upward and to the left above anchorCrown.
+  // Each Z is built from three RoundedBoxGeometry bars: top, diagonal, bottom.
+  // All three share a single yellow material (same as alertMat for consistency).
+
+  const zzzMat = mat(0xffd400, 0.5, true);
+
+  function buildZGroup(): THREE.Group {
+    const g = new THREE.Group();
+    // Top bar
+    const topBar = new THREE.Mesh(
+      new RoundedBoxGeometry(0.16, 0.035, 0.035, 2, 0.008),
+      zzzMat.clone()
+    );
+    topBar.position.set(0, 0.07, 0);
+    g.add(topBar);
+    // Diagonal bar: rotated so it goes from top-right to bottom-left
+    const diagBar = new THREE.Mesh(
+      new RoundedBoxGeometry(0.20, 0.035, 0.035, 2, 0.008),
+      zzzMat.clone()
+    );
+    diagBar.position.set(0, 0, 0);
+    diagBar.rotation.z = -0.6;
+    g.add(diagBar);
+    // Bottom bar
+    const botBar = new THREE.Mesh(
+      new RoundedBoxGeometry(0.16, 0.035, 0.035, 2, 0.008),
+      zzzMat.clone()
+    );
+    botBar.position.set(0, -0.07, 0);
+    g.add(botBar);
+    return g;
+  }
+
+  // Base position relative to anchorCrown: slightly upper-left above the head.
+  const ZZZ_BASE_X = -0.20;
+  const ZZZ_BASE_Y =  0.05;
+
+  const zGroups: THREE.Group[] = [];
+  for (let i = 0; i < 3; i++) {
+    const zg = buildZGroup();
+    zg.position.set(ZZZ_BASE_X, ZZZ_BASE_Y, 0);
+    zg.visible = false;
+    zg.scale.set(0, 0, 0);
+    anchorCrown.add(zg);
+    zGroups.push(zg);
+  }
+
   // ── Hands: hidden by default. ────────────────────────────────────────────────
   const handGeo  = new THREE.BoxGeometry(0.32, 0.24, 0.14, 1, 1, 1);
   const handMat  = mat(0xffffff);
@@ -456,6 +504,9 @@
   let alertScale = 0;
   let dropPhase  = 0;  // 0 = growing, 1 = settling
   let alertPhase = 0;
+
+  // Zzz: each Z animates on a staggered loop (period 2.4s, phase offsets 0/1/3/2/3).
+  const ZZZ_PERIOD = 2.4;
 
   const EFFECT_LERP = 0.22;
 
@@ -596,6 +647,74 @@
         const alertBaseY = 0.24;
         alertGroup.position.y = alertBaseY + Math.sin(elapsed * 4) * 0.02;
         alertGroup.rotation.z = Math.sin(elapsed * 3) * 0.05;
+      }
+    }
+
+    // ── Zzz sleep-effect animation ────────────────────────────────────────────
+    const showZzz = !!pose.showZzz;
+
+    if (reducedMotion) {
+      // Static: all 3 Z's at fixed staggered positions, no animation.
+      for (let i = 0; i < 3; i++) {
+        const zg = zGroups[i];
+        if (showZzz) {
+          const staticScale = 0.7 + i * 0.15;  // Z0 small, Z1 mid, Z2 larger
+          zg.scale.set(staticScale, staticScale, staticScale);
+          zg.position.set(ZZZ_BASE_X - i * 0.06, ZZZ_BASE_Y + i * 0.18, 0);
+          zg.visible = true;
+        } else {
+          zg.scale.set(0, 0, 0);
+          zg.visible = false;
+        }
+      }
+    } else {
+      // Animated: staggered loop with drift, scale-up, and fade-out via scale taper.
+      const PHASE_OFFSETS = [0, 1 / 3, 2 / 3];
+
+      for (let i = 0; i < 3; i++) {
+        const zg = zGroups[i];
+
+        if (!showZzz) {
+          // Lerp scale to 0 and hide once fully gone.
+          const s = zg.scale.x;
+          const next = s + (0 - s) * EFFECT_LERP;
+          zg.scale.set(next, next, next);
+          zg.visible = next > 0.01;
+          continue;
+        }
+
+        // Compute this Z's position within its staggered period [0, 1).
+        const rawT = ((elapsed / ZZZ_PERIOD) + PHASE_OFFSETS[i]) % 1;
+        // t drives the lifecycle: 0=pop-in start, 1=end of cycle.
+        const t = rawT;
+
+        let s: number;
+        let dx = 0;
+        let dy = 0;
+
+        if (t < 0.15) {
+          // Pop-in: scale 0 -> 1.0
+          s = t / 0.15;
+          dx = 0;
+          dy = 0;
+        } else if (t < 0.85) {
+          // Drift: float upward and left, grow gently from 1.0 to ~1.3
+          const progress = (t - 0.15) / 0.70;
+          s  = 1.0 + progress * 0.30;
+          dx = -progress * 0.18;
+          dy =  progress * 0.45;
+        } else {
+          // Fade-out: taper scale to 0
+          const fadeProgress = (t - 0.85) / 0.15;
+          s  = 1.3 * (1 - fadeProgress);
+          // Keep position at drift-end during fade
+          dx = -0.18;
+          dy =  0.45;
+        }
+
+        zg.position.set(ZZZ_BASE_X + dx, ZZZ_BASE_Y + dy, 0);
+        zg.scale.set(s, s, s);
+        zg.visible = s > 0.01;
       }
     }
   });

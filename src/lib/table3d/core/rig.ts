@@ -62,6 +62,8 @@ export interface ExpressionPose {
   showSweatDrop?: boolean;
   /** Show the floating exclamation-mark prop for this expression. */
   showAlert?: boolean;
+  /** Show the drifting Zzz sleep-effect above the head for this expression. */
+  showZzz?: boolean;
 }
 
 export interface MonkeyConfig {
@@ -163,6 +165,7 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     mouthCurve:   -0.10,  // slack, faintly down
     mouthWave:     0.15,
     mouthSkew:     0,
+    showZzz:       true,
   },
 
   /**

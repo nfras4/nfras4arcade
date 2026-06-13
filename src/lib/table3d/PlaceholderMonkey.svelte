@@ -258,6 +258,74 @@
   anchorMouth.position.set(0, -0.30, 0.68);
   headGroup.add(anchorMouth);
 
+  // ── Sweat droplet prop ────────────────────────────────────────────────────────
+  // Pale blue-white smooth sphere stretched into a drop shape.
+  // Anchored at the right temple, outside the head silhouette.
+  // 0.10 radius reads at table distance; teardrop stretch 1.5x on Y.
+  const sweatDropGeo = new THREE.SphereGeometry(0.10, 10, 8);
+  sweatDropGeo.scale(1.0, 1.5, 1.0); // taller than wide for teardrop silhouette
+
+  // Pull the top vertex up to suggest a point (move the topmost vertex cluster).
+  // The simplest approach: after scale the top ring is already narrowed; nudge
+  // the peak vertex up slightly for the teardrop tip.
+  const sweatPosAttr = sweatDropGeo.attributes.position;
+  let topY = -Infinity;
+  for (let i = 0; i < sweatPosAttr.count; i++) {
+    const y = sweatPosAttr.getY(i);
+    if (y > topY) topY = y;
+  }
+  for (let i = 0; i < sweatPosAttr.count; i++) {
+    if (sweatPosAttr.getY(i) >= topY - 0.001) {
+      sweatPosAttr.setY(i, sweatPosAttr.getY(i) + 0.05);
+    }
+  }
+  sweatPosAttr.needsUpdate = true;
+  sweatDropGeo.computeVertexNormals();
+
+  const sweatDropMesh = new THREE.Mesh(
+    sweatDropGeo,
+    mat(0xc8e8f5, 0.2, false)
+  );
+  sweatDropMesh.name = 'SweatDrop';
+  // Outside the ear disc (head half-width ~0.62 + ear radius 0.40), forward of
+  // it on Z so the camera at +Z doesn't lose it behind the ear.
+  const SWEAT_BASE_X =  0.82;
+  const SWEAT_BASE_Y =  0.40;
+  const SWEAT_BASE_Z =  0.28;
+  sweatDropMesh.position.set(SWEAT_BASE_X, SWEAT_BASE_Y, SWEAT_BASE_Z);
+  sweatDropMesh.visible = false;
+  sweatDropMesh.scale.set(0, 0, 0);
+  headGroup.add(sweatDropMesh);
+
+  // ── Exclamation mark prop ─────────────────────────────────────────────────────
+  // Two primitives (stem + dot) parented to a group, floated above anchorCrown.
+  const alertMat = mat(0xffd400, 0.5, true);
+
+  const alertGroup = new THREE.Group();
+  alertGroup.name = 'AlertGroup';
+
+  // Stem: tall rounded box. Larger to read clearly at table distance.
+  const alertStem = new THREE.Mesh(
+    new RoundedBoxGeometry(0.16, 0.48, 0.16, 2, 0.04),
+    alertMat
+  );
+  alertStem.position.set(0, 0.28, 0); // offset up so dot sits below
+  alertGroup.add(alertStem);
+
+  // Dot: sphere below the stem
+  const alertDot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.11, 10, 7),
+    alertMat.clone()
+  );
+  alertDot.position.set(0, -0.10, 0);
+  alertGroup.add(alertDot);
+
+  // Float above anchorCrown, slightly closer than before so it sits in frame.
+  alertGroup.position.set(0, 0.24, 0);
+  alertGroup.visible = false;
+  alertGroup.scale.set(0, 0, 0);
+  anchorCrown.add(alertGroup);
+
   // ── Hands: hidden by default. ────────────────────────────────────────────────
   const handGeo  = new THREE.BoxGeometry(0.32, 0.24, 0.14, 1, 1, 1);
   const handMat  = mat(0xffffff);
@@ -380,6 +448,17 @@
   let curMouthSkew  = 0;
   let elapsed       = 0;
 
+  // ── Effect prop scale state ───────────────────────────────────────────────────
+  // Each prop uses a two-phase lerp for a pop-in overshoot on grow, plain lerp
+  // on shrink. dropPhase/alertPhase track whether we're in phase 0 (growing to
+  // 1.08 overshoot) or phase 1 (settling from 1.08 to 1.0).
+  let dropScale  = 0;
+  let alertScale = 0;
+  let dropPhase  = 0;  // 0 = growing, 1 = settling
+  let alertPhase = 0;
+
+  const EFFECT_LERP = 0.22;
+
   // ── Frame loop ────────────────────────────────────────────────────────────────
   useTask((delta) => {
     elapsed += delta;
@@ -460,6 +539,65 @@
     headGroup.rotation.z = headRotZ;
     headGroup.rotation.x = headRotX;
     headGroup.position.z = headPosZ;
+
+    // ── Effect prop animation ─────────────────────────────────────────────────
+    const targetDrop  = pose.showSweatDrop ? 1 : 0;
+    const targetAlert = pose.showAlert     ? 1 : 0;
+
+    if (reducedMotion) {
+      dropScale  = targetDrop;
+      alertScale = targetAlert;
+      dropPhase  = targetDrop > 0 ? 1 : 0;
+      alertPhase = targetAlert > 0 ? 1 : 0;
+    } else {
+      // Sweat drop: two-phase lerp with overshoot on grow-in.
+      if (targetDrop > 0) {
+        if (dropPhase === 0) {
+          // Phase 0: grow toward 1.08 (overshoot target)
+          dropScale += (1.08 - dropScale) * EFFECT_LERP;
+          if (dropScale >= 1.0) dropPhase = 1;
+        } else {
+          // Phase 1: settle from overshoot to 1.0
+          dropScale += (1.0 - dropScale) * EFFECT_LERP;
+        }
+      } else {
+        // Shrinking: plain lerp to 0, reset phase for next show
+        dropScale += (0 - dropScale) * EFFECT_LERP;
+        if (dropScale < 0.01) { dropScale = 0; dropPhase = 0; }
+      }
+
+      // Exclamation mark: same two-phase logic.
+      if (targetAlert > 0) {
+        if (alertPhase === 0) {
+          alertScale += (1.08 - alertScale) * EFFECT_LERP;
+          if (alertScale >= 1.0) alertPhase = 1;
+        } else {
+          alertScale += (1.0 - alertScale) * EFFECT_LERP;
+        }
+      } else {
+        alertScale += (0 - alertScale) * EFFECT_LERP;
+        if (alertScale < 0.01) { alertScale = 0; alertPhase = 0; }
+      }
+    }
+
+    // Apply scale + visibility
+    sweatDropMesh.visible = dropScale > 0.01;
+    sweatDropMesh.scale.set(dropScale, dropScale, dropScale);
+
+    alertGroup.visible = alertScale > 0.01;
+    alertGroup.scale.set(alertScale, alertScale, alertScale);
+
+    // Idle motion when visible (skipped under reduced motion)
+    if (!reducedMotion) {
+      if (sweatDropMesh.visible) {
+        sweatDropMesh.position.y = SWEAT_BASE_Y + Math.sin(elapsed * 3) * 0.015;
+      }
+      if (alertGroup.visible) {
+        const alertBaseY = 0.24;
+        alertGroup.position.y = alertBaseY + Math.sin(elapsed * 4) * 0.02;
+        alertGroup.rotation.z = Math.sin(elapsed * 3) * 0.05;
+      }
+    }
   });
 </script>
 

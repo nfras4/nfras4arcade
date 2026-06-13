@@ -58,6 +58,10 @@ export interface ExpressionPose {
   mouthWave: number;
   /** Chin tilt -1..1: jaw swings to one side (smirk). */
   mouthSkew: number;
+  /** Show the floating sweat-droplet prop for this expression. */
+  showSweatDrop?: boolean;
+  /** Show the floating exclamation-mark prop for this expression. */
+  showAlert?: boolean;
 }
 
 export interface MonkeyConfig {
@@ -87,8 +91,8 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
   grin: {
     jawRad:        0.12,
     eyeScale:      0.85,
-    browOffset:    0,
-    browPinch:     0,
+    browOffset:    0.05,
+    browPinch:    -0.04,
     headTiltDeg:   4,
     headPitchDeg:  0,
     headPullBack:  0,
@@ -100,7 +104,7 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
   shock: {
     jawRad:        0.40,
     eyeScale:      1.30,
-    browOffset:    0.08,  // raised brows
+    browOffset:    0.14,  // raised brows
     browPinch:     0,
     headTiltDeg:   0,
     headPitchDeg:  0,
@@ -109,12 +113,13 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     mouthCurve:   -0.15,  // slack; the open jaw carries the read
     mouthWave:     0,
     mouthSkew:     0,
+    showAlert:     true,
   },
   sweat: {
     jawRad:        0,
     eyeScale:      0.70,
-    browOffset:    0,
-    browPinch:     0.12,  // pinched inward
+    browOffset:   -0.03,
+    browPinch:     0.22,  // pinched inward
     headTiltDeg:   0,
     headPitchDeg:  0,
     headPullBack:  0,
@@ -122,6 +127,7 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
     mouthCurve:   -0.35,  // anxious downturn
     mouthWave:     1.0,   // maximum wobble
     mouthSkew:     0,
+    showSweatDrop: true,
   },
   /**
    * laugh: vindicated player's triumphant reaction during the Liar's Ritual VERDICT cue.
@@ -130,8 +136,8 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
   laugh: {
     jawRad:        0.30,
     eyeScale:      0.85,
-    browOffset:    0.06,
-    browPinch:     0,
+    browOffset:    0.10,
+    browPinch:    -0.06,
     headTiltDeg:   5,
     headPitchDeg:  0,
     headPullBack:  0,
@@ -148,7 +154,7 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
   asleep: {
     jawRad:        0.08,  // mouth slightly slack
     eyeScale:      0.15,  // nearly closed
-    browOffset:   -0.04,  // brows low, heavy
+    browOffset:   -0.06,  // brows low, heavy
     browPinch:     0,
     headTiltDeg:   3,     // slight list to one side
     headPitchDeg:  28,    // chin toward chest -- reads as "passed out" at distance
@@ -166,8 +172,8 @@ export const EXPRESSION_POSES: Record<ExpressionName, ExpressionPose> = {
   smug: {
     jawRad:        0.06,  // barely-open smirk
     eyeScale:      0.78,  // narrowed, knowing
-    browOffset:    0.03,  // one brow raised (approximated via uniform offset + pinch asymmetry)
-    browPinch:    -0.06,  // outward slant -- opposite of sweat's worry pinch
+    browOffset:    0.04,  // one brow raised (approximated via uniform offset + pinch asymmetry)
+    browPinch:    -0.08,  // outward slant -- opposite of sweat's worry pinch
     headTiltDeg:   6,     // distinct lean, reads clearly at distance
     headPitchDeg: -2,     // chin ever so slightly up (confident)
     headPullBack:  0,

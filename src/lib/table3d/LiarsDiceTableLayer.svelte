@@ -7,8 +7,9 @@
   import TableDirectorTick from './TableDirectorTick.svelte';
   import RitualSpotlight from './RitualSpotlight.svelte';
   import KeySpotlight from './KeySpotlight.svelte';
+  import RitualOverlay from './RitualOverlay.svelte';
   import { TableDirector } from './TableDirector.svelte.js';
-  import { assignSeats } from './core/seats.js';
+  import { assignSeats, MONKEY_SCALE } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
   import type { LDStateLike } from './core/types.js';
   import { EMOTE_LIST, EMOTE_REGISTRY, type EmoteId } from './core/emotes.js';
@@ -70,6 +71,10 @@
     director.ritualTimescale = ritualTimescale;
   });
 
+  $effect(() => {
+    director.onesWild = ldState.onesWild;
+  });
+
   // ── Reduced-motion via matchMedia (runtime, not prop) ─────────────────────
   $effect(() => {
     if (reducedMotionOverride !== undefined) return; // prop wins
@@ -98,8 +103,17 @@
   const opponents = $derived(ldState.players.filter((p) => p.id !== ldState.myId));
   const opponentIds = $derived(opponents.map((p) => p.id));
 
+  // ── Player name map for ritual overlay ──────────────────────────────────────────
+  const playerNames = $derived.by(() => {
+    const names: Record<string, string> = {};
+    for (const player of ldState.players) {
+      names[player.id] = player.name;
+    }
+    return names;
+  });
+
   // ── Nameplate overlay state ───────────────────────────────────────────────────
-  const HEAD_OFFSET_Y = 0.95;
+  const HEAD_OFFSET_Y = 0.95 * MONKEY_SCALE;
 
   type PlatePos = { left: string; top: string; visible: boolean };
   let platePosMap = $state<Record<string, PlatePos>>({});
@@ -279,6 +293,7 @@
         <T.Group
           position={seat.transform.position}
           rotation={[0, seat.transform.rotationY, 0]}
+          scale={MONKEY_SCALE}
         >
           <PlaceholderMonkey
             furColor={seat.furColour}
@@ -304,6 +319,9 @@
 
   <!-- Nameplate overlay: absolutely positioned on top of the Canvas, pointer-events none -->
   <div class="nameplate-layer" aria-hidden="true">
+    <!-- Ritual overlay: displays banners during round-over ceremony -->
+    <RitualOverlay banner={director.banner} names={playerNames} />
+
     {#each opponents as player (player.id)}
       {@const pos = platePosMap[player.id]}
       {#if pos?.visible}

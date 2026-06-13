@@ -36,10 +36,17 @@ export interface SeatAssignment {
 // ─── Arc geometry constants ───────────────────────────────────────────────────
 
 /**
+ * Uniform scale applied to each seated monkey's root.
+ * Tuned so heads clear each other on the arc (at full scale, heads are ~2 units wide
+ * including ears, but arc seat spacing is ~1.2 units; scaling to 0.62 prevents overlap).
+ */
+export const MONKEY_SCALE = 0.62;
+
+/**
  * Radius of the seating arc from the table centre, in scene units.
  * Monkeys sit around the far half of a barrel roughly 2.4 units wide.
  */
-const ARC_RADIUS = 2.15;
+const ARC_RADIUS = 2.30;
 
 /**
  * Y position of monkey Root nodes. Felt surface is at y=0.06 (BarrelTable);
@@ -51,10 +58,10 @@ const SEAT_Y = 0.35;
 /**
  * Half-angle of the seating arc in degrees (total spread = 130 degrees).
  *
- * With HALF_ARC_DEG = 65 and ARC_RADIUS = 2.15:
- *   Slot 0 (far left):   angleDeg = -65, x ~ -1.95, z ~ -0.91
- *   Slot 2 (centre):     angleDeg =   0, x =  0,    z = -2.15
- *   Slot 4 (far right):  angleDeg = +65, x ~ +1.95, z ~ -0.91
+ * With HALF_ARC_DEG = 65 and ARC_RADIUS = 2.30:
+ *   Slot 0 (far left):   angleDeg = -65, x ~ -2.08, z ~ -0.97
+ *   Slot 2 (centre):     angleDeg =   0, x =  0,    z = -2.30
+ *   Slot 4 (far right):  angleDeg = +65, x ~ +2.08, z ~ -0.97
  * All seats sit on the far half of the table and inside the horizontal FOV of
  * the authored camera (FOV 42 at [0, 1.5, 3.6]). Wider values clip the end
  * seats at the frame edges; 150 (the original) put them behind the camera.

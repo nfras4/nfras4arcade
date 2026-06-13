@@ -14,6 +14,7 @@
   import { voiceParamsFor } from '$lib/table3d/core/chatVoice.js';
   import { furColourFor } from '$lib/table3d/core/seats.js';
   import { playChatBlips } from '$lib/table3d/chatAudio.js';
+  import { derivePeerSet, diffPeerSet } from '$lib/table3d/core/mesh.js';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
   import type { EmoteId } from '$lib/table3d/core/emotes.js';
@@ -200,6 +201,11 @@
   let chatInput = $state('');
   let chatCooldownUntil = $state(0);
   let nextChatBubbleId = 0;
+
+  // ── WebRTC Mesh Controller (Stage B: signaling only, no media) ──────────────
+  let MeshController: typeof import('$lib/table3d/MeshController.js').MeshController | null = null;
+  let mesh: InstanceType<typeof import('$lib/table3d/MeshController.js').MeshController> | null = null;
+  let prevPeerSet = new Set<string>();
 
   // ── Controller view initialization ─────────────────────────────────────────
   // Resolves the default exactly once per tablePresent=true session.
@@ -456,6 +462,11 @@
             chatLog = [...chatLog, entry].slice(-12);
           }
         }
+      } else if (msg.type === 'rtc_signal') {
+        // Forward WebRTC signaling to mesh controller
+        if (mesh) {
+          mesh.handleSignal(msg.from, msg.payload);
+        }
       }
       dispatchRelayMessages(msg);
     });
@@ -529,6 +540,55 @@
       clearTimeout(liarStampTimer);
       clearTimeout(matchIgniteTimer);
     };
+  });
+
+  // ── Mesh Controller lifecycle ──────────────────────────────────────────────
+  // Lazy-import MeshController only for seated players (not TV, not spectators).
+  // Initialize once when state and pid become known.
+  $effect(() => {
+    if (isTv) return;
+    if (!state || !pid) return;
+    // Only seated players use the mesh
+    const isSeatedPlayer = state.players.some((p) => p.id === pid);
+    if (!isSeatedPlayer) return;
+
+    if (!MeshController) {
+      import('$lib/table3d/MeshController.js').then((mod) => {
+        MeshController = mod.MeshController;
+        if (!mesh && MeshController) {
+          mesh = new MeshController({
+            selfId: pid,
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+            sendSignal: (to: string, payload: unknown) => {
+              socket.send({ type: 'rtc_signal', to, payload });
+            },
+            onPeerConnectionStateChange: (peerId: string, state: RTCPeerConnectionState) => {
+              if (import.meta.env.DEV) {
+                console.log('[mesh]', peerId, state);
+              }
+            },
+          });
+        }
+      });
+    }
+
+    return () => {
+      if (mesh) {
+        mesh.dispose();
+        mesh = null;
+      }
+    };
+  });
+
+  // ── Peer set tracking: update mesh whenever peer list changes ──────────────
+  $effect(() => {
+    if (!mesh || !state) return;
+    const nextPeerSet = derivePeerSet(state.players, pid!);
+    const diff = diffPeerSet(prevPeerSet, nextPeerSet);
+    if (diff.added.length > 0 || diff.removed.length > 0) {
+      mesh.updatePeers(nextPeerSet);
+      prevPeerSet = nextPeerSet;
+    }
   });
 
   let state = $derived($gameState);

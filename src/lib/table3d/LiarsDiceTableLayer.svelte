@@ -21,6 +21,7 @@
   /** Handle returned via onready so the parent can route WS emote messages in. */
   export interface LayerHandle {
     handleRemoteEmote(playerId: string, emoteId: string): void;
+    setRemoteAmplitude(peerId: string, value: number): void;
   }
 
   // ── Props ────────────────────────────────────────────────────────────────────
@@ -260,9 +261,20 @@
     }
   }
 
+  /**
+   * Set the talk amplitude for a remote peer (audio-driven jaw flap).
+   * Called by VoiceJawDriver when polling audio streams.
+   */
+  function setRemoteAmplitude(peerId: string, value: number): void {
+    director.talkAmplitudes = {
+      ...director.talkAmplitudes,
+      [peerId]: value,
+    };
+  }
+
   // Publish the handle once on mount so the parent can route WS messages in.
   $effect(() => {
-    onready?.({ handleRemoteEmote });
+    onready?.({ handleRemoteEmote, setRemoteAmplitude });
   });
 
   // Mount/unmount logging for diagnostics

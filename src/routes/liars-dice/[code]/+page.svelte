@@ -216,6 +216,9 @@
   let remoteMutes = $state<Record<string, boolean>>({});
   const REMOTE_MUTES_KEY = 'ld-remote-mute';
 
+  // ── Voice jaw driver (Stage D: audio-driven jaw flap) ──────────────────────
+  let jawDriver: InstanceType<typeof import('$lib/table3d/voiceJawDriver.js').VoiceJawDriver> | null = null;
+
   // Load remote mutes from localStorage on mount
   $effect(() => {
     if (typeof localStorage === 'undefined') return;
@@ -584,6 +587,18 @@
       import('$lib/table3d/MeshController.js').then((mod) => {
         MeshController = mod.MeshController;
         if (!mesh && MeshController) {
+          // Initialize jaw driver for audio-driven jaw flap
+          if (!jawDriver && layerHandle) {
+            import('$lib/table3d/voiceJawDriver.js').then((mod) => {
+              jawDriver = new mod.VoiceJawDriver({
+                setAmplitude: (peerId: string, value: number) => {
+                  layerHandle?.setRemoteAmplitude(peerId, value);
+                },
+                reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+              });
+            });
+          }
+
           mesh = new MeshController({
             selfId: pid,
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
@@ -600,6 +615,8 @@
               if (!remoteAudioRefs[peerId]) {
                 // Audio element will be created by the template and bound via bind:this
               }
+              // Attach to jaw driver for audio-driven jaw flap
+              jawDriver?.attach(peerId, stream);
             },
             onPeerRemoved: (peerId: string) => {
               remoteStreams = { ...remoteStreams };
@@ -608,6 +625,8 @@
               delete remoteAudioRefs[peerId];
               remoteMutes = { ...remoteMutes };
               delete remoteMutes[peerId];
+              // Detach from jaw driver
+              jawDriver?.detach(peerId);
             },
           });
         }
@@ -615,6 +634,10 @@
     }
 
     return () => {
+      if (jawDriver) {
+        jawDriver.dispose();
+        jawDriver = null;
+      }
       if (mesh) {
         mesh.dispose();
         mesh = null;

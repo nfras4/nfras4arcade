@@ -11,9 +11,14 @@
   import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
   import { createShakeDetector } from '$lib/table3d/shake.js';
+  import { voiceParamsFor } from '$lib/table3d/core/chatVoice.js';
+  import { furColourFor } from '$lib/table3d/core/seats.js';
+  import { playChatBlips } from '$lib/table3d/chatAudio.js';
+  import { derivePeerSet, diffPeerSet } from '$lib/table3d/core/mesh.js';
   import type { Component } from 'svelte';
   import type { LDStateLike } from '$lib/table3d/core/types.js';
   import type { EmoteId } from '$lib/table3d/core/emotes.js';
+  import type { VoiceParams } from '$lib/table3d/core/chatVoice.js';
   import type { LayerHandle } from '$lib/table3d/LiarsDiceTableLayer.svelte';
 
   const code = $page.params.code!;
@@ -99,6 +104,8 @@
     state: LDStateLike;
     onemote?: (emoteId: EmoteId) => void;
     onready?: (handle: LayerHandle) => void;
+    chatBubbles?: ChatBubbleEntry[];
+    onchatbubbledone?: (id: number) => void;
   };
   // $state.raw: prevents Svelte deep-clone/snapshot on Component constructor.
   let LayerComp = $state.raw<Component<LayerProps> | null>(null);
@@ -119,6 +126,20 @@
 
   function handleLayerEmote(emoteId: EmoteId): void {
     socket.send({ type: 'emote', emoteId });
+  }
+
+  function handleSendChat(): void {
+    const now = Date.now();
+    if (now < chatCooldownUntil) return;
+    if (!chatInput.trim()) return;
+
+    socket.send({ type: 'chat', text: chatInput });
+    chatInput = '';
+    chatCooldownUntil = now + 1500;
+  }
+
+  function handleChatBubbleDone(id: number): void {
+    chatBubbles = chatBubbles.filter((b) => b.id !== id);
   }
 
   interface PlayerView {
@@ -165,6 +186,57 @@
   const gameState = writable<LDState | null>(null);
   const myPlayerId = writable<string | null>(null);
   const errorMsg = writable<string | null>(null);
+
+  // ── Chat state ─────────────────────────────────────────────────────────────
+  interface ChatBubbleEntry {
+    id: number;
+    playerId: string;
+    text: string;
+    ts: number;
+    voice: VoiceParams;
+  }
+
+  let chatBubbles = $state<ChatBubbleEntry[]>([]);
+  let chatLog = $state<ChatBubbleEntry[]>([]);
+  let chatInput = $state('');
+  let chatCooldownUntil = $state(0);
+  let nextChatBubbleId = 0;
+
+  // ── WebRTC Mesh Controller (Stage B: signaling only, no media) ──────────────
+  let MeshController: typeof import('$lib/table3d/MeshController.js').MeshController | null = null;
+  let mesh: InstanceType<typeof import('$lib/table3d/MeshController.js').MeshController> | null = null;
+  let prevPeerSet = new Set<string>();
+
+  // ── Voice state (Stage C: media + audio) ────────────────────────────────────
+  let voiceState = $state<'off' | 'requesting' | 'joined' | 'denied' | 'unsupported'>('off');
+  let localStream = $state<MediaStream | null>(null);
+  let selfMuted = $state(false);
+  let remoteStreams = $state<Record<string, MediaStream>>({});
+  let remoteAudioRefs = $state<Record<string, HTMLAudioElement>>({});
+  let remoteMutes = $state<Record<string, boolean>>({});
+  const REMOTE_MUTES_KEY = 'ld-remote-mute';
+
+  // ── Voice jaw driver (Stage D: audio-driven jaw flap) ──────────────────────
+  let jawDriver: InstanceType<typeof import('$lib/table3d/voiceJawDriver.js').VoiceJawDriver> | null = null;
+
+  // Load remote mutes from localStorage on mount
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    const stored = localStorage.getItem(REMOTE_MUTES_KEY);
+    if (stored) {
+      try {
+        remoteMutes = JSON.parse(stored) as Record<string, boolean>;
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  });
+
+  // Persist remote mutes on change
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(REMOTE_MUTES_KEY, JSON.stringify(remoteMutes));
+  });
 
   // ── Controller view initialization ─────────────────────────────────────────
   // Resolves the default exactly once per tablePresent=true session.
@@ -400,6 +472,32 @@
         errorTimeout = setTimeout(() => errorMsg.set(null), 4000);
       } else if (msg.type === 'player_emote') {
         layerHandle?.handleRemoteEmote(msg.playerId, msg.emoteId);
+      } else if (msg.type === 'player_chat') {
+        // Derive voice params from the player's fur colour
+        const s = $gameState;
+        if (s) {
+          const player = s.players.find((p) => p.id === msg.playerId);
+          if (player) {
+            const furColour = furColourFor(msg.playerId, player.isBot, new Map());
+            const voice = voiceParamsFor(furColour);
+            const entry: ChatBubbleEntry = {
+              id: nextChatBubbleId++,
+              playerId: msg.playerId,
+              text: msg.text,
+              ts: msg.ts,
+              voice,
+            };
+            // Add to floating bubbles (table view)
+            chatBubbles = [...chatBubbles, entry];
+            // Add to chat log (classic view, capped at 12 entries)
+            chatLog = [...chatLog, entry].slice(-12);
+          }
+        }
+      } else if (msg.type === 'rtc_signal') {
+        // Forward WebRTC signaling to mesh controller
+        if (mesh) {
+          mesh.handleSignal(msg.from, msg.payload);
+        }
       }
       dispatchRelayMessages(msg);
     });
@@ -444,12 +542,118 @@
     }
   });
 
+  // ── Chat audio: play blips once per new chatLog entry (all views) ──────────
+  // Audio is centralised here so no double-play occurs when both bubble and
+  // chat log are active. The bubble is purely visual; this effect is the
+  // single audio source for all views (table, controller, classic).
+  // Concurrent chats from different players are allowed to overlap (each has
+  // a different voice pitch); the rate limit caps a single player to one
+  // message per 1500ms so same-voice overlap is naturally rare.
+  let lastProcessedChatId = -1;
+  const pendingBlipCancels = new Set<() => void>();
+  $effect(() => {
+    const newEntries = chatLog.filter((e) => e.id > lastProcessedChatId);
+    if (newEntries.length === 0) return;
+    for (const entry of newEntries) {
+      if (entry.id > lastProcessedChatId) lastProcessedChatId = entry.id;
+      const cancel = playChatBlips(entry.text, entry.voice);
+      pendingBlipCancels.add(cancel);
+    }
+    return () => {
+      for (const cancel of pendingBlipCancels) cancel();
+      pendingBlipCancels.clear();
+    };
+  });
+
   // Cleanup timers on destroy
   $effect(() => {
     return () => {
       clearTimeout(liarStampTimer);
       clearTimeout(matchIgniteTimer);
     };
+  });
+
+  // ── Mesh Controller lifecycle ──────────────────────────────────────────────
+  // Lazy-import MeshController only for seated players (not TV, not spectators).
+  // Initialize once when state and pid become known.
+  $effect(() => {
+    if (isTv) return;
+    if (!state || !pid) return;
+    // Only seated players use the mesh
+    const isSeatedPlayer = state.players.some((p) => p.id === pid);
+    if (!isSeatedPlayer) return;
+
+    if (!MeshController) {
+      import('$lib/table3d/MeshController.js').then((mod) => {
+        MeshController = mod.MeshController;
+        if (!mesh && MeshController) {
+          // Initialize jaw driver for audio-driven jaw flap
+          if (!jawDriver && layerHandle) {
+            import('$lib/table3d/voiceJawDriver.js').then((mod) => {
+              jawDriver = new mod.VoiceJawDriver({
+                setAmplitude: (peerId: string, value: number) => {
+                  layerHandle?.setRemoteAmplitude(peerId, value);
+                },
+                reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+              });
+            });
+          }
+
+          mesh = new MeshController({
+            selfId: pid,
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+            sendSignal: (to: string, payload: unknown) => {
+              socket.send({ type: 'rtc_signal', to, payload });
+            },
+            onPeerConnectionStateChange: (peerId: string, state: RTCPeerConnectionState) => {
+              if (import.meta.env.DEV) {
+                console.log('[mesh]', peerId, state);
+              }
+            },
+            onRemoteStream: (peerId: string, stream: MediaStream) => {
+              remoteStreams = { ...remoteStreams, [peerId]: stream };
+              if (!remoteAudioRefs[peerId]) {
+                // Audio element will be created by the template and bound via bind:this
+              }
+              // Attach to jaw driver for audio-driven jaw flap
+              jawDriver?.attach(peerId, stream);
+            },
+            onPeerRemoved: (peerId: string) => {
+              remoteStreams = { ...remoteStreams };
+              delete remoteStreams[peerId];
+              remoteAudioRefs = { ...remoteAudioRefs };
+              delete remoteAudioRefs[peerId];
+              remoteMutes = { ...remoteMutes };
+              delete remoteMutes[peerId];
+              // Detach from jaw driver
+              jawDriver?.detach(peerId);
+            },
+          });
+        }
+      });
+    }
+
+    return () => {
+      if (jawDriver) {
+        jawDriver.dispose();
+        jawDriver = null;
+      }
+      if (mesh) {
+        mesh.dispose();
+        mesh = null;
+      }
+    };
+  });
+
+  // ── Peer set tracking: update mesh whenever peer list changes ──────────────
+  $effect(() => {
+    if (!mesh || !state) return;
+    const nextPeerSet = derivePeerSet(state.players, pid!);
+    const diff = diffPeerSet(prevPeerSet, nextPeerSet);
+    if (diff.added.length > 0 || diff.removed.length > 0) {
+      mesh.updatePeers(nextPeerSet);
+      prevPeerSet = nextPeerSet;
+    }
   });
 
   let state = $derived($gameState);
@@ -611,6 +815,102 @@
       ? `${window.location.origin}/liars-dice/${code}?role=table`
       : ''
   );
+
+  // ── Voice handlers ─────────────────────────────────────────────────────────
+
+  async function joinVoice(): Promise<void> {
+    // Check for platform support
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+      voiceState = 'unsupported';
+      return;
+    }
+
+    voiceState = 'requesting';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStream = stream;
+      if (mesh) {
+        mesh.attachLocalStream(stream);
+      }
+      voiceState = 'joined';
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        voiceState = 'denied';
+      } else if (err.name === 'NotFoundError') {
+        voiceState = 'unsupported';
+      } else {
+        voiceState = 'unsupported';
+        if (import.meta.env.DEV) {
+          console.error('[voice] getUserMedia failed:', err);
+        }
+      }
+    }
+  }
+
+  async function leaveVoice(): Promise<void> {
+    if (localStream) {
+      localStream.getTracks().forEach((t) => t.stop());
+      localStream = null;
+    }
+    if (mesh) {
+      mesh.detachLocalStream();
+    }
+    selfMuted = false;
+    voiceState = 'off';
+  }
+
+  function toggleSelfMute(): void {
+    if (!localStream) return;
+    selfMuted = !selfMuted;
+    localStream.getAudioTracks().forEach((t) => {
+      t.enabled = !selfMuted;
+    });
+  }
+
+  function toggleRemoteMute(peerId: string): void {
+    remoteMutes = {
+      ...remoteMutes,
+      [peerId]: !remoteMutes[peerId],
+    };
+  }
+
+  // ── Voice cleanup on unmount ───────────────────────────────────────────────
+  $effect(() => {
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach((t) => t.stop());
+        localStream = null;
+      }
+    };
+  });
+
+  // ── Mesh callbacks for remote streams ───────────────────────────────────────
+  function wireVoiceCallbacks(): void {
+    if (!mesh) return;
+
+    // Already wired in the mesh construction, but here for clarity
+    // See: mesh = new MeshController({ ..., onRemoteStream, onPeerRemoved })
+  }
+
+  // ── Apply remote mute state ────────────────────────────────────────────────
+  $effect(() => {
+    for (const [peerId, audioEl] of Object.entries(remoteAudioRefs)) {
+      if (audioEl) {
+        audioEl.muted = remoteMutes[peerId] ?? false;
+      }
+    }
+  });
+
+  // ── Apply remote streams to audio elements ──────────────────────────────────
+  $effect(() => {
+    for (const [peerId, stream] of Object.entries(remoteStreams)) {
+      const audioEl = remoteAudioRefs[peerId];
+      if (audioEl && stream) {
+        audioEl.srcObject = stream;
+      }
+    }
+  });
+
 </script>
 
 {#if $errorMsg}
@@ -629,6 +929,8 @@
             onready={handleLayerReady}
             fullTable={isTv || selfSeat}
             showEmoteStrip={!isTv}
+            chatBubbles={chatBubbles}
+            onchatbubbledone={handleChatBubbleDone}
           />
         {:else if layerLoadError}
           <p class="stage-error">{layerLoadError}</p>
@@ -739,6 +1041,24 @@
         {/key}
       {/each}
     </section>
+
+    <!-- Chat log: visible in every player view (table, classic, controller); hidden on TV.
+         Bubbles handle the same content above each seated speaker's monkey when seats are
+         available; the log is the universal fallback when the speaker has no seat (e.g. the
+         local player in non-selfseat desktop mode) and is also handy on phones. -->
+    {#if !isTv && chatLog.length > 0}
+      <section class="chat-log">
+        <div class="chat-log-title">Chat</div>
+        <div class="chat-log-entries">
+          {#each chatLog as entry (entry.id)}
+            <div class="chat-log-entry">
+              <span class="chat-log-name">{state.players.find((p) => p.id === entry.playerId)?.name ?? 'Unknown'}:</span>
+              <span class="chat-log-text">{entry.text}</span>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
     {/if}
 
     <!-- Phase: lobby -->
@@ -896,6 +1216,91 @@
             </div>
           </div>
         {/if}
+
+        <!-- Chat compose input (all phases except game_over) -->
+        {#if state.phase !== 'game_over' && !isTv}
+          <div class="chat-compose">
+            <input
+              type="text"
+              maxlength="140"
+              placeholder="Say something..."
+              bind:value={chatInput}
+              onkeydown={(e) => {
+                if (e.key === 'Enter') handleSendChat();
+              }}
+              class="chat-input"
+            />
+            <button
+              class="btn-small"
+              onclick={handleSendChat}
+              disabled={!chatInput.trim() || Date.now() < chatCooldownUntil}
+            >
+              Send
+            </button>
+          </div>
+        {/if}
+
+        <!-- Voice section -->
+        <section class="voice-section">
+          <div class="voice-status">
+            {#if voiceState === 'off'}
+              Voice off
+            {:else if voiceState === 'requesting'}
+              Requesting mic...
+            {:else if voiceState === 'joined'}
+              Voice on ({Object.keys(remoteStreams).length} connected)
+            {:else if voiceState === 'denied'}
+              Microphone denied
+            {:else}
+              Microphone unavailable
+            {/if}
+          </div>
+
+          <button
+            class="btn-small"
+            onclick={voiceState === 'joined' ? leaveVoice : joinVoice}
+            disabled={voiceState === 'requesting' || (voiceState === 'unsupported' && navigator?.mediaDevices === undefined)}
+          >
+            {voiceState === 'joined' ? 'Leave voice' : 'Join voice'}
+          </button>
+
+          {#if voiceState === 'joined'}
+            <button
+              class="btn-small"
+              onclick={toggleSelfMute}
+              aria-pressed={selfMuted}
+              class:muted={selfMuted}
+            >
+              {selfMuted ? 'Unmute mic' : 'Mute mic'}
+            </button>
+          {/if}
+
+          {#if voiceState === 'joined' && Object.keys(remoteStreams).length > 0}
+            <div class="remote-mute-list">
+              {#each state.players as p (p.id)}
+                {#if remoteStreams[p.id]}
+                  <button
+                    class="btn-remote-mute"
+                    onclick={() => toggleRemoteMute(p.id)}
+                    aria-pressed={remoteMutes[p.id] ?? false}
+                    class:muted={remoteMutes[p.id] ?? false}
+                    title="{p.name}: {remoteMutes[p.id] ? 'unmute' : 'mute'}"
+                  >
+                    {p.name} {remoteMutes[p.id] ? '(muted)' : ''}
+                  </button>
+                {/if}
+              {/each}
+            </div>
+          {/if}
+        </section>
+
+        <!-- Remote audio elements -->
+        {#each Object.keys(remoteStreams) as peerId (peerId)}
+          <audio
+            autoplay
+            bind:this={remoteAudioRefs[peerId]}
+          />
+        {/each}
       </section>
     {/if}
 
@@ -1907,5 +2312,151 @@
     color: var(--text-muted, #a8b8c4);
     word-break: break-all;
     text-align: center;
+  }
+
+  /* ─── Chat styling ─────────────────────────────────────────────────────────── */
+
+  .chat-compose {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .chat-input {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid var(--border, #4a6278);
+    border-radius: 4px;
+    background-color: var(--bg-input, #1a2f4a);
+    color: var(--text, #ffffff);
+    font-family: inherit;
+    font-size: 0.9rem;
+  }
+
+  .chat-input::placeholder {
+    color: var(--text-muted, #a8b8c4);
+  }
+
+  .chat-input:focus {
+    outline: none;
+    border-color: var(--accent, #4db8ff);
+  }
+
+  .chat-log {
+    margin-top: 1rem;
+    border: 1px solid var(--border, #4a6278);
+    border-radius: 4px;
+    background-color: var(--bg-panel, #1a2f4a);
+    padding: 0.75rem;
+    max-height: 6.5rem;
+    overflow-y: auto;
+  }
+
+  .chat-log-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted, #a8b8c4);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .chat-log-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .chat-log-entry {
+    font-size: 0.8rem;
+    color: var(--text, #ffffff);
+    line-height: 1.2;
+    word-wrap: break-word;
+  }
+
+  .chat-log-name {
+    font-weight: 600;
+    color: var(--accent, #4db8ff);
+  }
+
+  .chat-log-text {
+    color: var(--text, #ffffff);
+    margin-left: 0.25rem;
+  }
+
+  .chat-bubble-positioner {
+    pointer-events: none;
+  }
+
+  /* ── Voice Section Styling ───────────────────────────────────────────────────── */
+
+  .voice-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    background-color: var(--panel-bg, #1a1f24);
+    border: 1px solid var(--border-color, #2d3a42);
+    border-radius: 0.5rem;
+  }
+
+  .voice-status {
+    font-size: 0.85rem;
+    color: var(--text-muted, #a8b8c4);
+    padding: 0.25rem 0;
+  }
+
+  .btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    background-color: var(--button-bg, #2d3a42);
+    color: var(--text, #ffffff);
+    border: 1px solid var(--border-color, #3d4a52);
+    border-radius: 0.3rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-small:hover:not(:disabled) {
+    background-color: var(--button-hover, #3d4a52);
+  }
+
+  .btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-small.muted {
+    background-color: var(--danger-bg-deep, #6b1f1f);
+    border-color: var(--danger-border-mid, #8a3030);
+    color: var(--danger-text-pale, #f5d2d2);
+  }
+
+  .remote-mute-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+  }
+
+  .btn-remote-mute {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.75rem;
+    background-color: var(--button-bg, #2d3a42);
+    color: var(--text, #ffffff);
+    border: 1px solid var(--border-color, #3d4a52);
+    border-radius: 0.3rem;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.15s ease;
+  }
+
+  .btn-remote-mute:hover {
+    background-color: var(--button-hover, #3d4a52);
+  }
+
+  .btn-remote-mute.muted {
+    background-color: var(--danger-bg-deep, #6b1f1f);
+    border-color: var(--danger-border-mid, #8a3030);
+    color: var(--danger-text-pale, #f5d2d2);
   }
 </style>

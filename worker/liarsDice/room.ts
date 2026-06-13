@@ -106,7 +106,9 @@ type ServerMessage =
   | { type: 'pong' }
   | { type: 'level_up'; newLevel: number; rewards: { name: string; type: string; tier: 'hero' | 'minor' }[] }
   | { type: 'xp_gained'; amount: number; newXp: number }
-  | { type: 'player_emote'; playerId: string; emoteId: string };
+  | { type: 'player_emote'; playerId: string; emoteId: string }
+  | { type: 'player_chat'; playerId: string; text: string; ts: number }
+  | { type: 'rtc_signal'; from: string; payload: unknown };
 
 interface ClientState {
   code: string;
@@ -191,8 +193,12 @@ export class LiarsDiceRoom extends DurableObject<Env> {
   private cosmeticsCache = new CosmeticsCache();
   /** Per-player last emote timestamp (ms). In-memory only; no storage, no alarms. */
   private lastEmoteAt = new Map<string, number>();
+  /** Per-player last chat timestamp (ms). In-memory only; no storage, no alarms. */
+  private lastChatAt = new Map<string, number>();
   /** Flag: bot-drop check is scheduled; don't double-schedule */
   private botDropCheckPending = false;
+  /** Per-player RTC signal rate limiting: tracks count + window start (ms). In-memory only; no storage. */
+  private rtcSignalCounters = new Map<string, { windowStart: number; count: number }>();
 
   // --- Persistence ---
 
@@ -862,6 +868,63 @@ export class LiarsDiceRoom extends DurableObject<Env> {
         this.broadcastEmote(playerId, msg.emoteId as string);
         break;
       }
+      case 'chat': {
+        // Validate text is a string
+        if (typeof msg.text !== 'string') break;
+        // Only seated players may chat (not spectators or role=table displays)
+        if (!this.players.has(playerId)) break;
+        // Phase gate: lobby, playing, round_over only (not game_over)
+        if (!['lobby', 'playing', 'round_over'].includes(this.phase)) break;
+        // Per-player rate limit: 1 message per 1500 ms (in-memory, no storage writes)
+        const now = Date.now();
+        const lastChat = this.lastChatAt.get(playerId);
+        if (lastChat !== undefined && now - lastChat < 1500) break;
+        // Sanitise text; if empty after sanitisation, drop
+        const sanitised = sanitizeText(msg.text, 140);
+        if (!sanitised) break;
+        // Record the chat timestamp
+        this.lastChatAt.set(playerId, now);
+        // Broadcast to all sockets (players, spectators, role=table displays)
+        this.broadcastChat(playerId, sanitised, now);
+        break;
+      }
+      case 'rtc_signal': {
+        // Validate target is a string
+        if (typeof msg.to !== 'string') break;
+        // Validate payload exists
+        if (msg.payload === undefined) break;
+        // Sender must be a seated player
+        if (!this.players.has(playerId)) break;
+        // Target must be a different seated player
+        if (msg.to === playerId || !this.players.has(msg.to)) break;
+        // Per-sender rate limit: 50 signals/sec (window 1000ms)
+        const now = Date.now();
+        const counter = this.rtcSignalCounters.get(playerId);
+        if (counter) {
+          if (now - counter.windowStart >= 1000) {
+            // Window expired, reset
+            counter.windowStart = now;
+            counter.count = 1;
+          } else {
+            // Within window
+            counter.count++;
+            if (counter.count > 50) break; // Rate limit exceeded, drop silently
+          }
+        } else {
+          // First signal in new window
+          this.rtcSignalCounters.set(playerId, { windowStart: now, count: 1 });
+        }
+        // Find connected sockets for the target and relay
+        for (const ws of this.ctx.getWebSockets(msg.to)) {
+          const relayMsg: ServerMessage = {
+            type: 'rtc_signal',
+            from: playerId,
+            payload: msg.payload,
+          };
+          this.sendToWs(ws, relayMsg);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -869,6 +932,13 @@ export class LiarsDiceRoom extends DurableObject<Env> {
 
   private broadcastEmote(playerId: string, emoteId: string): void {
     const msg: ServerMessage = { type: 'player_emote', playerId, emoteId };
+    for (const ws of this.ctx.getWebSockets()) {
+      this.sendToWs(ws, msg);
+    }
+  }
+
+  private broadcastChat(playerId: string, text: string, ts: number): void {
+    const msg: ServerMessage = { type: 'player_chat', playerId, text, ts };
     for (const ws of this.ctx.getWebSockets()) {
       this.sendToWs(ws, msg);
     }

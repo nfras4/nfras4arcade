@@ -8,6 +8,7 @@
   import RitualSpotlight from './RitualSpotlight.svelte';
   import KeySpotlight from './KeySpotlight.svelte';
   import RitualOverlay from './RitualOverlay.svelte';
+  import ChatBubble from './ChatBubble.svelte';
   import { TableDirector } from './TableDirector.svelte.js';
   import { assignSeats, MONKEY_SCALE, FULL_TABLE_ARC } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
@@ -15,10 +16,12 @@
   import { EMOTE_LIST, EMOTE_REGISTRY, type EmoteId } from './core/emotes.js';
   import { playSting, isMuted, setMuted } from './audio.js';
   import { TV_CAMERA_POSITION, TV_CAMERA_LOOK_AT, TV_CAMERA_FOV } from './core/camera.js';
+  import type { VoiceParams } from './core/chatVoice.js';
 
   /** Handle returned via onready so the parent can route WS emote messages in. */
   export interface LayerHandle {
     handleRemoteEmote(playerId: string, emoteId: string): void;
+    setRemoteAmplitude(peerId: string, value: number): void;
   }
 
   // ── Props ────────────────────────────────────────────────────────────────────
@@ -55,6 +58,16 @@
      * Default true for backward compatibility.
      */
     showEmoteStrip = true,
+    /**
+     * Active chat bubbles to render above speaker nameplates.
+     * Each entry is positioned via platePosMap[playerId].
+     */
+    chatBubbles = [] as Array<{ id: number; playerId: string; text: string; voice: VoiceParams; ts: number }>,
+    /**
+     * Called when a chat bubble's dwell timer expires so the parent can
+     * remove the entry from its chatBubbles array.
+     */
+    onchatbubbledone = undefined as ((id: number) => void) | undefined,
   }: {
     state: LDStateLike;
     reducedMotionOverride?: boolean;
@@ -63,6 +76,8 @@
     onready?: (handle: LayerHandle) => void;
     fullTable?: boolean;
     showEmoteStrip?: boolean;
+    chatBubbles?: Array<{ id: number; playerId: string; text: string; voice: VoiceParams; ts: number }>;
+    onchatbubbledone?: (id: number) => void;
   } = $props();
 
   // ── Director ─────────────────────────────────────────────────────────────────
@@ -246,9 +261,20 @@
     }
   }
 
+  /**
+   * Set the talk amplitude for a remote peer (audio-driven jaw flap).
+   * Called by VoiceJawDriver when polling audio streams.
+   */
+  function setRemoteAmplitude(peerId: string, value: number): void {
+    director.talkAmplitudes = {
+      ...director.talkAmplitudes,
+      [peerId]: value,
+    };
+  }
+
   // Publish the handle once on mount so the parent can route WS messages in.
   $effect(() => {
-    onready?.({ handleRemoteEmote });
+    onready?.({ handleRemoteEmote, setRemoteAmplitude });
   });
 
   // Mount/unmount logging for diagnostics
@@ -366,6 +392,25 @@
   <div class="nameplate-layer" aria-hidden="true">
     <!-- Ritual overlay: displays banners during round-over ceremony -->
     <RitualOverlay banner={director.banner} names={playerNames} scale={fullTable ? 1.6 : 1} />
+
+    <!-- Chat bubbles: each positioned 4rem above its speaker's nameplate -->
+    {#each chatBubbles as bubble (bubble.id)}
+      {@const pos = platePosMap[bubble.playerId]}
+      {#if pos?.visible}
+        <div
+          class="chat-bubble-positioner"
+          style="position: absolute; left: {pos.left}; top: calc({pos.top} - 4rem);"
+        >
+          <ChatBubble
+            text={bubble.text}
+            voice={bubble.voice}
+            startTs={bubble.ts}
+            onDone={() => onchatbubbledone?.(bubble.id)}
+            reducedMotion={window.matchMedia('(prefers-reduced-motion: reduce)').matches}
+          />
+        </div>
+      {/if}
+    {/each}
 
     {#each opponents as player (player.id)}
       {@const pos = platePosMap[player.id]}

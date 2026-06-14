@@ -118,6 +118,25 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     // Resolve cosmetics (frame, emblem, title badge)
     const cosmetics = await resolvePlayerCosmetics(locals.user.id, db);
 
+    // Crown override (mirrors CosmeticsCache.get in the game DOs): a Barrel Night
+    // winner wears the crown everywhere for their week. /api/auth/me calls the pure
+    // resolver directly (not the cache), so the override is applied here too — this
+    // is what the self-portrait reads, so it must agree with the seated table monkey.
+    // Own nested try: a failed/absent crown lookup degrades to the equipped hat,
+    // never strips cosmetics.
+    let hatId = cosmetics.hatId;
+    try {
+      const crownRow = await db
+        .prepare('SELECT crown_active_until FROM player_profiles WHERE id = ?')
+        .bind(locals.user.id)
+        .first<{ crown_active_until: number }>();
+      if (crownRow && crownRow.crown_active_until > Math.floor(Date.now() / 1000)) {
+        hatId = 'crown';
+      }
+    } catch {
+      // keep the resolved hat
+    }
+
     // Recent game history (last 20)
     const historyRows = await db
       .prepare(
@@ -183,7 +202,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
         frame: cosmetics.frameSvg ? { svg: cosmetics.frameSvg } : null,
         emblem: cosmetics.emblemSvg ? { svg: cosmetics.emblemSvg } : null,
         titleBadge: cosmetics.titleBadgeId ? { id: cosmetics.titleBadgeId } : null,
-        hat: cosmetics.hatId ? { id: cosmetics.hatId } : null,
+        hat: hatId ? { id: hatId } : null,
       },
       stats: profile ? { gamesPlayed: profile.games_played, gamesWon: profile.games_won, chips: profile.chips, xp: profile.xp ?? 0, level: xpToLevel(profile.xp ?? 0) } : null,
       badges,

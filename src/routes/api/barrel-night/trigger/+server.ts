@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
     return json({ error: 'Bindings unavailable' }, { status: 500 });
   }
 
-  let body: { week?: string; bots?: number; startNow?: boolean };
+  let body: { week?: string; bots?: number; startNow?: boolean; startInMs?: number };
   try {
     body = await request.json();
   } catch {
@@ -31,7 +31,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   const res = await stub.fetch(`https://do/bn-open?room=${encodeURIComponent(code)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ week, bots: body.bots ?? 0, startNow: body.startNow === true }),
+    body: JSON.stringify({ week, bots: body.bots ?? 0, startNow: body.startNow === true, startInMs: body.startInMs ?? 0 }),
   });
   const room = await res.json().catch(() => ({}));
   return json({ triggered: true, code, status: res.status, room });

@@ -12,7 +12,7 @@ const WORKER_PATH = 'worker/index.js';
 let code = readFileSync(WORKER_PATH, 'utf8');
 
 // 1. Add Durable Object imports at the top
-const doImport = `import { ImpostorRoom } from './impostor/room';\nimport { PresidentRoom } from './cards/president';\nimport { ChaseTheQueenRoom } from './cards/chaseTheQueen';\nimport { ConnectFourRoom } from './connectFour/room';\nimport { WavelengthRoom } from './wavelength/room';\nimport { PokerRoom } from './poker/room';\nimport { SnapRoom } from './snap/room';\nimport { BlackjackRoom } from './casino/blackjack';\nimport { RouletteRoom } from './casino/roulette';\nimport { BaccaratRoom } from './casino/baccarat';\nimport { LiarsDiceRoom } from './liarsDice/room';\nimport { CoupRoom } from './coup/room';\n`;
+const doImport = `import { ImpostorRoom } from './impostor/room';\nimport { PresidentRoom } from './cards/president';\nimport { ChaseTheQueenRoom } from './cards/chaseTheQueen';\nimport { ConnectFourRoom } from './connectFour/room';\nimport { WavelengthRoom } from './wavelength/room';\nimport { PokerRoom } from './poker/room';\nimport { SnapRoom } from './snap/room';\nimport { BlackjackRoom } from './casino/blackjack';\nimport { RouletteRoom } from './casino/roulette';\nimport { BaccaratRoom } from './casino/baccarat';\nimport { LiarsDiceRoom } from './liarsDice/room';\nimport { CoupRoom } from './coup/room';\nimport { barrelNightScheduled } from './barrelNight/cron';\n`;
 code = doImport + code;
 
 // 2. Capture the original fetch handler and wrap it with WS upgrade + auth
@@ -143,6 +143,9 @@ worker_default.fetch = async function(req, env, ctx) {
 
   return _svelteKitFetch.call(this, req, env, ctx);
 };
+
+// Barrel Night weekly cron (trigger "0 9 * * 0") -> open this week's room.
+worker_default.scheduled = barrelNightScheduled;
 // --- End patch ---
 `;
 

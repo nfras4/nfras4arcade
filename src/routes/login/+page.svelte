@@ -13,22 +13,24 @@
     e.preventDefault();
     error = '';
     loading = true;
-    // WHY: iOS / mobile autofill may not trigger Svelte's bind:value sync; read from FormData as a fallback.
-    const form = e.currentTarget as HTMLFormElement;
-    const fd = new FormData(form);
-    const emailVal = ((fd.get('email') as string | null) ?? email).trim();
-    const passwordVal = (fd.get('password') as string | null) ?? password;
-    const result = await login(emailVal, passwordVal);
-    loading = false;
-    if (result.ok) {
-      goto('/');
-    } else {
-      error = result.error || 'Login failed';
+    try {
+      // WHY: iOS / mobile autofill may not trigger Svelte's bind:value sync; read from FormData as a fallback.
+      const form = e.currentTarget as HTMLFormElement;
+      const fd = new FormData(form);
+      const emailVal = ((fd.get('email') as string | null) ?? email).trim();
+      const passwordVal = (fd.get('password') as string | null) ?? password;
+      const result = await login(emailVal, passwordVal);
+      if (result.ok) {
+        goto('/');
+      } else {
+        error = result.error || 'Login failed';
+      }
+    } catch {
+      // Defensive: never leave the button stuck on "Logging in..." if anything throws.
+      error = 'Something went wrong. Please try again.';
+    } finally {
+      loading = false;
     }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') handleSubmit(e);
   }
 </script>
 
@@ -55,7 +57,6 @@
           placeholder="Your password"
           minlength="8"
           required
-          onkeydown={handleKeydown}
         />
       </label>
       {#if error}

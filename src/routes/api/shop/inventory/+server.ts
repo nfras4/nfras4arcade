@@ -46,7 +46,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 				metadata: string | null;
 			}>(),
 		db
-			.prepare('SELECT avatar_id, name_colour_id, card_back_id, table_felt_id, frame_id, emblem_id, title_badge_id FROM player_equipped WHERE player_id = ?')
+			.prepare('SELECT avatar_id, name_colour_id, card_back_id, table_felt_id, frame_id, emblem_id, title_badge_id, hat_id FROM player_equipped WHERE player_id = ?')
 			.bind(locals.user.id)
 			.first<{
 				avatar_id: string | null;
@@ -56,6 +56,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 				frame_id: string | null;
 				emblem_id: string | null;
 				title_badge_id: string | null;
+				hat_id: string | null;
 			}>(),
 	]);
 
@@ -84,6 +85,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
 			frame_id: null,
 			emblem_id: null,
 			title_badge_id: null,
+			hat_id: null,
 		},
 	});
 };

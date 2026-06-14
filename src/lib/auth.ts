@@ -95,11 +95,19 @@ async function readAuthError(res: Response, fallback: string): Promise<string> {
 }
 
 export async function login(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    // Network failure (offline, dropped connection, or an upstream reset).
+    // Surface a real message instead of leaving the caller hung on a rejected
+    // promise — that was the "click does nothing / button stuck" bug.
+    return { ok: false, error: 'Network error. Check your connection and try again.' };
+  }
   if (!res.ok) return { ok: false, error: await readAuthError(res, 'Login failed') };
   const data: { user?: AuthUser } = await res.json();
   if (data.user) currentUser.set(data.user);
@@ -111,11 +119,16 @@ export async function register(
   password: string,
   displayName: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch('/api/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, displayName }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, displayName }),
+    });
+  } catch {
+    return { ok: false, error: 'Network error. Check your connection and try again.' };
+  }
   if (!res.ok) return { ok: false, error: await readAuthError(res, 'Registration failed') };
   const data: { user?: AuthUser } = await res.json();
   if (data.user) currentUser.set(data.user);

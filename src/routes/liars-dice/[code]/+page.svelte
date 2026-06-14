@@ -803,6 +803,7 @@
             eliminated: p.eliminated,
             chips: p.chips,
             nameColour: p.nameColour ?? null,
+            hat: p.hat ?? null,
           })),
           myId: pid ?? '',
           currentTurnId: state.currentTurnId,

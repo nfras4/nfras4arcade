@@ -29,12 +29,17 @@
     }
 
     loading = true;
-    const result = await register(emailVal, passwordVal, displayNameVal);
-    loading = false;
-    if (result.ok) {
-      goto('/');
-    } else {
-      error = result.error || 'Registration failed';
+    try {
+      const result = await register(emailVal, passwordVal, displayNameVal);
+      if (result.ok) {
+        goto('/');
+      } else {
+        error = result.error || 'Registration failed';
+      }
+    } catch {
+      error = 'Something went wrong. Please try again.';
+    } finally {
+      loading = false;
     }
   }
 </script>

@@ -407,9 +407,15 @@
                     <span class="item-sub">{item.subcategory.replace('_', ' ')}</span>
                   {/if}
                   {#if isHero}
-                    <span class="level-label hero-level">Earn at Lv {item.level_requirement}</span>
+                    <span class="level-label hero-level">
+                      {item.level_requirement ? `Earn at Lv ${item.level_requirement}` : 'Awarded, not for sale'}
+                    </span>
                   {:else if isMinor}
-                    <span class="level-label minor-level">Unlocks at Lv {item.level_requirement} or buy for {item.price.toLocaleString()} chips</span>
+                    <span class="level-label minor-level">
+                      {item.level_requirement
+                        ? `Unlocks at Lv ${item.level_requirement} or buy for ${item.price.toLocaleString()} chips`
+                        : `Buy for ${item.price.toLocaleString()} chips`}
+                    </span>
                   {/if}
                 </div>
 
@@ -435,11 +441,13 @@
                           aria-disabled="true"
                           onclick={() => { heroTooltip = heroTooltip === item.id ? null : item.id; }}
                         >
-                          Earn at Lv {item.level_requirement}
+                          {item.level_requirement ? `Earn at Lv ${item.level_requirement}` : 'Earn only'}
                         </button>
                         {#if heroTooltip === item.id}
                           <div class="hero-tooltip" role="tooltip">
-                            Reward unlocked by reaching Level {item.level_requirement} — not for sale
+                            {item.level_requirement
+                              ? `Reward unlocked by reaching Level ${item.level_requirement} — not for sale`
+                              : 'Special reward — not for sale'}
                           </div>
                         {/if}
                       </div>

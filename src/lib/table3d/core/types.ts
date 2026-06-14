@@ -19,6 +19,7 @@ export interface PlayerViewLike {
   eliminated: boolean;
   chips: number;
   nameColour?: string | null;
+  hat?: string | null;
 }
 
 /** Minimal bid shape. Mirrors the Bid interface in liarsDice/room.ts. */

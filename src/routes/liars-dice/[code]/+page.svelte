@@ -2484,30 +2484,32 @@
 
   /* ─── Barrel Night crown toast ──────────────────────────────────────────────── */
 
+  /* Top-centre, just below the nav, with a very high z-index so it renders ABOVE
+     the centre ritual banner that plays at the same game-over moment. */
   .crown-toast {
     position: fixed;
-    top: 4.5rem;
+    top: 4.75rem;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 200;
+    z-index: 9999;
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    max-width: min(92vw, 420px);
-    padding: 0.75rem 1.15rem;
-    border-radius: 10px;
+    max-width: min(92vw, 440px);
+    padding: 0.85rem 1.3rem;
+    border-radius: 12px;
     background: linear-gradient(135deg, #2a1f08, #1a1206);
     border: 1px solid var(--gold, #e8b84b);
     color: var(--gold, #e8b84b);
     font-weight: 700;
-    box-shadow: 0 6px 24px rgba(232, 184, 75, 0.25);
+    box-shadow: 0 8px 30px rgba(232, 184, 75, 0.3);
     animation: crown-toast-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  .crown-toast-icon { font-size: 1.4rem; line-height: 1; }
+  .crown-toast-icon { font-size: 1.5rem; line-height: 1; }
   .crown-toast-text { font-size: 0.95rem; }
 
   @keyframes crown-toast-in {
-    from { opacity: 0; transform: translate(-50%, -12px); }
+    from { opacity: 0; transform: translate(-50%, -14px); }
     to { opacity: 1; transform: translate(-50%, 0); }
   }
   @media (prefers-reduced-motion: reduce) {

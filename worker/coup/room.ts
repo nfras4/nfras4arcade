@@ -705,6 +705,7 @@ export class CoupRoom extends CardRoom {
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
       titleText: p.titleText ?? null,
+      hat: p.hat ?? null,
     }));
 
     let tableView: any = null;

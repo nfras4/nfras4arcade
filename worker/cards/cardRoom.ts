@@ -693,6 +693,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       player.nameColour = DEFAULT_COSMETICS.nameColour;
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
       player.titleText = null;
+      player.hat = DEFAULT_COSMETICS.hatId;
       return;
     }
     try {
@@ -705,6 +706,7 @@ export abstract class CardRoom extends DurableObject<Env> {
       p.titleBadgeId = cosmetics.titleBadgeId;
       p.titleText = cosmetics.titleText;
       p.avatarId = cosmetics.avatarId ?? null;
+      p.hat = cosmetics.hatId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }

@@ -49,13 +49,14 @@
     { id: 'boost', label: 'Boosts' },
   ];
 
-  type CosmeticSubcategory = 'all' | 'avatar' | 'frame' | 'emblem' | 'card_back' | 'table_felt' | 'name_colour' | 'title';
+  type CosmeticSubcategory = 'all' | 'avatar' | 'frame' | 'emblem' | 'hat' | 'card_back' | 'table_felt' | 'name_colour' | 'title';
 
   const cosmeticSubcategories: { id: CosmeticSubcategory; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'avatar', label: 'Avatars' },
     { id: 'frame', label: 'Frames' },
     { id: 'emblem', label: 'Emblems' },
+    { id: 'hat', label: 'Hats' },
     { id: 'card_back', label: 'Card Backs' },
     { id: 'table_felt', label: 'Table Felts' },
     { id: 'name_colour', label: 'Name Colours' },

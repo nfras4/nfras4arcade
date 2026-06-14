@@ -970,6 +970,7 @@ export class PokerRoom extends CardRoom {
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
       titleText: p.titleText ?? null,
+      hat: p.hat ?? null,
     }));
 
     // Build player hands visibility: only show own cards, or all at showdown

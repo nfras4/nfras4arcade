@@ -12,6 +12,7 @@ export interface AuthUser {
   frame: { svg: string } | null;
   emblem: { svg: string } | null;
   titleBadge: { id: string } | null;
+  hat: { id: string } | null;
 }
 
 export interface AuthStats {

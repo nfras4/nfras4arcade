@@ -27,7 +27,7 @@ export const NODE_HAND_R        = 'HandR';
 
 export type ExpressionName = 'neutral' | 'grin' | 'shock' | 'sweat' | 'asleep' | 'laugh' | 'smug';
 
-export type HatId = 'none' | 'party' | 'crown';
+export type HatId = 'none' | 'party' | 'crown' | 'top_hat' | 'beanie' | 'sombrero';
 
 /** A single expression pose: all values applied simultaneously via lerp. */
 export interface ExpressionPose {

@@ -15,6 +15,7 @@ export interface Player {
   nameColour?: string | null;
   titleBadgeId?: string | null;
   titleText?: string | null;
+  hat?: string | null;
 }
 
 export interface HintEntry {

@@ -183,6 +183,7 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
         frame: cosmetics.frameSvg ? { svg: cosmetics.frameSvg } : null,
         emblem: cosmetics.emblemSvg ? { svg: cosmetics.emblemSvg } : null,
         titleBadge: cosmetics.titleBadgeId ? { id: cosmetics.titleBadgeId } : null,
+        hat: cosmetics.hatId ? { id: cosmetics.hatId } : null,
       },
       stats: profile ? { gamesPlayed: profile.games_played, gamesWon: profile.games_won, chips: profile.chips, xp: profile.xp ?? 0, level: xpToLevel(profile.xp ?? 0) } : null,
       badges,
@@ -191,5 +192,5 @@ export const GET: RequestHandler = async ({ locals, platform }) => {
     });
   }
 
-  return json({ user: { ...locals.user, nameColour: null, cardBack: null, tableFelt: null, frame: null, emblem: null, titleBadge: null }, stats: null, badges });
+  return json({ user: { ...locals.user, nameColour: null, cardBack: null, tableFelt: null, frame: null, emblem: null, titleBadge: null, hat: null }, stats: null, badges });
 };

@@ -77,7 +77,7 @@
   });
 
   const EXPRESSIONS: ExpressionName[] = ['neutral', 'grin', 'shock', 'sweat', 'laugh', 'asleep', 'smug'];
-  const HATS: HatId[] = ['none', 'party', 'crown'];
+  const HATS: HatId[] = ['none', 'party', 'crown', 'top_hat', 'beanie', 'sombrero'];
 </script>
 
 {#if !import.meta.env.DEV}

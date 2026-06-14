@@ -52,6 +52,18 @@
     return new THREE.MeshStandardMaterial({ color, flatShading: flat, roughness, metalness: 0 });
   }
 
+  // ── GPU resource disposal helper ─────────────────────────────────────────────
+  // Called before removing a hat group to prevent geometry/material leaks.
+  function disposeGroup(group: THREE.Group | null): void {
+    if (!group) return;
+    group.traverse((obj) => {
+      if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose();
+      const m = (obj as THREE.Mesh).material;
+      if (Array.isArray(m)) m.forEach((mm) => mm.dispose());
+      else if (m) m.dispose();
+    });
+  }
+
   // ── Build the full rig hierarchy ─────────────────────────────────────────────
   // All objects built once; $effect handles reactive updates to colour and hats.
 
@@ -432,6 +444,83 @@
     return g;
   }
 
+  // Dark felt top hat: wide brim disc, tall crown cylinder, thin band ring.
+  function buildTopHat(): THREE.Group {
+    const g    = new THREE.Group();
+    const felt = mat(0x1a1a1a);
+    // Wide brim disc
+    const brim = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.85, 0.85, 0.04, 24, 1),
+      felt.clone()
+    );
+    brim.position.y = 0.02;
+    g.add(brim);
+    // Crown cylinder sits atop the brim
+    const crown = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.55, 0.5, 24, 1),
+      felt.clone()
+    );
+    crown.position.y = 0.04 + 0.25; // brim height + half crown height
+    g.add(crown);
+    // Thin hat band just above the brim
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.56, 0.56, 0.06, 24, 1),
+      mat(0x3a2f1c)
+    );
+    band.position.y = 0.04 + 0.03; // sits just above brim surface
+    g.add(band);
+    return g;
+  }
+
+  // Knitted beanie: hemisphere cap tinted from fur colour, cream cuff ring.
+  function buildBeanieHat(): THREE.Group {
+    const g = new THREE.Group();
+    // Hemisphere: thetaLength = PI/2 gives the upper half of the sphere.
+    const capColour = new THREE.Color(furColor).multiplyScalar(0.7);
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.62, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      mat(capColour.getHex())
+    );
+    cap.position.y = 0.0;
+    g.add(cap);
+    // Cream cuff ring at the base of the cap
+    const cuff = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.64, 0.64, 0.12, 24, 1),
+      mat(0xe8d8a8)
+    );
+    cuff.position.y = 0.06; // centred at the equator of the hemisphere
+    g.add(cuff);
+    return g;
+  }
+
+  // Straw sombrero: shallow cone crown, wide brim, dark hat band.
+  function buildSombreroHat(): THREE.Group {
+    const g    = new THREE.Group();
+    const straw = mat(0xc9a866);
+    // Wide flat brim disc
+    const brim = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.1, 1.1, 0.04, 32, 1),
+      straw.clone()
+    );
+    brim.position.y = 0.02;
+    g.add(brim);
+    // Shallow cone crown sits at centre of the brim
+    const crown = new THREE.Mesh(
+      new THREE.ConeGeometry(0.45, 0.35, 20, 1),
+      straw.clone()
+    );
+    crown.position.y = 0.04 + 0.175; // brim height + half cone height
+    g.add(crown);
+    // Hat band at the base of the crown
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.46, 0.46, 0.06, 20, 1),
+      mat(0x8b4513)
+    );
+    band.position.y = 0.04 + 0.03; // just above brim surface
+    g.add(band);
+    return g;
+  }
+
   let activeHat: THREE.Group | null = null;
 
   // ── Reactive prop handlers ────────────────────────────────────────────────────
@@ -452,12 +541,21 @@
   });
 
   $effect(() => {
-    if (activeHat) { anchorCrown.remove(activeHat); activeHat = null; }
+    if (activeHat) { disposeGroup(activeHat); anchorCrown.remove(activeHat); activeHat = null; }
     if (hat === 'party') {
       activeHat = buildPartyHat();
       anchorCrown.add(activeHat);
     } else if (hat === 'crown') {
       activeHat = buildCrownHat();
+      anchorCrown.add(activeHat);
+    } else if (hat === 'top_hat') {
+      activeHat = buildTopHat();
+      anchorCrown.add(activeHat);
+    } else if (hat === 'beanie') {
+      activeHat = buildBeanieHat();
+      anchorCrown.add(activeHat);
+    } else if (hat === 'sombrero') {
+      activeHat = buildSombreroHat();
       anchorCrown.add(activeHat);
     }
   });

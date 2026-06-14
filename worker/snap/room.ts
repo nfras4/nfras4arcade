@@ -38,6 +38,7 @@ interface SnapPlayerData {
   emblemSvg?: string | null;
   nameColour?: string | null;
   titleBadgeId?: string | null;
+  hat?: string | null;
 }
 
 interface SnapRoomState {
@@ -528,6 +529,7 @@ export class SnapRoom extends DurableObject<Env> {
       p.emblemSvg = cosmetics.emblemSvg;
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
+      p.hat = cosmetics.hatId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
@@ -1062,6 +1064,7 @@ export class SnapRoom extends DurableObject<Env> {
       nameColour: p.nameColour ?? null,
       titleBadgeId: p.titleBadgeId ?? null,
       titleText: p.titleText ?? null,
+      hat: p.hat ?? null,
     }));
 
     const topCard = this.pile.length > 0 ? this.pile[this.pile.length - 1] : null;

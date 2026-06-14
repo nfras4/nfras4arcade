@@ -63,12 +63,13 @@
     name_colour_id: string | null;
     card_back_id: string | null;
     table_felt_id: string | null;
+    hat_id?: string | null;
     frame_id?: string | null;
     emblem_id?: string | null;
     title_badge_id?: string | null;
   }
 
-  type TabId = 'frame' | 'emblem' | 'colour' | 'title' | 'card_back' | 'table_felt';
+  type TabId = 'frame' | 'emblem' | 'colour' | 'hat' | 'title' | 'card_back' | 'table_felt';
 
   interface OwnedCosmetic {
     id: string;
@@ -93,6 +94,7 @@
     name_colour_id: null,
     card_back_id: null,
     table_felt_id: null,
+    hat_id: null,
     frame_id: null,
     emblem_id: null,
     title_badge_id: null,
@@ -112,9 +114,10 @@
     { id: 'frame', label: 'Frame' },
     { id: 'emblem', label: 'Emblem' },
     { id: 'colour', label: 'Name Colour' },
-    { id: 'title', label: 'Title' },
+    { id: 'hat', label: 'Hat' },
     { id: 'card_back', label: 'Card Back' },
     { id: 'table_felt', label: 'Table Felt' },
+    { id: 'title', label: 'Title' },
   ];
 
   function iconChar(codePoint: string): string {
@@ -247,6 +250,7 @@
         inventory = invData.inventory || [];
         equipped = {
           ...invData.equipped,
+          hat_id: invData.equipped.hat_id ?? null,
           frame_id: invData.equipped.frame_id ?? null,
           emblem_id: invData.equipped.emblem_id ?? null,
           title_badge_id: invData.equipped.title_badge_id ?? null,
@@ -452,6 +456,59 @@
 
   function isColourEquipped(id: string | null): boolean {
     return (equipped.name_colour_id ?? null) === id;
+  }
+
+  interface OwnedHat {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    metadata: string | null;
+  }
+
+  let ownedHats = $derived<OwnedHat[]>(
+    inventory
+      .filter((row) => row.item.subcategory === 'hat')
+      .map((row) => ({
+        id: row.item.id,
+        name: row.item.name,
+        description: row.item.description,
+        icon: row.item.icon,
+        metadata: row.item.metadata,
+      }))
+  );
+
+  function isHatEquipped(id: string | null): boolean {
+    return (equipped.hat_id ?? null) === id;
+  }
+
+  async function equipHat(hat: OwnedHat | null) {
+    const targetId = hat?.id ?? null;
+    const prevId = equipped.hat_id ?? null;
+
+    pendingId = hat?.id ?? '__none_hat';
+    errorMsg = '';
+
+    equipped = { ...equipped, hat_id: targetId };
+
+    try {
+      const res = await fetch('/api/shop/equip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: 'hat', itemId: targetId }),
+      });
+      const data: { success?: boolean; error?: string } = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || 'Equip failed');
+      }
+      successMsg = targetId ? `Equipped ${hat?.name}` : 'Hat cleared';
+      setTimeout(() => { successMsg = ''; }, 2000);
+    } catch (err) {
+      equipped = { ...equipped, hat_id: prevId };
+      errorMsg = err instanceof Error ? err.message : 'Equip failed';
+    }
+
+    pendingId = null;
   }
 
   interface OwnedSlotItem {
@@ -813,6 +870,54 @@
                   </div>
                   <span class="locked-label">{item.tier === 'hero' ? `Unlocks at Level ${item.level_requirement}` : `Unlocks at Level ${item.level_requirement} or buy for ${item.price} chips`}</span>
                 </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {:else if activeTab === 'hat'}
+        <div
+          class="picker-panel"
+          role="tabpanel"
+          id="panel-hat"
+          aria-labelledby="tab-hat"
+        >
+          {#if ownedHats.length === 0}
+            <div class="empty-state card">
+              <p>You don't own any hats yet.</p>
+              <a class="btn-primary" href="/shop">Visit the shop</a>
+            </div>
+          {:else}
+            <div class="picker-grid" role="radiogroup" aria-label="Hat">
+              <button
+                class="picker-card none-card"
+                role="radio"
+                aria-checked={isHatEquipped(null)}
+                class:selected={isHatEquipped(null)}
+                disabled={pendingId === '__none_hat'}
+                onclick={() => equipHat(null)}
+                aria-label="No hat"
+              >
+                <span class="picker-none" aria-hidden="true">∅</span>
+                <span class="picker-name">None</span>
+                {#if isHatEquipped(null)}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                {#if pendingId === '__none_hat'}<span class="picker-loader" aria-hidden="true"></span>{/if}
+              </button>
+              {#each ownedHats as hat}
+                {@const selected = isHatEquipped(hat.id)}
+                <button
+                  class="picker-card"
+                  role="radio"
+                  aria-checked={selected}
+                  class:selected
+                  disabled={pendingId === hat.id}
+                  onclick={() => equipHat(hat)}
+                  aria-label="Equip {hat.name}"
+                >
+                  <span class="picker-icon hat-emoji" aria-hidden="true">{iconChar(hat.icon)}</span>
+                  <span class="picker-name">{hat.name}</span>
+                  {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                  {#if pendingId === hat.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
+                </button>
               {/each}
             </div>
           {/if}
@@ -1204,6 +1309,11 @@
 
   .picker-icon {
     font-size: 1.75rem;
+    line-height: 1;
+  }
+
+  .hat-emoji {
+    font-size: 2rem;
     line-height: 1;
   }
 

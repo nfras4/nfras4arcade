@@ -3,6 +3,7 @@
   import PlaceholderMonkey from './PlaceholderMonkey.svelte';
   import type { ExpressionName } from './core/rig.js';
   import { MONKEY_SCALE } from './core/seats.js';
+  import { currentUser } from '$lib/auth';
 
   interface Props {
     furColour: string;
@@ -43,7 +44,7 @@
         furColor={furColour}
         expression={expression}
         talkAmplitude={talkAmplitude}
-        hat="none"
+        hat={$currentUser?.hat?.id ?? 'none'}
       />
     </T.Group>
   </Canvas>

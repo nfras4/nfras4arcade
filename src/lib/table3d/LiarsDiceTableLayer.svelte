@@ -390,7 +390,7 @@
               director.chatterAmplitudes[player.id] ?? 0,
               director.voiceAmplitudes[player.id] ?? 0,
             )}
-            hat="none"
+            hat={(player.hat ?? 'none') as import('./core/rig.js').HatId}
           />
         </T.Group>
       {/if}

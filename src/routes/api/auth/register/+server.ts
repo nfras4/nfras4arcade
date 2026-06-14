@@ -4,7 +4,10 @@ import { hashPassword } from '$lib/server/auth/password';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
 import { peek, record, getClientIp } from '$lib/server/auth/rateLimit';
 
-const IP_LIMIT = 100;
+// Tightened from 100/hr (audit H7): no legitimate client registers 30 accounts
+// from one IP in an hour, but a scraper enumerating emails needs far more. The
+// per-email limit below throttles per-target; this throttles bulk enumeration.
+const IP_LIMIT = 30;
 const IP_WINDOW = 3_600_000;
 const EMAIL_LIMIT = 20;
 const EMAIL_WINDOW = 3_600_000;
@@ -13,6 +16,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'Database not available' }, { status: 500 });
 
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
 
   const body = await request.json().catch(() => null);
@@ -53,8 +57,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   // IP and email so one user on a shared NAT can't lock out everyone else.
   const ipKey = `register:ip:${ip}`;
   const emailKey = `register:email:${email.toLowerCase()}`;
-  const ipPeek = peek(ipKey, IP_LIMIT, IP_WINDOW);
-  const emailPeek = peek(emailKey, EMAIL_LIMIT, EMAIL_WINDOW);
+  const ipPeek = await peek(rateNs, ipKey, IP_LIMIT, IP_WINDOW);
+  const emailPeek = await peek(rateNs, emailKey, EMAIL_LIMIT, EMAIL_WINDOW);
   if (!ipPeek.ok || !emailPeek.ok) {
     const retryAfter = Math.max(ipPeek.retryAfter, emailPeek.retryAfter);
     return json({ error: 'Too many attempts, try again later' }, { status: 429, headers: { 'Retry-After': String(retryAfter) } });
@@ -67,6 +71,17 @@ export const POST: RequestHandler = async ({ request, platform }) => {
       .bind(email.toLowerCase())
       .first();
     if (existing) {
+      // Burn equivalent PBKDF2 work before returning so the duplicate-email path
+      // isn't distinguishable from a fresh registration by timing (audit H7).
+      // NOTE: the 409 status itself still reveals existence; full closure needs
+      // Turnstile or email-verified signup (tracked in the medium-fixes plan).
+      await hashPassword(password);
+      // Consume the IP bucket on the duplicate path too — otherwise a scraper
+      // probing which emails exist hits only 409s and never trips the per-IP
+      // limit that H7 added precisely to throttle bulk enumeration. The email
+      // bucket is intentionally NOT consumed (would let an attacker lock a
+      // victim's address out of future registration).
+      await record(rateNs, ipKey, IP_WINDOW);
       return json({ error: 'Email already registered' }, { status: 409 });
     }
 
@@ -82,8 +97,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
         .bind(userId, name, now, now),
     ]);
 
-    record(ipKey, IP_WINDOW);
-    record(emailKey, EMAIL_WINDOW);
+    await record(rateNs, ipKey, IP_WINDOW);
+    await record(rateNs, emailKey, EMAIL_WINDOW);
 
     const sessionToken = await createSession(db, userId);
     const isProd = platform?.env?.ENVIRONMENT === 'production';

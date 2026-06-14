@@ -12,7 +12,7 @@ const WORKER_PATH = 'worker/index.js';
 let code = readFileSync(WORKER_PATH, 'utf8');
 
 // 1. Add Durable Object imports at the top
-const doImport = `import { ImpostorRoom } from './impostor/room';\nimport { PresidentRoom } from './cards/president';\nimport { ChaseTheQueenRoom } from './cards/chaseTheQueen';\nimport { ConnectFourRoom } from './connectFour/room';\nimport { WavelengthRoom } from './wavelength/room';\nimport { PokerRoom } from './poker/room';\nimport { SnapRoom } from './snap/room';\nimport { BlackjackRoom } from './casino/blackjack';\nimport { RouletteRoom } from './casino/roulette';\nimport { BaccaratRoom } from './casino/baccarat';\nimport { LiarsDiceRoom } from './liarsDice/room';\nimport { CoupRoom } from './coup/room';\n`;
+const doImport = `import { ImpostorRoom } from './impostor/room';\nimport { PresidentRoom } from './cards/president';\nimport { ChaseTheQueenRoom } from './cards/chaseTheQueen';\nimport { ConnectFourRoom } from './connectFour/room';\nimport { WavelengthRoom } from './wavelength/room';\nimport { PokerRoom } from './poker/room';\nimport { SnapRoom } from './snap/room';\nimport { BlackjackRoom } from './casino/blackjack';\nimport { RouletteRoom } from './casino/roulette';\nimport { BaccaratRoom } from './casino/baccarat';\nimport { LiarsDiceRoom } from './liarsDice/room';\nimport { CoupRoom } from './coup/room';\nimport { RateLimiterRoom } from './rateLimiter/room';\n`;
 code = doImport + code;
 
 // 2. Capture the original fetch handler and wrap it with WS upgrade + auth
@@ -149,7 +149,7 @@ worker_default.fetch = async function(req, env, ctx) {
 // Insert the patch before the final export statement
 code = code.replace(
   'export {\n  worker_default as default\n};',
-  wsPatch + '\nexport {\n  worker_default as default,\n  ImpostorRoom,\n  PresidentRoom,\n  ChaseTheQueenRoom,\n  ConnectFourRoom,\n  WavelengthRoom,\n  PokerRoom,\n  SnapRoom,\n  BlackjackRoom,\n  RouletteRoom,\n  BaccaratRoom,\n  LiarsDiceRoom,\n  CoupRoom\n};'
+  wsPatch + '\nexport {\n  worker_default as default,\n  ImpostorRoom,\n  PresidentRoom,\n  ChaseTheQueenRoom,\n  ConnectFourRoom,\n  WavelengthRoom,\n  PokerRoom,\n  SnapRoom,\n  BlackjackRoom,\n  RouletteRoom,\n  BaccaratRoom,\n  LiarsDiceRoom,\n  CoupRoom,\n  RateLimiterRoom\n};'
 );
 
 writeFileSync(WORKER_PATH, code);

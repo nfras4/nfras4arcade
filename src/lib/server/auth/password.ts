@@ -13,6 +13,15 @@ const LEGACY_ITERATIONS = 100_000;
 const KEY_LENGTH = 32; // bytes
 const SALT_LENGTH = 16; // bytes
 
+// A well-formed hash in the canonical `iterations:salt:hash` format used purely
+// to burn the same PBKDF2 work on auth paths where no real user/hash exists
+// (e.g. login with an unknown email, register with a taken email). Running
+// verifyPassword against this keeps response timing constant so an attacker
+// can't enumerate registered accounts via the missing-vs-present timing gap.
+// The salt/hash are fixed dummy bytes; verifyPassword always returns false.
+export const DUMMY_HASH =
+  '100000:AAAAAAAAAAAAAAAAAAAAAA==:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
 function toBase64(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }

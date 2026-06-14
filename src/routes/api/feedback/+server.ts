@@ -7,8 +7,9 @@ const RATE_LIMIT = 5;
 const RATE_WINDOW = 10 * 60 * 1000;
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
-  const rl = peek(`feedback:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  const rl = await peek(rateNs, `feedback:${ip}`, RATE_LIMIT, RATE_WINDOW);
   if (!rl.ok) {
     return json({ error: 'Slow down — try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
@@ -64,7 +65,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
     return json({ error: 'Failed to save feedback — please try again' }, { status: 500 });
   }
 
-  record(`feedback:${ip}`, RATE_WINDOW);
+  await record(rateNs, `feedback:${ip}`, RATE_WINDOW);
 
   return json({ ok: true });
 };

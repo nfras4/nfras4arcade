@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { isoWeekUTC } from '../../../../../worker/barrelNight/week';
 
 // Owner-only manual trigger for a Barrel Night game. The weekly cron will reuse
 // the same stub.fetch('/bn-open') call; this lets us fire and verify the event
@@ -21,7 +22,9 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
   } catch {
     body = {};
   }
-  const week = (body.week ?? '').toString().trim() || 'manual';
+  // Default to the current ISO week (what the cron will use) so the /barrel-night
+  // page's "live" link points at this exact room.
+  const week = (body.week ?? '').toString().trim() || isoWeekUTC(Date.now());
   const code = `BN-${week}`.toUpperCase();
 
   const stub = env.LIARS_DICE_ROOM.get(env.LIARS_DICE_ROOM.idFromName(code));

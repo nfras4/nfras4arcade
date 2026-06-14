@@ -10,6 +10,7 @@
   import RitualOverlay from './RitualOverlay.svelte';
   import ChatBubble from './ChatBubble.svelte';
   import ChatStageLog from './ChatStageLog.svelte';
+  import NameFrame from '$lib/components/NameFrame.svelte';
   import { TableDirector } from './TableDirector.svelte.js';
   import { assignSeats, MONKEY_SCALE, FULL_TABLE_ARC } from './core/seats.js';
   import type { SeatAssignment } from './core/seats.js';
@@ -454,7 +455,15 @@
           class:disconnected={!player.connected}
           style="left: {pos.left}; top: {pos.top}; color: {player.nameColour ?? 'var(--text, #d8dce8)'};"
         >
-          <span class="name">{player.name}</span>
+          <NameFrame
+            name={player.name}
+            nameColour={player.nameColour}
+            frameSvg={player.frameSvg}
+            emblemSvg={player.emblemSvg}
+            titleText={player.titleText}
+            size="full"
+            isBot={player.isBot}
+          />
           {#if player.diceCount > 0 && !player.eliminated}
             <span class="dice-count">{player.diceCount}</span>
           {/if}

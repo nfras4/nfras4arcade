@@ -150,6 +150,32 @@ export class CosmeticsCache {
       return cached;
     }
     const resolved = await resolvePlayerCosmetics(playerId, db);
+    // Crown override (Wave 2): a Barrel Night winner wears the crown everywhere
+    // for one week regardless of their equipped hat. This lives HERE at the cache
+    // layer (not inside resolvePlayerCosmetics) so the player_profiles join only
+    // fires on cache-miss, not on every state recompute, and so /api/auth/me,
+    // /customize, and every game DO inherit it uniformly.
+    //
+    // The lookup is in its OWN nested try: on any failure we return the already
+    // resolved payload UNTOUCHED (never DEFAULT_COSMETICS). A missing
+    // crown_active_until column (0030 not yet applied) or a transient D1 error
+    // therefore degrades to "no crown", never to "no cosmetics" (pre-mortem 1/3).
+    try {
+      const row = await db
+        .prepare('SELECT crown_active_until FROM player_profiles WHERE id = ?')
+        .bind(playerId)
+        .first<{ crown_active_until: number }>();
+      const now = Math.floor(Date.now() / 1000);
+      if (row && row.crown_active_until > now) {
+        // Clone so we never mutate the shared DEFAULT_COSMETICS singleton that
+        // resolvePlayerCosmetics returns on its own error path.
+        const withCrown: CosmeticPayload = { ...resolved, hatId: 'crown' };
+        this.cache.set(playerId, withCrown);
+        return withCrown;
+      }
+    } catch {
+      // Keep the resolved payload as-is; never strip cosmetics on a crown-lookup failure.
+    }
     this.cache.set(playerId, resolved);
     return resolved;
   }

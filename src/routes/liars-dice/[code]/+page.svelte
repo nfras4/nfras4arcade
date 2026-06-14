@@ -278,6 +278,10 @@
   let bidFace = $state(2);
   let errorTimeout: ReturnType<typeof setTimeout>;
 
+  // Barrel Night crown-award toast (shown at the award moment in the room).
+  let crownToast = $state<string | null>(null);
+  let crownToastTimeout: ReturnType<typeof setTimeout>;
+
   const ANTE_OPTIONS = [25, 50, 100, 250];
 
   // ── Shake detector state ───────────────────────────────────────────────────
@@ -512,6 +516,10 @@
             chatLog = [...chatLog, entry].slice(-12);
           }
         }
+      } else if (msg.type === 'crown_awarded') {
+        crownToast = 'You won Barrel Night! The crown is yours for a week.';
+        clearTimeout(crownToastTimeout);
+        crownToastTimeout = setTimeout(() => { crownToast = null; }, 9000);
       } else if (msg.type === 'rtc_signal') {
         // Forward WebRTC signaling to mesh controller
         if (mesh) {
@@ -1050,6 +1058,13 @@
 
 {#if $errorMsg}
   <div class="error-toast">{$errorMsg}</div>
+{/if}
+
+{#if crownToast}
+  <div class="crown-toast" role="status" aria-live="polite">
+    <span class="crown-toast-icon" aria-hidden="true">👑</span>
+    <span class="crown-toast-text">{crownToast}</span>
+  </div>
 {/if}
 
 {#if state}
@@ -2465,6 +2480,38 @@
     color: var(--text-muted, #a8b8c4);
     word-break: break-all;
     text-align: center;
+  }
+
+  /* ─── Barrel Night crown toast ──────────────────────────────────────────────── */
+
+  .crown-toast {
+    position: fixed;
+    top: 4.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: min(92vw, 420px);
+    padding: 0.75rem 1.15rem;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #2a1f08, #1a1206);
+    border: 1px solid var(--gold, #e8b84b);
+    color: var(--gold, #e8b84b);
+    font-weight: 700;
+    box-shadow: 0 6px 24px rgba(232, 184, 75, 0.25);
+    animation: crown-toast-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .crown-toast-icon { font-size: 1.4rem; line-height: 1; }
+  .crown-toast-text { font-size: 0.95rem; }
+
+  @keyframes crown-toast-in {
+    from { opacity: 0; transform: translate(-50%, -12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .crown-toast { animation: none; }
   }
 
   /* ─── Chat styling ─────────────────────────────────────────────────────────── */

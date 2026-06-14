@@ -23,8 +23,9 @@ function generateCode(): string {
 }
 
 export const POST: RequestHandler = async ({ request, url, platform }) => {
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
-  const rl = peek(`create-solo:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  const rl = await peek(rateNs, `create-solo:${ip}`, RATE_LIMIT, RATE_WINDOW);
   if (!rl.ok) {
     return json({ error: 'Too many solo games, slow down' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
@@ -56,6 +57,6 @@ export const POST: RequestHandler = async ({ request, url, platform }) => {
     await stub.fetch(new Request(botUrl, { method: 'POST' }));
   }
 
-  record(`create-solo:${ip}`, RATE_WINDOW);
+  await record(rateNs, `create-solo:${ip}`, RATE_WINDOW);
   return json({ code, game });
 };

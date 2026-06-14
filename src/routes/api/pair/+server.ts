@@ -11,13 +11,13 @@ import type { RequestHandler } from './$types';
 import { check, getClientIp } from '$lib/server/auth/rateLimit';
 import { consumeToken } from '../../../../worker/shared/pairingTokens';
 
-export const POST: RequestHandler = async ({ request, locals }) => {
+export const POST: RequestHandler = async ({ request, locals, platform }) => {
   if (!locals.user) {
     return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const ip = getClientIp(request);
-  const rl = check(`pair-consume:${ip}`, 10, 60_000);
+  const rl = await check(platform?.env?.RATE_LIMITER, `pair-consume:${ip}`, 10, 60_000);
   if (!rl.ok) {
     return json(
       { error: 'Too many attempts, try again later' },

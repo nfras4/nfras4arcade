@@ -15,8 +15,9 @@ const RATE_LIMIT = 15;
 const RATE_WINDOW = 60_000;
 
 export const POST: RequestHandler = async ({ request, url, platform }) => {
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
-  const rl = peek(`remove-bots:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  const rl = await peek(rateNs, `remove-bots:${ip}`, RATE_LIMIT, RATE_WINDOW);
   if (!rl.ok) {
     return json({ error: 'Too many bot removes, slow down' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
@@ -45,6 +46,6 @@ export const POST: RequestHandler = async ({ request, url, platform }) => {
   const res = await stub.fetch(new Request(doUrl, { method: 'POST' }));
   const data = await res.json();
 
-  record(`remove-bots:${ip}`, RATE_WINDOW);
+  await record(rateNs, `remove-bots:${ip}`, RATE_WINDOW);
   return json(data, { status: res.status });
 };

@@ -12,6 +12,7 @@ export interface Env {
   BACCARAT_ROOM: DurableObjectNamespace;
   LIARS_DICE_ROOM: DurableObjectNamespace;
   COUP_ROOM: DurableObjectNamespace;
+  RATE_LIMITER: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
 }

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { verifyPassword, needsRehash, hashPassword } from '$lib/server/auth/password';
+import { verifyPassword, needsRehash, hashPassword, DUMMY_HASH } from '$lib/server/auth/password';
 import { createSession, setSessionCookie } from '$lib/server/auth/session';
 import { peek, record, getClientIp } from '$lib/server/auth/rateLimit';
 
@@ -11,12 +11,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'Database not available' }, { status: 500 });
 
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
   const failKey = `login:fail:${ip}`;
 
   // Only count FAILED attempts toward the bucket. Successful logins don't
   // consume, so a busy household sharing one NAT can keep logging in.
-  const rl = peek(failKey, FAIL_LIMIT, FAIL_WINDOW);
+  const rl = await peek(rateNs, failKey, FAIL_LIMIT, FAIL_WINDOW);
   if (!rl.ok) {
     return json({ error: 'Too many failed attempts, try again later' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
@@ -41,13 +42,16 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     .first<{ id: string; email: string; hashed_password: string; display_name: string; avatar: string | null }>();
 
   if (!user) {
-    record(failKey, FAIL_WINDOW);
+    // Burn equivalent PBKDF2 work so an unknown email can't be distinguished
+    // from a wrong password by response timing (account enumeration, audit H6).
+    await verifyPassword(password, DUMMY_HASH);
+    await record(rateNs, failKey, FAIL_WINDOW);
     return json({ error: 'Invalid email or password' }, { status: 401 });
   }
 
   const valid = await verifyPassword(password, user.hashed_password);
   if (!valid) {
-    record(failKey, FAIL_WINDOW);
+    await record(rateNs, failKey, FAIL_WINDOW);
     return json({ error: 'Invalid email or password' }, { status: 401 });
   }
 

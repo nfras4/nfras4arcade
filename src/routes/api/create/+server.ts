@@ -11,13 +11,14 @@ function generateCode(): string {
   return Array.from(bytes, (b) => CHARSET[b % CHARSET.length]).join('');
 }
 
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, platform }) => {
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
-  const rl = peek(`create:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  const rl = await peek(rateNs, `create:${ip}`, RATE_LIMIT, RATE_WINDOW);
   if (!rl.ok) {
     return json({ error: 'Too many room creations, slow down' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
-  record(`create:${ip}`, RATE_WINDOW);
+  await record(rateNs, `create:${ip}`, RATE_WINDOW);
   const code = generateCode();
   return json({ code });
 };

@@ -6,8 +6,9 @@ const RATE_LIMIT = 30;
 const RATE_WINDOW = 60_000;
 
 export const GET: RequestHandler = async ({ request, params, platform }) => {
+  const rateNs = platform?.env?.RATE_LIMITER;
   const ip = getClientIp(request);
-  const rl = peek(`room-lookup:${ip}`, RATE_LIMIT, RATE_WINDOW);
+  const rl = await peek(rateNs, `room-lookup:${ip}`, RATE_LIMIT, RATE_WINDOW);
   if (!rl.ok) {
     return json({ error: 'Too many room lookups, slow down' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } });
   }
@@ -31,7 +32,7 @@ export const GET: RequestHandler = async ({ request, params, platform }) => {
   try {
     const exists = await db.prepare('SELECT 1 FROM active_rooms WHERE code = ? LIMIT 1').bind(code).first();
     if (!exists) {
-      record(`room-lookup:${ip}`, RATE_WINDOW);
+      await record(rateNs, `room-lookup:${ip}`, RATE_WINDOW);
       return json({ error: 'Room not found' }, { status: 404 });
     }
   } catch (err) {
@@ -46,14 +47,14 @@ export const GET: RequestHandler = async ({ request, params, platform }) => {
     const data = (await res.json()) as { code: string; playerCount: number; phase: string };
 
     if (!data.code) {
-      record(`room-lookup:${ip}`, RATE_WINDOW);
+      await record(rateNs, `room-lookup:${ip}`, RATE_WINDOW);
       return json({ error: 'Room not found' }, { status: 404 });
     }
 
-    record(`room-lookup:${ip}`, RATE_WINDOW);
+    await record(rateNs, `room-lookup:${ip}`, RATE_WINDOW);
     return json(data);
   } catch {
-    record(`room-lookup:${ip}`, RATE_WINDOW);
+    await record(rateNs, `room-lookup:${ip}`, RATE_WINDOW);
     return json({ error: 'Room not found' }, { status: 404 });
   }
 };

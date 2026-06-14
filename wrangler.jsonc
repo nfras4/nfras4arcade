@@ -82,6 +82,6 @@
   // Scheduled triggers (cron). Barrel Night opens Sunday 09:00 UTC = 19:00 AEST
   // (20:00 during AEDT). Handler wired as worker_default.scheduled by patch-worker.ts.
   "triggers": {
-    "crons": ["0 9 * * 0"]
+    "crons": ["0 9 * * SUN"]
   }
 }

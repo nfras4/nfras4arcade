@@ -228,6 +228,18 @@
       <span class="store-strip-arrow" aria-hidden="true">→</span>
     </a>
 
+    <!-- Barrel Night strip: weekly liar's dice crown event -->
+    <a class="store-strip bn-strip" href="/barrel-night" aria-label="Barrel Night: weekly liar's dice crown event">
+      <div class="store-strip-glyph bn-strip-glyph" aria-hidden="true">👑</div>
+      <div class="store-strip-text">
+        <span class="store-strip-title geo-title">Barrel Night</span>
+        <span class="store-strip-sub store-strip-sub-full">Win the weekly liar's dice crown. Sundays 7pm AEST.</span>
+        <span class="store-strip-sub store-strip-sub-short">Weekly crown. Sun 7pm.</span>
+      </div>
+      <span class="store-strip-spacer" aria-hidden="true"></span>
+      <span class="store-strip-arrow" aria-hidden="true">→</span>
+    </a>
+
     <!-- Live Now: cross-game active rooms feed -->
     {#if liveRooms !== null && liveRooms.length > 0}
       {void liveTick}
@@ -952,6 +964,23 @@
     color: var(--casino);
     background: var(--casino-faint);
     border: 1px solid var(--casino-border-soft);
+  }
+
+  /* Barrel Night: gold-crown accent variant of the store strip */
+  .bn-strip::before {
+    background: linear-gradient(135deg, var(--gold, #e8b84b), var(--border));
+  }
+  .bn-strip::after {
+    background: linear-gradient(90deg, var(--gold, #e8b84b) 0%, transparent 70%);
+  }
+  .bn-strip:hover {
+    filter: drop-shadow(0 0 12px rgba(232, 184, 75, 0.35));
+  }
+  .bn-strip-glyph {
+    font-size: 1.4rem;
+    color: var(--gold, #e8b84b);
+    background: rgba(232, 184, 75, 0.1);
+    border-color: rgba(232, 184, 75, 0.3);
   }
 
   /* Text block */

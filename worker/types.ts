@@ -14,4 +14,6 @@ export interface Env {
   COUP_ROOM: DurableObjectNamespace;
   ASSETS: Fetcher;
   ENVIRONMENT: string;
+  /** Kill-switch for Barrel Night (the weekly liar's dice crown event). "true" to enable. */
+  BARREL_NIGHT_ENABLED?: string;
 }

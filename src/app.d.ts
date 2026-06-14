@@ -11,7 +11,9 @@ declare global {
         IMPOSTOR_ROOM: DurableObjectNamespace;
         PRESIDENT_ROOM: DurableObjectNamespace;
         CHASE_QUEEN_ROOM: DurableObjectNamespace;
+        LIARS_DICE_ROOM: DurableObjectNamespace;
         ENVIRONMENT: string;
+        BARREL_NIGHT_ENABLED?: string;
       };
       ctx: ExecutionContext;
     }

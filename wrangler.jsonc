@@ -74,6 +74,8 @@
   "vars": {
     "ENVIRONMENT": "production",
     // Feature flag: cosmetic tile rendering. Set to "false" in production until verified.
-    "COSMETIC_TILES_ENABLED": "true"
+    "COSMETIC_TILES_ENABLED": "true",
+    // Kill-switch for Barrel Night (weekly liar's dice crown event). Flip to "false" to disable.
+    "BARREL_NIGHT_ENABLED": "true"
   }
 }

@@ -16,6 +16,7 @@ describe('CosmeticPayload (hat slot)', () => {
       titleBadgeId: null,
       titleText: null,
       hatId: null,
+      glassesId: null,
     };
     expect(payload.hatId).toBeNull();
   });
@@ -28,6 +29,7 @@ describe('CosmeticPayload (hat slot)', () => {
       titleBadgeId: null,
       titleText: null,
       hatId: 'party',
+      glassesId: null,
     };
     expect(payload.hatId).toBe('party');
   });

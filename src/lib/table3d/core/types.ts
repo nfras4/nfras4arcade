@@ -20,6 +20,7 @@ export interface PlayerViewLike {
   chips: number;
   nameColour?: string | null;
   hat?: string | null;
+  glasses?: string | null;
   titleText?: string | null;
   emblemSvg?: string | null;
   frameSvg?: string | null;

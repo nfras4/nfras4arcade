@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { authedFetch } from './auth';
 
 export const canClaim = writable(false);
 export const nextClaimAt = writable<number | null>(null);
@@ -7,7 +8,7 @@ export const nextHourlyClaimAt = writable<number | null>(null);
 
 export async function fetchChipStatus() {
   try {
-    const res = await fetch('/api/chips/status');
+    const res = await authedFetch('/api/chips/status');
     if (!res.ok) return;
     const data: any = await res.json();
     canClaim.set(data.canClaim);

@@ -1,7 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { fetchLiveRooms, gameLabel, playersSummary, phaseLabel, elapsedLabel, type LiveRoom } from '$lib/liveRooms'
-  import { isLoggedIn } from '$lib/auth'
+  import { isLoggedIn, currentUser } from '$lib/auth'
+  import { browser } from '$app/environment'
+  import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte'
+  import { furColourFor } from '$lib/table3d/core/seats'
+  import { probeWebGL } from '$lib/table3d/webgl'
 
   interface DailyQuestSummary {
     slot: number;
@@ -39,6 +43,14 @@
   }}
 
   let { data }: Props = $props()
+
+  // 3D monkey hero: rendered only when logged in, in-browser, and WebGL is
+  // available. Fur colour is the same deterministic colour the player wears at
+  // any table (furColourFor), so the hero monkey matches their in-game self.
+  let webglOk = $state(false)
+  $effect(() => { webglOk = browser && probeWebGL() })
+  let heroFur = $derived($currentUser ? furColourFor($currentUser.id, false, new Map()) : '#8B5E3C')
+  let show3dMonkey = $derived(webglOk && $isLoggedIn && !!$currentUser)
 
   let lbData = $state(data.leaderboard)
   let chipLb = $state(data.chipLeaderboard)
@@ -103,15 +115,6 @@
 
 <div class="hub">
   <div class="hub-content">
-
-    <header class="hub-hero">
-      <div class="title-frame">
-        <span class="diamond-accent" aria-hidden="true"></span>
-        <h1 class="wordmark geo-title">nfras4arcade</h1>
-        <span class="diamond-accent" aria-hidden="true"></span>
-      </div>
-      <p class="tagline">Choose your arena</p>
-    </header>
 
     {#if $isLoggedIn && questSummary}
       <a class="quests-pill" href="/quests" aria-label="Daily quests">
@@ -194,6 +197,18 @@
         <span class="cat-arrow rpg-arrow" aria-hidden="true">→</span>
         <div class="card-shine" aria-hidden="true"></div>
       </button>
+
+      {#if show3dMonkey}
+        <div class="hero-monkey-float">
+          <SelfMonkeyPortrait
+            furColour={heroFur}
+            expression="grin"
+            idle
+            playerName={$currentUser?.displayName ?? 'You'}
+          />
+          <a class="hero-customize-btn" href="/customize">Customize</a>
+        </div>
+      {/if}
 
     </nav>
 
@@ -451,6 +466,48 @@
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
+  .hero-monkey-float {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    margin-left: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    z-index: 2;
+  }
+
+  .hero-customize-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    text-decoration: none;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .hero-customize-btn:hover {
+    background: var(--accent-border);
+    transform: translateY(-1px);
+  }
+
+  /* Hide the floated monkey when there isn't room beside the centred column. */
+  @media (max-width: 1024px) {
+    .hero-monkey-float { display: none; }
+  }
+
   .title-frame {
     display: flex;
     align-items: center;
@@ -481,6 +538,7 @@
 
   /* ── Category grid ───────────────────────────────────── */
   .category-grid {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 1rem;

@@ -10,6 +10,7 @@ import { checkLevelGrants } from '../shared/levelRewards';
 import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
 import { upsertActiveRoom, deleteActiveRoom, type ActiveRoomPlayer } from '../shared/activeRooms';
 import { xpToLevel } from '../../src/lib/xp';
+import { earlierAlarm } from './alarmHelpers';
 
 // --- Constants ---
 
@@ -457,6 +458,11 @@ export class WavelengthRoom extends DurableObject<Env> {
       await this.processBotTurn();
       this.broadcastState();
       await this.saveState();
+      // Re-arm a pending reconnect deadline that may have been displaced by this
+      // bot-turn alarm, so disconnected players are still timed out on schedule.
+      if (this.disconnectTimestamps.size > 0) {
+        await this.scheduleReconnectCheck();
+      }
       return;
     }
 
@@ -644,6 +650,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
       player.titleText = DEFAULT_COSMETICS.titleText;
       player.hat = DEFAULT_COSMETICS.hatId;
+      player.glasses = DEFAULT_COSMETICS.glassesId;
       return;
     }
     try {
@@ -656,6 +663,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       p.titleBadgeId = cosmetics.titleBadgeId;
       p.titleText = cosmetics.titleText;
       p.hat = cosmetics.hatId;
+      p.glasses = cosmetics.glassesId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
@@ -1433,7 +1441,11 @@ export class WavelengthRoom extends DurableObject<Env> {
     if (this.phase === 'clue_giving' && this.bots.has(this.psychicId)) {
       this.botTurnPending = true;
       const delay = botThinkDelay();
-      await this.ctx.storage.setAlarm(Date.now() + delay);
+      const target = Date.now() + delay;
+      const existing = await this.ctx.storage.getAlarm();
+      if (earlierAlarm(existing, target)) {
+        await this.ctx.storage.setAlarm(target);
+      }
     } else if (this.phase === 'guessing') {
       // Check if any bots need to guess
       for (const botId of this.bots.keys()) {
@@ -1441,7 +1453,11 @@ export class WavelengthRoom extends DurableObject<Env> {
         if (!this.lockedIn.has(botId)) {
           this.botTurnPending = true;
           const delay = botThinkDelay();
-          await this.ctx.storage.setAlarm(Date.now() + delay);
+          const target = Date.now() + delay;
+          const existing = await this.ctx.storage.getAlarm();
+          if (earlierAlarm(existing, target)) {
+            await this.ctx.storage.setAlarm(target);
+          }
           return;
         }
       }

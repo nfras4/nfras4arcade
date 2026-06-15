@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const VALID_SLOTS = ['avatar', 'name_colour', 'card_back', 'table_felt', 'frame', 'emblem', 'hat'] as const;
+const VALID_SLOTS = ['avatar', 'name_colour', 'card_back', 'table_felt', 'frame', 'emblem', 'hat', 'glasses'] as const;
 type EquipSlot = (typeof VALID_SLOTS)[number];
 
 const SLOT_TO_COLUMN: Record<EquipSlot, string> = {
@@ -12,6 +12,7 @@ const SLOT_TO_COLUMN: Record<EquipSlot, string> = {
 	frame: 'frame_id',
 	emblem: 'emblem_id',
 	hat: 'hat_id',
+	glasses: 'glasses_id',
 };
 
 export const POST: RequestHandler = async ({ request, locals, platform }) => {
@@ -34,7 +35,7 @@ export const POST: RequestHandler = async ({ request, locals, platform }) => {
 	const { slot, itemId } = body;
 
 	if (!slot || !VALID_SLOTS.includes(slot as EquipSlot)) {
-		return json({ error: 'Invalid slot. Must be one of: avatar, name_colour, card_back, table_felt, frame, emblem, hat' }, { status: 400 });
+		return json({ error: 'Invalid slot. Must be one of: avatar, name_colour, card_back, table_felt, frame, emblem, hat, glasses' }, { status: 400 });
 	}
 
 	const equipSlot = slot as EquipSlot;

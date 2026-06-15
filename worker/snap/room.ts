@@ -530,6 +530,7 @@ export class SnapRoom extends DurableObject<Env> {
       p.nameColour = cosmetics.nameColour;
       p.titleBadgeId = cosmetics.titleBadgeId;
       p.hat = cosmetics.hatId;
+      p.glasses = cosmetics.glassesId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }

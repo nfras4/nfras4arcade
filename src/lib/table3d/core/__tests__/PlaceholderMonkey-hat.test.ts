@@ -24,9 +24,11 @@ import {
 // ── HatId: all known values compile and round-trip ───────────────────────────
 
 describe('HatId values (rig contract)', () => {
-  it('all five wearable hat ids are valid HatId members', () => {
-    const wearable: HatId[] = ['party', 'top_hat', 'beanie', 'sombrero', 'crown'];
-    expect(wearable).toHaveLength(5);
+  it('all wearable hat ids are valid HatId members', () => {
+    const wearable: HatId[] = ['party', 'top_hat', 'beanie', 'sombrero', 'crown',
+      'wizard', 'cowboy', 'halo', 'horns', 'propeller', 'chef', 'graduate',
+      'viking', 'flower_crown', 'cat_ears', 'santa', 'beret'];
+    expect(wearable).toHaveLength(17);
     for (const id of wearable) {
       expect(typeof id).toBe('string');
       expect(id.length).toBeGreaterThan(0);
@@ -38,15 +40,19 @@ describe('HatId values (rig contract)', () => {
     expect(sentinel).toBe('none');
   });
 
-  it('HatId covers exactly 6 values including the sentinel', () => {
+  it('HatId covers exactly 18 values including the sentinel', () => {
     // Enumerate every value the union currently declares.
     // Adding a new hat without updating this list will cause a type error.
-    const all: HatId[] = ['none', 'party', 'top_hat', 'beanie', 'sombrero', 'crown'];
-    expect(all).toHaveLength(6);
+    const all: HatId[] = ['none', 'party', 'top_hat', 'beanie', 'sombrero', 'crown',
+      'wizard', 'cowboy', 'halo', 'horns', 'propeller', 'chef', 'graduate',
+      'viking', 'flower_crown', 'cat_ears', 'santa', 'beret'];
+    expect(all).toHaveLength(18);
   });
 
   it('each hat id is a non-empty lowercase string with no spaces', () => {
-    const all: HatId[] = ['none', 'party', 'top_hat', 'beanie', 'sombrero', 'crown'];
+    const all: HatId[] = ['none', 'party', 'top_hat', 'beanie', 'sombrero', 'crown',
+      'wizard', 'cowboy', 'halo', 'horns', 'propeller', 'chef', 'graduate',
+      'viking', 'flower_crown', 'cat_ears', 'santa', 'beret'];
     for (const id of all) {
       expect(id).toMatch(/^[a-z_]+$/);
     }

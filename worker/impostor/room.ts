@@ -8,6 +8,7 @@ import type {
   RoundResult, GameState, ClientMessage, ServerMessage,
 } from '../../src/lib/types';
 import { getRandomWord, getRandomCategory, getCategories } from './words';
+import { shouldResolveVotes, selectSpectatorsToPromote } from './logic';
 import { CosmeticsCache } from '../shared/cosmetics';
 import { checkLevelGrants } from '../shared/levelRewards';
 import { recordGameEnd as recordProgressionGameEnd } from '../shared/progression';
@@ -289,7 +290,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       await this.saveState();
       return;
     }
-    this.handleDisconnect(playerId);
+    await this.handleDisconnect(playerId);
     await this.saveState();
   }
 
@@ -305,7 +306,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       await this.saveState();
       return;
     }
-    this.handleDisconnect(playerId);
+    await this.handleDisconnect(playerId);
     await this.saveState();
   }
 
@@ -315,7 +316,7 @@ export class ImpostorRoom extends DurableObject<Env> {
 
     // Check reconnect timeouts first
     if (this.disconnectTimestamps.size > 0) {
-      const changed = this.handleReconnectTimeouts();
+      const changed = await this.handleReconnectTimeouts();
       if (changed) {
         this.broadcastState();
         await this.saveState();
@@ -466,12 +467,13 @@ export class ImpostorRoom extends DurableObject<Env> {
       p.player.titleBadgeId = cosmetics.titleBadgeId;
       p.player.titleText = cosmetics.titleText;
       p.player.hat = cosmetics.hatId;
+      p.player.glasses = cosmetics.glassesId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }
   }
 
-  private handleDisconnect(playerId: string): void {
+  private async handleDisconnect(playerId: string): Promise<void> {
     // Handle spectator disconnect
     if (this.spectators.has(playerId)) {
       this.spectators.delete(playerId);
@@ -512,6 +514,16 @@ export class ImpostorRoom extends DurableObject<Env> {
       return;
     }
 
+    // FINDING 1: If the disconnecting player was the last non-voter during the
+    // voting phase, resolve the round immediately rather than waiting for the
+    // 45s reconnect-timeout alarm (which previously had no voting branch). The
+    // shouldResolveVotes guard requires at least one vote to have been cast, so
+    // a tab-close before anyone voted won't crash / mis-resolve.
+    if (this.phase === 'voting' && shouldResolveVotes(this.connectedVotingView())) {
+      const roundResult = await this.resolveVotes();
+      this.broadcast({ type: 'round_result', result: roundResult });
+    }
+
     this.broadcastState();
     if (this.phase === 'lobby') {
       this.writeActiveRoom().catch(() => {});
@@ -528,9 +540,10 @@ export class ImpostorRoom extends DurableObject<Env> {
     }
   }
 
-  private handleReconnectTimeouts(): boolean {
+  private async handleReconnectTimeouts(): Promise<boolean> {
     const now = Date.now();
     let changed = false;
+    let timedOutDuringVoting = false;
 
     for (const [pid, timestamp] of this.disconnectTimestamps) {
       if (now - timestamp >= RECONNECT_TIMEOUT_MS) {
@@ -548,6 +561,10 @@ export class ImpostorRoom extends DurableObject<Env> {
             }
           }
 
+          if (this.phase === 'voting') {
+            timedOutDuringVoting = true;
+          }
+
           // Host promotion if host disconnected
           if (pid === this.hostId) {
             this.promoteNewHost(pid);
@@ -556,7 +573,28 @@ export class ImpostorRoom extends DurableObject<Env> {
       }
     }
 
+    // FINDING 1: If a player timed out during voting, the remaining connected
+    // players may now all have voted. Re-evaluate over CONNECTED players and
+    // resolve the round so it doesn't deadlock until room expiry. The
+    // shouldResolveVotes guard also requires at least one vote to have been
+    // cast, so we don't crash / mis-resolve if nobody voted.
+    if (timedOutDuringVoting && this.phase === 'voting' && shouldResolveVotes(this.connectedVotingView())) {
+      const roundResult = await this.resolveVotes();
+      this.broadcast({ type: 'round_result', result: roundResult });
+    }
+
     return changed;
+  }
+
+  /**
+   * View of players as the minimal { connected, hasVoted } shape consumed by
+   * the pure vote-resolution helpers.
+   */
+  private connectedVotingView(): { connected: boolean; hasVoted?: boolean }[] {
+    return Array.from(this.players.values()).map((cp) => ({
+      connected: cp.player.connected,
+      hasVoted: cp.hasVoted,
+    }));
   }
 
   private skipDisconnectedTurn(playerId: string): void {
@@ -697,7 +735,7 @@ export class ImpostorRoom extends DurableObject<Env> {
 
       case 'play_again': {
         if (playerId !== this.hostId) break;
-        this.resetToLobby();
+        await this.resetToLobby();
         this.broadcastState();
         await this.writeActiveRoom();
         break;
@@ -796,7 +834,7 @@ export class ImpostorRoom extends DurableObject<Env> {
 
       // If fewer than 3 players remain, return to lobby
       if (this.players.size < 3) {
-        this.resetToLobby();
+        await this.resetToLobby();
         this.broadcastState();
         return;
       }
@@ -1233,7 +1271,7 @@ export class ImpostorRoom extends DurableObject<Env> {
     return result;
   }
 
-  private resetToLobby(): void {
+  private async resetToLobby(): Promise<void> {
     this.phase = 'lobby';
     this.hintRound = 0;
     this.currentWord = null;
@@ -1262,14 +1300,26 @@ export class ImpostorRoom extends DurableObject<Env> {
       cp.hintGiven = false;
     }
 
-    // Promote spectators to players
-    for (const [specId, specName] of this.spectators) {
-      if (this.players.size < 8) {
-        const player: Player = { id: specId, name: specName, isHost: false, connected: true, connectionStatus: 'connected' };
-        this.players.set(specId, { player });
-      }
+    // Promote spectators to players, honoring the 8-player cap. FINDING 2:
+    // only delete spectators we actually promote — un-promoted users stay in
+    // the spectators map so their banner + read-only state persist instead of
+    // being orphaned (removed from spectators yet absent from players).
+    const promotedIds = selectSpectatorsToPromote(this.spectators.keys(), this.players.size, 8);
+    for (const specId of promotedIds) {
+      // FINDING 3: re-read the stored display name at promotion time and fall
+      // back to 'Player' (NOT the literal 'Spectator') if the name:<id> key was
+      // missing when they joined.
+      const storedName = await this.ctx.storage.get<string>(`name:${specId}`);
+      // The spectators-map value is itself 'Spectator' when name:<id> was
+      // missing at join time, so treat that literal as absent too.
+      const mapName = this.spectators.get(specId);
+      const name = storedName || (mapName && mapName !== 'Spectator' ? mapName : 'Player');
+      const player: Player = { id: specId, name, isHost: false, connected: true, connectionStatus: 'connected' };
+      this.players.set(specId, { player });
+      // FINDING 3: resolve frame/emblem/nameColour/hat/title like a normal join.
+      await this.resolveCosmeticsForPlayer(specId);
+      this.spectators.delete(specId);
     }
-    this.spectators.clear();
   }
 
   private getStateFor(playerId: string, deviceRole: DeviceRole): GameState {

@@ -5,7 +5,7 @@
   import LevelUpToast from '$lib/components/LevelUpToast.svelte';
   import XpGainedToast from '$lib/components/XpGainedToast.svelte';
   import { page } from '$app/stores';
-  import { currentUser, userStats, isLoggedIn, logout, fetchUser } from '$lib/auth';
+  import { currentUser, userStats, isLoggedIn, logout, fetchUser, authedFetch } from '$lib/auth';
   import { canClaim, nextClaimAt, canHourlyClaim, nextHourlyClaimAt, fetchChipStatus } from '$lib/chipStatus';
   import { xpToLevel } from '$lib/xp';
   import type { Snippet } from 'svelte';
@@ -66,7 +66,7 @@
     if ($isLoggedIn) {
       (async () => {
         try {
-          const res = await fetch('/api/friends/requests');
+          const res = await authedFetch('/api/friends/requests');
           if (!res.ok) return;
           const data = (await res.json()) as { incoming?: unknown[] };
           if (data && Array.isArray(data.incoming)) {
@@ -121,7 +121,7 @@
   async function claimChips() {
     claiming = true;
     try {
-      const res = await fetch('/api/chips/claim', { method: 'POST' });
+      const res = await authedFetch('/api/chips/claim', { method: 'POST' });
       const data: any = await res.json();
       if (data.success) {
         canClaim.set(false);
@@ -137,7 +137,7 @@
   async function claimHourly() {
     claimingHourly = true;
     try {
-      const res = await fetch('/api/chips/hourly', { method: 'POST' });
+      const res = await authedFetch('/api/chips/hourly', { method: 'POST' });
       const data: any = await res.json();
       if (data.success) {
         canHourlyClaim.set(false);
@@ -154,8 +154,17 @@
     theme = theme === 'dark' ? 'light' : 'dark';
   }
 
+  let logoutError = $state('');
+
   async function handleLogout() {
-    await logout();
+    const r = await logout();
+    if (!r.ok) {
+      // Server unreachable / errored: logout() deliberately kept the session,
+      // so stay put and tell the user rather than faking a logged-out nav.
+      logoutError = r.error ?? 'Could not log out. Please try again.';
+      setTimeout(() => { logoutError = ''; }, 4000);
+      return;
+    }
     goto('/');
   }
 </script>
@@ -241,12 +250,34 @@
   {@render children()}
 </main>
 
+{#if logoutError}
+  <div class="logout-toast" role="alert">{logoutError}</div>
+{/if}
+
 {#if !roomCode}
   <a href="/about" class="corner-about" title="About this project">About</a>
 {/if}
 
 
 <style>
+  .logout-toast {
+    position: fixed;
+    top: 4.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    padding: 0.6rem 1rem;
+    background: var(--bg-card, #1a1a1a);
+    border: 1px solid var(--danger-red, #e74c3c);
+    color: var(--danger-red, #e74c3c);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    max-width: calc(100vw - 2rem);
+    text-align: center;
+  }
+
   .top-nav {
     position: fixed;
     top: 0;

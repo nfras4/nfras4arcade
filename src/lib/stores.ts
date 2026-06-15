@@ -84,6 +84,9 @@ export function initSocketListeners(): () => void {
         error.set(msg.message);
         gameState.set(null);
         connected.set(false);
+        // The server closes the socket right after this; tear the client down
+        // too so onclose's reconnect path doesn't re-spawn us into the dead room.
+        socket.disconnect();
         break;
 
       case 'xp_gained':

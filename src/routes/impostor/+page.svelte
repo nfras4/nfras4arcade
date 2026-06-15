@@ -4,12 +4,40 @@
   import { initSocketListeners, gameState, error, resetStores } from '$lib/stores';
   import { currentUser, isLoggedIn, fetchUser } from '$lib/auth';
   import { getGuestDisplayName } from '$lib/guest';
+  import { impostorRoomExists } from '$lib/roomCheck';
 
   let roomCode = $state('');
   let joining = $state(false);
   let mode: 'menu' | 'join' = $state('menu');
   let showRules = $state(false);
   let codeInputEl: HTMLInputElement | null = $state(null);
+
+  // Only navigate into a room when THIS page started a create/join. Without this
+  // gate, a stale broadcast from a still-open socket (back-button into the lobby)
+  // would set gameState.code and bounce the user straight back into the room.
+  let navigatingToRoom = $state(false);
+  // Watchdog: if a join sends but the server never acks (no joined, no error),
+  // the user would sit on "Joining..." forever. Surface a recoverable error.
+  let joinWatchdog: ReturnType<typeof setTimeout> | null = null;
+
+  function clearJoinWatchdog() {
+    if (joinWatchdog) {
+      clearTimeout(joinWatchdog);
+      joinWatchdog = null;
+    }
+  }
+
+  function armJoinWatchdog() {
+    clearJoinWatchdog();
+    joinWatchdog = setTimeout(() => {
+      if (joining && !$gameState?.code) {
+        error.set('Could not join room. Please try again.');
+        joining = false;
+        navigatingToRoom = false;
+        socket.disconnect();
+      }
+    }, 8000);
+  }
 
   $effect(() => {
     if (mode === 'join' && codeInputEl) {
@@ -21,43 +49,74 @@
     resetStores();
     const unsub = initSocketListeners();
     fetchUser();
-    return () => unsub();
+    return () => {
+      unsub();
+      clearJoinWatchdog();
+    };
   });
 
   $effect(() => {
-    if ($gameState?.code) {
+    if (navigatingToRoom && $gameState?.code) {
+      clearJoinWatchdog();
       goto(`/impostor/${$gameState.code}`);
+    }
+  });
+
+  // Any server error (e.g. "Room is full") clears the in-flight join so the
+  // button returns to its idle label and the user can retry a different code.
+  $effect(() => {
+    if ($error) {
+      joining = false;
+      navigatingToRoom = false;
+      clearJoinWatchdog();
     }
   });
 
   async function createRoom() {
     joining = true;
+    navigatingToRoom = true;
     try {
       const res = await fetch('/api/create', { method: 'POST' });
       const data: { code?: string; error?: string } = await res.json();
       if (data.error || !data.code) {
         error.set(data.error || 'Failed to create room');
         joining = false;
+        navigatingToRoom = false;
         return;
       }
+      armJoinWatchdog();
       await socket.connect(data.code, !$isLoggedIn);
       socket.joinRoom(data.code);
     } catch {
       error.set('Could not connect to server');
       joining = false;
+      navigatingToRoom = false;
+      clearJoinWatchdog();
     }
   }
 
   async function joinRoom() {
     if (!roomCode.trim()) return;
     joining = true;
+    navigatingToRoom = true;
+    const code = roomCode.trim().toUpperCase();
     try {
-      const code = roomCode.trim().toUpperCase();
+      // Reject a mistyped / expired / never-created code up front instead of
+      // silently minting a fresh empty room and stranding the user in it.
+      if (!(await impostorRoomExists(code))) {
+        error.set('Room not found. Check the code and try again.');
+        joining = false;
+        navigatingToRoom = false;
+        return;
+      }
+      armJoinWatchdog();
       await socket.connect(code, !$isLoggedIn);
       socket.joinRoom(code);
     } catch {
       error.set('Could not connect to server');
       joining = false;
+      navigatingToRoom = false;
+      clearJoinWatchdog();
     }
   }
 

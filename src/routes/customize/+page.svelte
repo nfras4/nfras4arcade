@@ -4,6 +4,11 @@
   import PlayerTile from '$lib/components/PlayerTile.svelte';
   import CosmeticPreview from '$lib/components/CosmeticPreview.svelte';
   import { xpToLevel } from '$lib/xp';
+  import { browser } from '$app/environment';
+  import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte';
+  import { furColourFor } from '$lib/table3d/core/seats';
+  import { probeWebGL } from '$lib/table3d/webgl';
+  import type { HatId, GlassesId } from '$lib/table3d/core/rig';
 
   /**
    * Build the minimal CosmeticItem shape that CosmeticPreview expects from
@@ -64,12 +69,13 @@
     card_back_id: string | null;
     table_felt_id: string | null;
     hat_id?: string | null;
+    glasses_id?: string | null;
     frame_id?: string | null;
     emblem_id?: string | null;
     title_badge_id?: string | null;
   }
 
-  type TabId = 'frame' | 'emblem' | 'colour' | 'hat' | 'title' | 'card_back' | 'table_felt';
+  type TabId = 'frame' | 'emblem' | 'colour' | 'hat' | 'title' | 'card_back' | 'table_felt' | 'glasses';
 
   interface OwnedCosmetic {
     id: string;
@@ -95,6 +101,7 @@
     card_back_id: null,
     table_felt_id: null,
     hat_id: null,
+    glasses_id: null,
     frame_id: null,
     emblem_id: null,
     title_badge_id: null,
@@ -103,6 +110,9 @@
   let previewFrameSvg: string | null = $state(null);
   let previewEmblemSvg: string | null = $state(null);
   let previewTitleSlug: string | null = $state(null);
+  // True when /api/auth/me resolves the hat to the Barrel Night crown, i.e. the
+  // crown override is currently active for this account (won within the week).
+  let crownActive = $state(false);
 
   let activeTab: TabId = $state('frame');
   let loading = $state(true);
@@ -115,6 +125,7 @@
     { id: 'emblem', label: 'Emblem' },
     { id: 'colour', label: 'Name Colour' },
     { id: 'hat', label: 'Hat' },
+    { id: 'glasses', label: 'Glasses' },
     { id: 'card_back', label: 'Card Back' },
     { id: 'table_felt', label: 'Table Felt' },
     { id: 'title', label: 'Title' },
@@ -239,6 +250,16 @@
     earnedTitles.find((t) => t.slug === previewTitleSlug)?.label ?? null
   );
 
+  // 3D monkey preview: deterministic fur colour (matches the player's monkey at
+  // any table) plus the currently-equipped hat, so picking a hat updates the
+  // model live. Gated on WebGL so non-capable devices keep the 2D tile only.
+  let webglOk = $state(false);
+  $effect(() => { webglOk = browser && probeWebGL(); });
+  let previewFur = $derived($currentUser ? furColourFor($currentUser.id, false, new Map()) : '#8B5E3C');
+  let previewHat = $derived((equipped.hat_id ?? null) as HatId | null);
+  let previewGlasses = $derived((equipped.glasses_id ?? null) as GlassesId | null);
+  let show3dMonkey = $derived(webglOk && !!$currentUser);
+
   async function loadCustomizeData() {
     loading = true;
     errorMsg = '';
@@ -251,6 +272,7 @@
         equipped = {
           ...invData.equipped,
           hat_id: invData.equipped.hat_id ?? null,
+          glasses_id: invData.equipped.glasses_id ?? null,
           frame_id: invData.equipped.frame_id ?? null,
           emblem_id: invData.equipped.emblem_id ?? null,
           title_badge_id: invData.equipped.title_badge_id ?? null,
@@ -274,11 +296,14 @@
             frame?: { svg: string } | null;
             emblem?: { svg: string } | null;
             titleBadge?: { id: string } | null;
+            hat?: { id: string } | null;
           };
         } = await meRes.json();
         previewFrameSvg = meData.user?.frame?.svg ?? null;
         previewEmblemSvg = meData.user?.emblem?.svg ?? null;
         previewTitleSlug = meData.user?.titleBadge?.id ?? null;
+        // The resolver hands back hat 'crown' only while the override window is live.
+        crownActive = meData.user?.hat?.id === 'crown';
       }
     } catch {
       errorMsg = 'Failed to load your loadout';
@@ -543,6 +568,22 @@
       }))
   );
 
+  let ownedGlasses = $derived<OwnedSlotItem[]>(
+    inventory
+      .filter((row) => row.item.subcategory === 'glasses')
+      .map((row) => ({
+        id: row.item.id,
+        name: row.item.name,
+        description: row.item.description,
+        icon: row.item.icon,
+        metadata: row.item.metadata,
+      }))
+  );
+
+  function isGlassesEquipped(id: string | null): boolean {
+    return (equipped.glasses_id ?? null) === id;
+  }
+
   function isCardBackEquipped(id: string | null): boolean {
     return (equipped.card_back_id ?? null) === id;
   }
@@ -551,9 +592,9 @@
     return (equipped.table_felt_id ?? null) === id;
   }
 
-  async function equipSlotItem(slot: 'card_back' | 'table_felt', item: OwnedSlotItem | null) {
+  async function equipSlotItem(slot: 'card_back' | 'table_felt' | 'glasses', item: OwnedSlotItem | null) {
     const targetId = item?.id ?? null;
-    const slotKey: keyof EquippedState = slot === 'card_back' ? 'card_back_id' : 'table_felt_id';
+    const slotKey: keyof EquippedState = `${slot}_id` as keyof EquippedState;
     const prevId = equipped[slotKey];
 
     pendingId = item?.id ?? `__none_${slot}`;
@@ -612,6 +653,17 @@
       <div class="preview-wrap card" aria-label="Loadout preview">
         <span class="preview-label">Preview</span>
         <div class="preview-stage">
+          {#if show3dMonkey}
+            <div class="preview-monkey">
+              <SelfMonkeyPortrait
+                furColour={previewFur}
+                expression="grin"
+                hat={previewHat}
+                glasses={previewGlasses}
+                playerName={previewName}
+              />
+            </div>
+          {/if}
           <PlayerTile
             player={{
               id: $currentUser?.id ?? 'preview',
@@ -881,6 +933,20 @@
           id="panel-hat"
           aria-labelledby="tab-hat"
         >
+          <div class="crown-note" class:crown-note--active={crownActive} role="note">
+            <span class="crown-note-icon" aria-hidden="true">&#x1F451;</span>
+            {#if crownActive}
+              <span class="crown-note-text">
+                <strong>You're wearing the Barrel Night crown.</strong>
+                It overrides your hat everywhere until this week's bracket resets. Win again to keep it.
+              </span>
+            {:else}
+              <span class="crown-note-text">
+                <strong>The crown can't be bought.</strong>
+                Win <a href="/barrel-night">Barrel Night</a> and it auto-equips over your hat for the week.
+              </span>
+            {/if}
+          </div>
           {#if ownedHats.length === 0}
             <div class="empty-state card">
               <p>You don't own any hats yet.</p>
@@ -1028,6 +1094,54 @@
             </div>
           {/if}
         </div>
+      {:else if activeTab === 'glasses'}
+        <div
+          class="picker-panel"
+          role="tabpanel"
+          id="panel-glasses"
+          aria-labelledby="tab-glasses"
+        >
+          {#if ownedGlasses.length === 0}
+            <div class="empty-state card">
+              <p>You don't own any glasses yet.</p>
+              <a class="btn-primary" href="/shop">Visit the shop</a>
+            </div>
+          {:else}
+            <div class="picker-grid" role="radiogroup" aria-label="Glasses">
+              <button
+                class="picker-card none-card"
+                role="radio"
+                aria-checked={isGlassesEquipped(null)}
+                class:selected={isGlassesEquipped(null)}
+                disabled={pendingId === '__none_glasses'}
+                onclick={() => equipSlotItem('glasses', null)}
+                aria-label="No glasses"
+              >
+                <span class="picker-none" aria-hidden="true">∅</span>
+                <span class="picker-name">None</span>
+                {#if isGlassesEquipped(null)}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                {#if pendingId === '__none_glasses'}<span class="picker-loader" aria-hidden="true"></span>{/if}
+              </button>
+              {#each ownedGlasses as gl}
+                {@const selected = isGlassesEquipped(gl.id)}
+                <button
+                  class="picker-card"
+                  role="radio"
+                  aria-checked={selected}
+                  class:selected
+                  disabled={pendingId === gl.id}
+                  onclick={() => equipSlotItem('glasses', gl)}
+                  aria-label="Equip {gl.name}"
+                >
+                  <span class="picker-icon hat-emoji" aria-hidden="true">{iconChar(gl.icon)}</span>
+                  <span class="picker-name">{gl.name}</span>
+                  {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                  {#if pendingId === gl.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       {:else}
         <div
           class="picker-panel"
@@ -1164,9 +1278,16 @@
 
   .preview-stage {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
+    gap: 1rem;
     padding: 0.75rem 0;
+  }
+
+  .preview-monkey {
+    display: flex;
+    justify-content: center;
   }
 
   .notice {
@@ -1315,6 +1436,44 @@
   .hat-emoji {
     font-size: 2rem;
     line-height: 1;
+  }
+
+  /* Caption explaining the Barrel Night crown — an earned-only hat override.
+     Gold-tinted to read as special; brightens when the crown is live. */
+  .crown-note {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.9rem;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+    background: rgba(200, 168, 75, 0.06);
+    border: 1px solid rgba(200, 168, 75, 0.28);
+    border-radius: 3px;
+  }
+
+  .crown-note--active {
+    color: var(--text);
+    background: rgba(200, 168, 75, 0.14);
+    border-color: rgba(200, 168, 75, 0.55);
+  }
+
+  .crown-note-icon {
+    font-size: 1.15rem;
+    line-height: 1;
+    flex: 0 0 auto;
+  }
+
+  .crown-note-text strong {
+    color: #d8bd6a;
+    font-weight: 700;
+  }
+
+  .crown-note-text a {
+    color: #d8bd6a;
+    text-decoration: underline;
   }
 
   .picker-none {

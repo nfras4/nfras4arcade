@@ -33,6 +33,7 @@ export interface CardPlayer {
   titleText?: string | null;
   avatarId?: string | null;
   hat?: string | null;
+  glasses?: string | null;
   devices: Device[];
 }
 
@@ -53,6 +54,7 @@ export interface CardGameState {
     titleText?: string | null;
     avatarId?: string | null;
     hat?: string | null;
+    glasses?: string | null;
   }[];
   turnOrder: string[];
   currentTurn: string | null;

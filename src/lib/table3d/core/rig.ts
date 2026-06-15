@@ -32,6 +32,8 @@ export type HatId =
   | 'wizard' | 'cowboy' | 'halo' | 'horns' | 'propeller' | 'chef'
   | 'graduate' | 'viking' | 'flower_crown' | 'cat_ears' | 'santa' | 'beret';
 
+export type GlassesId = 'none' | 'sunglasses' | 'nerd' | 'threed' | 'eye_patch' | 'monocle';
+
 /** A single expression pose: all values applied simultaneously via lerp. */
 export interface ExpressionPose {
   /** Jaw X-rotation in radians. Art bible: 0 closed, 0.45 max open. */

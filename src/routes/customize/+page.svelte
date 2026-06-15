@@ -8,7 +8,7 @@
   import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte';
   import { furColourFor } from '$lib/table3d/core/seats';
   import { probeWebGL } from '$lib/table3d/webgl';
-  import type { HatId } from '$lib/table3d/core/rig';
+  import type { HatId, GlassesId } from '$lib/table3d/core/rig';
 
   /**
    * Build the minimal CosmeticItem shape that CosmeticPreview expects from
@@ -69,12 +69,13 @@
     card_back_id: string | null;
     table_felt_id: string | null;
     hat_id?: string | null;
+    glasses_id?: string | null;
     frame_id?: string | null;
     emblem_id?: string | null;
     title_badge_id?: string | null;
   }
 
-  type TabId = 'frame' | 'emblem' | 'colour' | 'hat' | 'title' | 'card_back' | 'table_felt';
+  type TabId = 'frame' | 'emblem' | 'colour' | 'hat' | 'title' | 'card_back' | 'table_felt' | 'glasses';
 
   interface OwnedCosmetic {
     id: string;
@@ -100,6 +101,7 @@
     card_back_id: null,
     table_felt_id: null,
     hat_id: null,
+    glasses_id: null,
     frame_id: null,
     emblem_id: null,
     title_badge_id: null,
@@ -123,6 +125,7 @@
     { id: 'emblem', label: 'Emblem' },
     { id: 'colour', label: 'Name Colour' },
     { id: 'hat', label: 'Hat' },
+    { id: 'glasses', label: 'Glasses' },
     { id: 'card_back', label: 'Card Back' },
     { id: 'table_felt', label: 'Table Felt' },
     { id: 'title', label: 'Title' },
@@ -254,6 +257,7 @@
   $effect(() => { webglOk = browser && probeWebGL(); });
   let previewFur = $derived($currentUser ? furColourFor($currentUser.id, false, new Map()) : '#8B5E3C');
   let previewHat = $derived((equipped.hat_id ?? null) as HatId | null);
+  let previewGlasses = $derived((equipped.glasses_id ?? null) as GlassesId | null);
   let show3dMonkey = $derived(webglOk && !!$currentUser);
 
   async function loadCustomizeData() {
@@ -268,6 +272,7 @@
         equipped = {
           ...invData.equipped,
           hat_id: invData.equipped.hat_id ?? null,
+          glasses_id: invData.equipped.glasses_id ?? null,
           frame_id: invData.equipped.frame_id ?? null,
           emblem_id: invData.equipped.emblem_id ?? null,
           title_badge_id: invData.equipped.title_badge_id ?? null,
@@ -563,6 +568,22 @@
       }))
   );
 
+  let ownedGlasses = $derived<OwnedSlotItem[]>(
+    inventory
+      .filter((row) => row.item.subcategory === 'glasses')
+      .map((row) => ({
+        id: row.item.id,
+        name: row.item.name,
+        description: row.item.description,
+        icon: row.item.icon,
+        metadata: row.item.metadata,
+      }))
+  );
+
+  function isGlassesEquipped(id: string | null): boolean {
+    return (equipped.glasses_id ?? null) === id;
+  }
+
   function isCardBackEquipped(id: string | null): boolean {
     return (equipped.card_back_id ?? null) === id;
   }
@@ -571,9 +592,9 @@
     return (equipped.table_felt_id ?? null) === id;
   }
 
-  async function equipSlotItem(slot: 'card_back' | 'table_felt', item: OwnedSlotItem | null) {
+  async function equipSlotItem(slot: 'card_back' | 'table_felt' | 'glasses', item: OwnedSlotItem | null) {
     const targetId = item?.id ?? null;
-    const slotKey: keyof EquippedState = slot === 'card_back' ? 'card_back_id' : 'table_felt_id';
+    const slotKey: keyof EquippedState = `${slot}_id` as keyof EquippedState;
     const prevId = equipped[slotKey];
 
     pendingId = item?.id ?? `__none_${slot}`;
@@ -638,6 +659,7 @@
                 furColour={previewFur}
                 expression="grin"
                 hat={previewHat}
+                glasses={previewGlasses}
                 playerName={previewName}
               />
             </div>
@@ -1067,6 +1089,54 @@
                   <span class="picker-name">{tf.name}</span>
                   {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
                   {#if pendingId === tf.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {:else if activeTab === 'glasses'}
+        <div
+          class="picker-panel"
+          role="tabpanel"
+          id="panel-glasses"
+          aria-labelledby="tab-glasses"
+        >
+          {#if ownedGlasses.length === 0}
+            <div class="empty-state card">
+              <p>You don't own any glasses yet.</p>
+              <a class="btn-primary" href="/shop">Visit the shop</a>
+            </div>
+          {:else}
+            <div class="picker-grid" role="radiogroup" aria-label="Glasses">
+              <button
+                class="picker-card none-card"
+                role="radio"
+                aria-checked={isGlassesEquipped(null)}
+                class:selected={isGlassesEquipped(null)}
+                disabled={pendingId === '__none_glasses'}
+                onclick={() => equipSlotItem('glasses', null)}
+                aria-label="No glasses"
+              >
+                <span class="picker-none" aria-hidden="true">∅</span>
+                <span class="picker-name">None</span>
+                {#if isGlassesEquipped(null)}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                {#if pendingId === '__none_glasses'}<span class="picker-loader" aria-hidden="true"></span>{/if}
+              </button>
+              {#each ownedGlasses as gl}
+                {@const selected = isGlassesEquipped(gl.id)}
+                <button
+                  class="picker-card"
+                  role="radio"
+                  aria-checked={selected}
+                  class:selected
+                  disabled={pendingId === gl.id}
+                  onclick={() => equipSlotItem('glasses', gl)}
+                  aria-label="Equip {gl.name}"
+                >
+                  <span class="picker-icon hat-emoji" aria-hidden="true">{iconChar(gl.icon)}</span>
+                  <span class="picker-name">{gl.name}</span>
+                  {#if selected}<span class="picker-check" aria-hidden="true">&#x2713;</span>{/if}
+                  {#if pendingId === gl.id}<span class="picker-loader" aria-hidden="true"></span>{/if}
                 </button>
               {/each}
             </div>

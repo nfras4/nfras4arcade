@@ -13,6 +13,7 @@ export interface AuthUser {
   emblem: { svg: string } | null;
   titleBadge: { id: string } | null;
   hat: { id: string } | null;
+  glasses: { id: string } | null;
 }
 
 export interface AuthStats {

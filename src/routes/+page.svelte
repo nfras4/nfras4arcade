@@ -116,28 +116,6 @@
 <div class="hub">
   <div class="hub-content">
 
-    <header class="hub-hero" class:has-monkey={show3dMonkey}>
-      <div class="hero-text">
-        <div class="title-frame">
-          <span class="diamond-accent" aria-hidden="true"></span>
-          <h1 class="wordmark geo-title">nfras4arcade</h1>
-          <span class="diamond-accent" aria-hidden="true"></span>
-        </div>
-        <p class="tagline">Choose your arena</p>
-      </div>
-      {#if show3dMonkey}
-        <div class="hero-monkey">
-          <SelfMonkeyPortrait
-            furColour={heroFur}
-            expression="grin"
-            idle
-            playerName={$currentUser?.displayName ?? 'You'}
-          />
-          <a class="hero-customize-btn" href="/customize">Customize</a>
-        </div>
-      {/if}
-    </header>
-
     {#if $isLoggedIn && questSummary}
       <a class="quests-pill" href="/quests" aria-label="Daily quests">
         <span class="quests-pill-icon" aria-hidden="true">★</span>
@@ -219,6 +197,18 @@
         <span class="cat-arrow rpg-arrow" aria-hidden="true">→</span>
         <div class="card-shine" aria-hidden="true"></div>
       </button>
+
+      {#if show3dMonkey}
+        <div class="hero-monkey-float">
+          <SelfMonkeyPortrait
+            furColour={heroFur}
+            expression="grin"
+            idle
+            playerName={$currentUser?.displayName ?? 'You'}
+          />
+          <a class="hero-customize-btn" href="/customize">Customize</a>
+        </div>
+      {/if}
 
     </nav>
 
@@ -476,32 +466,17 @@
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
-  .hub-hero.has-monkey {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-    text-align: left;
-  }
-
-  .hero-text {
-    min-width: 0;
-  }
-
-  .has-monkey .wordmark {
-    font-size: clamp(1.4rem, 5vw, 2.05rem);
-  }
-
-  .has-monkey .diamond-accent {
-    display: none;
-  }
-
-  .hero-monkey {
+  .hero-monkey-float {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    margin-left: 1.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.65rem;
-    flex-shrink: 0;
+    gap: 0.6rem;
+    z-index: 2;
   }
 
   .hero-customize-btn {
@@ -528,11 +503,9 @@
     transform: translateY(-1px);
   }
 
-  @media (max-width: 560px) {
-    .hub-hero.has-monkey {
-      flex-direction: column;
-      text-align: center;
-    }
+  /* Hide the floated monkey when there isn't room beside the centred column. */
+  @media (max-width: 1024px) {
+    .hero-monkey-float { display: none; }
   }
 
   .title-frame {
@@ -565,6 +538,7 @@
 
   /* ── Category grid ───────────────────────────────────── */
   .category-grid {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 1rem;

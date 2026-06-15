@@ -15,7 +15,7 @@
     HEAD_RADIUS, HEAD_SQUASH, FACE_PLATE_RADIUS, MUZZLE_RADIUS,
     EAR_PARAMS, INNER_EAR_PARAMS, EYE_RADIUS,
     CREAM_COLOUR,
-    type ExpressionName, type HatId,
+    type ExpressionName, type HatId, type GlassesId,
   } from './core/rig.js';
 
   // ── Props ────────────────────────────────────────────────────────────────────
@@ -25,11 +25,13 @@
     talkAmplitude = 0,
     hat = 'none' as HatId,
     idle = false,
+    glasses = 'none' as GlassesId,
   }: {
     furColor?: string;
     expression?: ExpressionName;
     talkAmplitude?: number;
     hat?: HatId;
+    glasses?: GlassesId;
     /** When true, layer subtle ambient idle motion (breathing, look-around
      *  sway, blink) on top of the pose. Suppressed while talking or asleep,
      *  and disabled under reduced motion. */
@@ -771,6 +773,111 @@
     beret: buildBeretHat,
   };
 
+  function buildSunglasses(): THREE.Group {
+    const g = new THREE.Group();
+    const lensMat = mat(0x0a0a12, 0.2, false);
+    const frame = mat(0x141414, 0.5, true);
+    const mkLens = (sx: number) => {
+      const lens = new THREE.Mesh(new RoundedBoxGeometry(0.22, 0.17, 0.04, 3, 0.04), lensMat.clone());
+      lens.position.set(0.20 * sx, 0.15, 0.52);
+      g.add(lens);
+    };
+    mkLens(-1); mkLens(1);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), frame);
+    bridge.position.set(0, 0.17, 0.53);
+    g.add(bridge);
+    const mkArm = (sx: number) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.34), frame.clone());
+      arm.position.set(0.33 * sx, 0.17, 0.36);
+      g.add(arm);
+    };
+    mkArm(-1); mkArm(1);
+    return g;
+  }
+
+  function buildNerdGlasses(): THREE.Group {
+    const g = new THREE.Group();
+    const rim = mat(0x141414, 0.5, true);
+    const lensMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ff, transparent: true, opacity: 0.18, roughness: 0.1, metalness: 0 });
+    const mk = (sx: number) => {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.022, 8, 22), rim.clone());
+      ring.position.set(0.20 * sx, 0.15, 0.52);
+      g.add(ring);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(0.10, 18), lensMat.clone());
+      lens.position.set(0.20 * sx, 0.15, 0.515);
+      g.add(lens);
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.32), rim.clone());
+      arm.position.set(0.33 * sx, 0.16, 0.36);
+      g.add(arm);
+    };
+    mk(-1); mk(1);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.025), rim.clone());
+    bridge.position.set(0, 0.15, 0.52);
+    g.add(bridge);
+    return g;
+  }
+
+  function build3DGlasses(): THREE.Group {
+    const g = new THREE.Group();
+    const frame = mat(0xf2f2f2, 0.6, true);
+    const red = new THREE.MeshStandardMaterial({ color: 0xff2433, transparent: true, opacity: 0.6, roughness: 0.2, metalness: 0 });
+    const cyan = new THREE.MeshStandardMaterial({ color: 0x18c2e0, transparent: true, opacity: 0.6, roughness: 0.2, metalness: 0 });
+    const lensL = new THREE.Mesh(new RoundedBoxGeometry(0.21, 0.15, 0.02, 3, 0.03), red);
+    lensL.position.set(-0.20, 0.15, 0.52);
+    g.add(lensL);
+    const lensR = new THREE.Mesh(new RoundedBoxGeometry(0.21, 0.15, 0.02, 3, 0.03), cyan);
+    lensR.position.set(0.20, 0.15, 0.52);
+    g.add(lensR);
+    const topBar = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.045, 0.045), frame);
+    topBar.position.set(0, 0.235, 0.52);
+    g.add(topBar);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.035), frame.clone());
+    bridge.position.set(0, 0.15, 0.52);
+    g.add(bridge);
+    return g;
+  }
+
+  function buildEyePatch(): THREE.Group {
+    const g = new THREE.Group();
+    const black = mat(0x0a0a0a, 0.6, false);
+    const patch = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 9), black);
+    patch.scale.set(1, 1.2, 0.4);
+    patch.position.set(-0.20, 0.15, 0.50);
+    g.add(patch);
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.02, 6, 26), black.clone());
+    strap.rotation.x = Math.PI / 2;
+    strap.rotation.z = 0.18;
+    strap.position.set(0, 0.24, 0);
+    g.add(strap);
+    return g;
+  }
+
+  function buildMonocle(): THREE.Group {
+    const g = new THREE.Group();
+    const gold = new THREE.MeshStandardMaterial({ color: 0xf2c230, emissive: 0x7a5a00, emissiveIntensity: 0.4, roughness: 0.35, metalness: 0.2, flatShading: true });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.145, 0.032, 10, 26), gold);
+    ring.position.set(0.20, 0.15, 0.55);
+    g.add(ring);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.135, 20), new THREE.MeshStandardMaterial({ color: 0xd0ecff, transparent: true, opacity: 0.22, roughness: 0.1, metalness: 0 }));
+    lens.position.set(0.20, 0.15, 0.535);
+    g.add(lens);
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.26, 6), gold.clone());
+    chain.position.set(0.33, 0.01, 0.52);
+    chain.rotation.z = 0.4;
+    g.add(chain);
+    return g;
+  }
+
+  const GLASSES_BUILDERS: Partial<Record<GlassesId, () => THREE.Group>> = {
+    sunglasses: buildSunglasses,
+    nerd: buildNerdGlasses,
+    threed: build3DGlasses,
+    eye_patch: buildEyePatch,
+    monocle: buildMonocle,
+  };
+  let activeGlasses: THREE.Group | null = null;
+
+
 
   // ── Reactive prop handlers ────────────────────────────────────────────────────
 
@@ -798,6 +905,16 @@
       anchorCrown.add(activeHat);
       // Propeller cap exposes a named spinner group the frame loop rotates.
       hatSpinner = activeHat.getObjectByName('Propeller') ?? null;
+    }
+  });
+
+  // Glasses: mounted to headGroup (the face) so they ride head rotations + idle.
+  $effect(() => {
+    if (activeGlasses) { disposeGroup(activeGlasses); headGroup.remove(activeGlasses); activeGlasses = null; }
+    const builder = GLASSES_BUILDERS[glasses];
+    if (builder) {
+      activeGlasses = builder();
+      headGroup.add(activeGlasses);
     }
   });
 

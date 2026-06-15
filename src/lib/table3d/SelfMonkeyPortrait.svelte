@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import PlaceholderMonkey from './PlaceholderMonkey.svelte';
-  import type { ExpressionName, HatId } from './core/rig.js';
+  import type { ExpressionName, HatId, GlassesId } from './core/rig.js';
   import { MONKEY_SCALE } from './core/seats.js';
   import { currentUser } from '$lib/auth';
 
@@ -18,6 +18,8 @@
     hat?: HatId | null;
     /** Layer ambient idle motion (breathing, blink, sway) on the model. */
     idle?: boolean;
+    /** Optional glasses override; falls back to the equipped glasses. */
+    glasses?: GlassesId | null;
   }
 
   let {
@@ -27,10 +29,13 @@
     playerName = 'You',
     hat = undefined,
     idle = false,
+    glasses = undefined,
   }: Props = $props();
 
   // Resolve the hat to render: explicit prop wins, else the equipped hat.
   let resolvedHat = $derived((hat ?? $currentUser?.hat?.id ?? 'none') as HatId);
+  // Same precedence for glasses.
+  let resolvedGlasses = $derived((glasses ?? $currentUser?.glasses?.id ?? 'none') as GlassesId);
 </script>
 
 <div class="self-portrait-container">
@@ -59,6 +64,7 @@
         talkAmplitude={talkAmplitude}
         hat={resolvedHat}
         idle={idle}
+        glasses={resolvedGlasses}
       />
     </T.Group>
   </Canvas>

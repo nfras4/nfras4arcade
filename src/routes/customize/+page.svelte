@@ -4,6 +4,11 @@
   import PlayerTile from '$lib/components/PlayerTile.svelte';
   import CosmeticPreview from '$lib/components/CosmeticPreview.svelte';
   import { xpToLevel } from '$lib/xp';
+  import { browser } from '$app/environment';
+  import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte';
+  import { furColourFor } from '$lib/table3d/core/seats';
+  import { probeWebGL } from '$lib/table3d/webgl';
+  import type { HatId } from '$lib/table3d/core/rig';
 
   /**
    * Build the minimal CosmeticItem shape that CosmeticPreview expects from
@@ -241,6 +246,15 @@
   let previewTitleText = $derived(
     earnedTitles.find((t) => t.slug === previewTitleSlug)?.label ?? null
   );
+
+  // 3D monkey preview: deterministic fur colour (matches the player's monkey at
+  // any table) plus the currently-equipped hat, so picking a hat updates the
+  // model live. Gated on WebGL so non-capable devices keep the 2D tile only.
+  let webglOk = $state(false);
+  $effect(() => { webglOk = browser && probeWebGL(); });
+  let previewFur = $derived($currentUser ? furColourFor($currentUser.id, false, new Map()) : '#8B5E3C');
+  let previewHat = $derived((equipped.hat_id ?? null) as HatId | null);
+  let show3dMonkey = $derived(webglOk && !!$currentUser);
 
   async function loadCustomizeData() {
     loading = true;
@@ -618,6 +632,16 @@
       <div class="preview-wrap card" aria-label="Loadout preview">
         <span class="preview-label">Preview</span>
         <div class="preview-stage">
+          {#if show3dMonkey}
+            <div class="preview-monkey">
+              <SelfMonkeyPortrait
+                furColour={previewFur}
+                expression="grin"
+                hat={previewHat}
+                playerName={previewName}
+              />
+            </div>
+          {/if}
           <PlayerTile
             player={{
               id: $currentUser?.id ?? 'preview',
@@ -1184,9 +1208,16 @@
 
   .preview-stage {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
+    gap: 1rem;
     padding: 0.75rem 0;
+  }
+
+  .preview-monkey {
+    display: flex;
+    justify-content: center;
   }
 
   .notice {

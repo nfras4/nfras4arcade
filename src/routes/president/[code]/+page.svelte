@@ -13,6 +13,9 @@
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
   import Shockwave from '$lib/vfx/Shockwave.svelte';
   import { currentUser } from '$lib/auth';
+  import { browser } from '$app/environment';
+  import BarrelTableScene from '$lib/table3d/BarrelTableScene.svelte';
+  import { probeWebGL } from '$lib/table3d/webgl';
 
   const code = $page.params.code!;
   const socket = new CardGameSocket('/ws/president');
@@ -62,6 +65,10 @@
   // Derived state
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
+
+  // 3D barrel-table backdrop in the lobby (WebGL-capable browsers only).
+  let table3dOk = $state(false);
+  $effect(() => { table3dOk = browser && probeWebGL(); });
   let isHost = $derived(state?.players?.find((p: any) => p.id === pid)?.isHost ?? false);
   let isMyTurn = $derived(state?.currentTurn === pid);
   let myHand = $derived((state?.tableState?.myHand ?? []) as { suit: string; rank: string; value: number }[]);
@@ -236,6 +243,11 @@
     {#if state.phase === 'lobby'}
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Lobby</h2>
+        {#if table3dOk}
+          <div class="lobby-table-3d">
+            <BarrelTableScene players={state.players} myId={pid} />
+          </div>
+        {/if}
         <div class="player-list">
           {#each state.players as player}
             <div class="player-item" class:disconnected={!player.connected}>
@@ -923,5 +935,14 @@
     outline: 1px solid var(--accent);
     outline-offset: 3px;
     animation: vfx-breathe 2s ease-in-out infinite;
+  }
+
+  .lobby-table-3d {
+    width: 100%;
+    height: 260px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 0.25rem 0 0.75rem;
   }
 </style>

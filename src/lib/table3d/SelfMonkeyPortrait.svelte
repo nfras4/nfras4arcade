@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Canvas, T } from '@threlte/core';
   import PlaceholderMonkey from './PlaceholderMonkey.svelte';
-  import type { ExpressionName } from './core/rig.js';
+  import type { ExpressionName, HatId } from './core/rig.js';
   import { MONKEY_SCALE } from './core/seats.js';
   import { currentUser } from '$lib/auth';
 
@@ -10,6 +10,12 @@
     expression?: ExpressionName;
     talkAmplitude?: number;
     playerName?: string;
+    /**
+     * Optional hat override. When omitted the portrait shows the logged-in
+     * user's equipped hat. The customize page passes a pending selection here
+     * so the preview updates live before the equip round-trips.
+     */
+    hat?: HatId | null;
   }
 
   let {
@@ -17,7 +23,11 @@
     expression = 'neutral' as ExpressionName,
     talkAmplitude = 0,
     playerName = 'You',
+    hat = undefined,
   }: Props = $props();
+
+  // Resolve the hat to render: explicit prop wins, else the equipped hat.
+  let resolvedHat = $derived((hat ?? $currentUser?.hat?.id ?? 'none') as HatId);
 </script>
 
 <div class="self-portrait-container">
@@ -29,7 +39,7 @@
          gives a vertical extent of 2 * tan(19 deg) * 2.4 ~= 1.65 units centred
          on the head; with MONKEY_SCALE the head spans ~0.81 vertically (ears
          at top + jaw at bottom) so there's clear margin for head-bob. -->
-    <T.PerspectiveCamera position={[0, 0, 2.4]} fov={38} makeDefault />
+    <T.PerspectiveCamera position={[0, 0, 2.75]} fov={38} makeDefault />
 
     <!-- Key light: warm, front-facing -->
     <T.PointLight color={0xffe8c0} intensity={2.0} position={[0.5, 0.7, 1.8]} />
@@ -44,7 +54,7 @@
         furColor={furColour}
         expression={expression}
         talkAmplitude={talkAmplitude}
-        hat={$currentUser?.hat?.id ?? 'none'}
+        hat={resolvedHat}
       />
     </T.Group>
   </Canvas>

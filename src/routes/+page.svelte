@@ -1,7 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { fetchLiveRooms, gameLabel, playersSummary, phaseLabel, elapsedLabel, type LiveRoom } from '$lib/liveRooms'
-  import { isLoggedIn } from '$lib/auth'
+  import { isLoggedIn, currentUser } from '$lib/auth'
+  import { browser } from '$app/environment'
+  import SelfMonkeyPortrait from '$lib/table3d/SelfMonkeyPortrait.svelte'
+  import { furColourFor } from '$lib/table3d/core/seats'
+  import { probeWebGL } from '$lib/table3d/webgl'
 
   interface DailyQuestSummary {
     slot: number;
@@ -39,6 +43,14 @@
   }}
 
   let { data }: Props = $props()
+
+  // 3D monkey hero: rendered only when logged in, in-browser, and WebGL is
+  // available. Fur colour is the same deterministic colour the player wears at
+  // any table (furColourFor), so the hero monkey matches their in-game self.
+  let webglOk = $state(false)
+  $effect(() => { webglOk = browser && probeWebGL() })
+  let heroFur = $derived($currentUser ? furColourFor($currentUser.id, false, new Map()) : '#8B5E3C')
+  let show3dMonkey = $derived(webglOk && $isLoggedIn && !!$currentUser)
 
   let lbData = $state(data.leaderboard)
   let chipLb = $state(data.chipLeaderboard)
@@ -111,6 +123,15 @@
         <span class="diamond-accent" aria-hidden="true"></span>
       </div>
       <p class="tagline">Choose your arena</p>
+      {#if show3dMonkey}
+        <div class="hero-monkey">
+          <SelfMonkeyPortrait
+            furColour={heroFur}
+            expression="grin"
+            playerName={$currentUser?.displayName ?? 'You'}
+          />
+        </div>
+      {/if}
     </header>
 
     {#if $isLoggedIn && questSummary}

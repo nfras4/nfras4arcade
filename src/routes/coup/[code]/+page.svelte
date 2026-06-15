@@ -17,6 +17,9 @@
   import FloatUp from '$lib/vfx/FloatUp.svelte';
   import Spotlight from '$lib/vfx/Spotlight.svelte';
   import { fireGoldBurst, fireLoss } from '$lib/vfx/burst';
+  import { browser } from '$app/environment';
+  import BarrelTableScene from '$lib/table3d/BarrelTableScene.svelte';
+  import { probeWebGL } from '$lib/table3d/webgl';
 
   const code = $page.params.code!;
   const socket = new CoupSocket();
@@ -71,6 +74,10 @@
   // ─── Derived state ────────────────────────────────────────────
   let state = $derived($gameState);
   let pid = $derived($myPlayerId);
+
+  // 3D barrel-table backdrop in the lobby (WebGL-capable browsers only).
+  let table3dOk = $state(false);
+  $effect(() => { table3dOk = browser && probeWebGL(); });
   let isHost = $derived(state?.players?.find((p) => p.id === pid)?.isHost ?? false);
   let ts = $derived(state?.tableState ?? null);
   let pa = $derived<PendingActionView>(ts?.pendingAction ?? null);
@@ -377,6 +384,11 @@
       <div class="phase-panel">
         <h2 class="geo-title phase-title">Lobby</h2>
         <p class="room-code">Room <strong>{state.code}</strong></p>
+        {#if table3dOk}
+          <div class="lobby-table-3d">
+            <BarrelTableScene players={state.players.map((p) => ({ id: p.id, name: p.name, isBot: p.isBot }))} myId={pid} />
+          </div>
+        {/if}
 
         <div class="player-list">
           {#each state.players as player}
@@ -1305,5 +1317,14 @@
   /* (7) Turn breathe -- vfx-breathe is a global class; local colour override */
   .your-turn.vfx-breathe {
     display: inline-block;
+  }
+
+  .lobby-table-3d {
+    width: 100%;
+    height: 260px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 0.25rem 0 0.75rem;
   }
 </style>

@@ -24,11 +24,16 @@
     expression = 'neutral' as ExpressionName,
     talkAmplitude = 0,
     hat = 'none' as HatId,
+    idle = false,
   }: {
     furColor?: string;
     expression?: ExpressionName;
     talkAmplitude?: number;
     hat?: HatId;
+    /** When true, layer subtle ambient idle motion (breathing, look-around
+     *  sway, blink) on top of the pose. Suppressed while talking or asleep,
+     *  and disabled under reduced motion. */
+    idle?: boolean;
   } = $props();
 
   // ── Reduced-motion detection (listener in $effect with cleanup) ──────────────
@@ -521,7 +526,251 @@
     return g;
   }
 
+  function buildWizardHat(): THREE.Group {
+    const g = new THREE.Group();
+    const purple = mat(0x5b3a9e);
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 20), purple);
+    brim.position.y = 0.02;
+    g.add(brim);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.64, 18), purple.clone());
+    cone.position.y = 0.34;
+    cone.rotation.z = 0.08;
+    g.add(cone);
+    const star = mat(0xf5d020, 0.4, true);
+    const starPos: [number, number, number][] = [[0.06, 0.30, 0.20], [-0.08, 0.46, 0.16], [0.02, 0.58, 0.12]];
+    for (const [x, y, z] of starPos) {
+      const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.05), star.clone());
+      s.position.set(x, y, z);
+      g.add(s);
+    }
+    return g;
+  }
+
+  function buildCowboyHat(): THREE.Group {
+    const g = new THREE.Group();
+    const tan = mat(0x8a5a2b);
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.80, 0.80, 0.04, 24), tan);
+    brim.position.y = 0.02;
+    brim.scale.z = 0.78;
+    g.add(brim);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.40, 0.34, 16), tan.clone());
+    crown.position.y = 0.21;
+    g.add(crown);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), tan.clone());
+    dome.position.y = 0.36;
+    dome.scale.set(1, 0.5, 1);
+    g.add(dome);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.41, 0.41, 0.06, 16), mat(0x4a2e16));
+    band.position.y = 0.07;
+    g.add(band);
+    return g;
+  }
+
+  function buildHalo(): THREE.Group {
+    const g = new THREE.Group();
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xffcc33, emissiveIntensity: 0.7, flatShading: true, roughness: 0.4, metalness: 0 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.05, 10, 28), gold);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.52;
+    g.add(ring);
+    return g;
+  }
+
+  function buildHornsHat(): THREE.Group {
+    const g = new THREE.Group();
+    const red = mat(0xb0201c);
+    const mk = (sx: number) => {
+      const h = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.24, 12), red.clone());
+      h.position.set(0.17 * sx, 0.13, 0.02);
+      h.rotation.z = -0.4 * sx;
+      h.rotation.x = -0.15;
+      g.add(h);
+    };
+    mk(-1); mk(1);
+    return g;
+  }
+
+  function buildPropellerCap(): THREE.Group {
+    const g = new THREE.Group();
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xd43f3f));
+    dome.scale.set(1, 0.7, 1);
+    g.add(dome);
+    const stripe = new THREE.Mesh(new THREE.SphereGeometry(0.43, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0xf5f5f5));
+    stripe.scale.set(0.34, 0.71, 1.01);
+    g.add(stripe);
+    const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 10), mat(0x2a6fb0));
+    btn.position.y = 0.30;
+    g.add(btn);
+    const spinner = new THREE.Group();
+    spinner.name = 'Propeller';
+    spinner.position.y = 0.35;
+    const bladeMat = mat(0x2a6fb0, 0.5, true);
+    for (let i = 0; i < 2; i++) {
+      const blade = new THREE.Mesh(new RoundedBoxGeometry(0.5, 0.02, 0.1, 2, 0.01), bladeMat.clone());
+      blade.rotation.y = (i * Math.PI) / 2;
+      spinner.add(blade);
+    }
+    g.add(spinner);
+    return g;
+  }
+
+  function buildChefHat(): THREE.Group {
+    const g = new THREE.Group();
+    const white = mat(0xf5f5f5);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.28, 20), white);
+    base.position.y = 0.14;
+    g.add(base);
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(0.40, 16, 12), white.clone());
+    puff.scale.set(1, 0.7, 1);
+    puff.position.y = 0.42;
+    g.add(puff);
+    return g;
+  }
+
+  function buildGraduationCap(): THREE.Group {
+    const g = new THREE.Group();
+    const black = mat(0x1a1a1a);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.32, 0.14, 16), black);
+    cap.position.y = 0.07;
+    g.add(cap);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.04, 0.78), black.clone());
+    board.position.y = 0.16;
+    g.add(board);
+    const btn = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), mat(0xe8b84b));
+    btn.position.y = 0.19;
+    g.add(btn);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.26, 6), mat(0xe8b84b));
+    cord.position.set(0.28, 0.07, 0.28);
+    g.add(cord);
+    const tuft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.02, 0.10, 8), mat(0xe8b84b));
+    tuft.position.set(0.28, -0.05, 0.28);
+    g.add(tuft);
+    return g;
+  }
+
+  function buildVikingHelmet(): THREE.Group {
+    const g = new THREE.Group();
+    const steel = mat(0x9aa3ad);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.46, 16, 9, 0, Math.PI * 2, 0, Math.PI / 2), steel);
+    g.add(dome);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.07, 18), mat(0x6b727a));
+    rim.position.y = 0.03;
+    g.add(rim);
+    const ivory = mat(0xe8e0c8);
+    const mk = (sx: number) => {
+      // Point horns up-and-slightly-out above the helmet, inboard of the
+      // oversized ears so they read instead of hiding behind them.
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.10, 0.36, 12), ivory.clone());
+      horn.position.set(0.26 * sx, 0.24, 0.06);
+      horn.rotation.z = -0.32 * sx;
+      g.add(horn);
+    };
+    mk(-1); mk(1);
+    return g;
+  }
+
+  function buildFlowerCrown(): THREE.Group {
+    const g = new THREE.Group();
+    const vine = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.035, 8, 24), mat(0x4a8a3a));
+    vine.rotation.x = Math.PI / 2;
+    vine.position.y = 0.05;
+    g.add(vine);
+    const colours = [0xe87ab0, 0xf5f5f5, 0x9a6fd0, 0xf2c14e, 0xe8675a];
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const petal = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(colours[i]));
+      petal.scale.set(1, 0.55, 1);
+      petal.position.set(Math.sin(a) * 0.42, 0.09, Math.cos(a) * 0.42);
+      g.add(petal);
+      const centre = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 5), mat(0xf5d020));
+      centre.position.set(Math.sin(a) * 0.42, 0.13, Math.cos(a) * 0.42);
+      g.add(centre);
+    }
+    return g;
+  }
+
+  function buildCatEars(): THREE.Group {
+    const g = new THREE.Group();
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.40, 0.03, 8, 24), mat(0x2a2a2a));
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.06;
+    g.add(band);
+    const outer = new THREE.Color(furColor).multiplyScalar(0.85).getHex();
+    const mk = (sx: number) => {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.26, 12), mat(outer));
+      ear.scale.z = 0.45;
+      ear.position.set(0.19 * sx, 0.20, 0);
+      ear.rotation.z = -0.18 * sx;
+      g.add(ear);
+      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 12), mat(0xe87ab0));
+      inner.scale.z = 0.4;
+      inner.position.set(0.19 * sx, 0.20, 0.03);
+      inner.rotation.z = -0.18 * sx;
+      g.add(inner);
+    };
+    mk(-1); mk(1);
+    return g;
+  }
+
+  function buildSantaHat(): THREE.Group {
+    const g = new THREE.Group();
+    const sub = new THREE.Group();
+    sub.rotation.z = 0.4;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.6, 16), mat(0xc0252b));
+    cone.position.y = 0.30;
+    sub.add(cone);
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(0.10, 10, 8), mat(0xf5f5f5));
+    pom.position.y = 0.62;
+    sub.add(pom);
+    g.add(sub);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.09, 8, 22), mat(0xf5f5f5));
+    cuff.rotation.x = Math.PI / 2;
+    cuff.position.y = 0.05;
+    g.add(cuff);
+    return g;
+  }
+
+  function buildBeretHat(): THREE.Group {
+    const g = new THREE.Group();
+    const sub = new THREE.Group();
+    sub.rotation.z = 0.20;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.40, 0.40, 0.10, 22), mat(0x2a3a6a));
+    disc.position.y = 0.06;
+    sub.add(disc);
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.40, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x2a3a6a));
+    top.scale.set(1, 0.35, 1);
+    top.position.y = 0.10;
+    sub.add(top);
+    const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.05, 6), mat(0x1a2444));
+    stub.position.y = 0.18;
+    sub.add(stub);
+    g.add(sub);
+    return g;
+  }
+
   let activeHat: THREE.Group | null = null;
+  let hatSpinner: THREE.Object3D | null = null;
+
+  const HAT_BUILDERS: Partial<Record<HatId, () => THREE.Group>> = {
+    party: buildPartyHat,
+    crown: buildCrownHat,
+    top_hat: buildTopHat,
+    beanie: buildBeanieHat,
+    sombrero: buildSombreroHat,
+    wizard: buildWizardHat,
+    cowboy: buildCowboyHat,
+    halo: buildHalo,
+    horns: buildHornsHat,
+    propeller: buildPropellerCap,
+    chef: buildChefHat,
+    graduate: buildGraduationCap,
+    viking: buildVikingHelmet,
+    flower_crown: buildFlowerCrown,
+    cat_ears: buildCatEars,
+    santa: buildSantaHat,
+    beret: buildBeretHat,
+  };
+
 
   // ── Reactive prop handlers ────────────────────────────────────────────────────
 
@@ -542,21 +791,13 @@
 
   $effect(() => {
     if (activeHat) { disposeGroup(activeHat); anchorCrown.remove(activeHat); activeHat = null; }
-    if (hat === 'party') {
-      activeHat = buildPartyHat();
+    hatSpinner = null;
+    const builder = HAT_BUILDERS[hat];
+    if (builder) {
+      activeHat = builder();
       anchorCrown.add(activeHat);
-    } else if (hat === 'crown') {
-      activeHat = buildCrownHat();
-      anchorCrown.add(activeHat);
-    } else if (hat === 'top_hat') {
-      activeHat = buildTopHat();
-      anchorCrown.add(activeHat);
-    } else if (hat === 'beanie') {
-      activeHat = buildBeanieHat();
-      anchorCrown.add(activeHat);
-    } else if (hat === 'sombrero') {
-      activeHat = buildSombreroHat();
-      anchorCrown.add(activeHat);
+      // Propeller cap exposes a named spinner group the frame loop rotates.
+      hatSpinner = activeHat.getObjectByName('Propeller') ?? null;
     }
   });
 
@@ -657,8 +898,25 @@
     }
     jawGroup.rotation.z = chinTilt;
 
-    eyeLGroup.scale.set(1, 1.3 * curEyeScale, 0.55);
-    eyeRGroup.scale.set(1, 1.3 * curEyeScale, 0.55);
+    // Ambient idle motion: subtle breathing, slow look-around sway, and
+    // periodic blinks so a still portrait feels alive. Suppressed while talking
+    // (talk has its own bob) or asleep, and disabled under reduced motion.
+    let blink = 1;
+    let idleHeadPosY = 0;
+    let idleHeadRotY = 0;
+    let idleHeadRotZ = 0;
+    if (idle && !reducedMotion && amp <= 0.05 && !pose.showZzz) {
+      idleHeadPosY = Math.sin(elapsed * 1.1) * 0.012;
+      idleHeadRotY = Math.sin(elapsed * 0.45) * 0.10;
+      idleHeadRotZ = Math.sin(elapsed * 0.7 + 1.0) * 0.02;
+      const BLINK_PERIOD = 4.0;
+      const BLINK_DUR = 0.14;
+      const tb = elapsed % BLINK_PERIOD;
+      if (tb < BLINK_DUR) blink = 1 - Math.sin((tb / BLINK_DUR) * Math.PI) * 0.92;
+    }
+
+    eyeLGroup.scale.set(1, 1.3 * curEyeScale * blink, 0.55);
+    eyeRGroup.scale.set(1, 1.3 * curEyeScale * blink, 0.55);
 
     browLGroup.position.y = browBaseY + curBrowOff;
     browRGroup.position.y = browBaseY + curBrowOff;
@@ -669,9 +927,11 @@
     const pitchRad  = (curHeadPitch * Math.PI) / 180;
     const pullUnits = curHeadPull * 0.008;
 
-    let headRotZ   = tiltRad;
+    let headRotZ   = tiltRad + idleHeadRotZ;
     // Pitch (chin-down nod) is the base X rotation; bob adds on top.
     let headRotX   = pitchRad;
+    let headRotY   = idleHeadRotY;
+    let headPosY   = idleHeadPosY;
     const headPosZ = -pullUnits;
 
     if (!reducedMotion) {
@@ -687,7 +947,9 @@
 
     headGroup.rotation.z = headRotZ;
     headGroup.rotation.x = headRotX;
+    headGroup.rotation.y = headRotY;
     headGroup.position.z = headPosZ;
+    headGroup.position.y = headPosY;
 
     // ── Effect prop animation ─────────────────────────────────────────────────
     const targetDrop  = pose.showSweatDrop ? 1 : 0;
@@ -814,6 +1076,11 @@
         zg.scale.set(s, s, s);
         zg.visible = s > 0.01;
       }
+    }
+
+    // Spin the propeller cap's blades (no-op for every other hat).
+    if (hatSpinner && !reducedMotion) {
+      hatSpinner.rotation.y += delta * 6;
     }
   });
 </script>

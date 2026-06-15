@@ -116,20 +116,24 @@
 <div class="hub">
   <div class="hub-content">
 
-    <header class="hub-hero">
-      <div class="title-frame">
-        <span class="diamond-accent" aria-hidden="true"></span>
-        <h1 class="wordmark geo-title">nfras4arcade</h1>
-        <span class="diamond-accent" aria-hidden="true"></span>
+    <header class="hub-hero" class:has-monkey={show3dMonkey}>
+      <div class="hero-text">
+        <div class="title-frame">
+          <span class="diamond-accent" aria-hidden="true"></span>
+          <h1 class="wordmark geo-title">nfras4arcade</h1>
+          <span class="diamond-accent" aria-hidden="true"></span>
+        </div>
+        <p class="tagline">Choose your arena</p>
       </div>
-      <p class="tagline">Choose your arena</p>
       {#if show3dMonkey}
         <div class="hero-monkey">
           <SelfMonkeyPortrait
             furColour={heroFur}
             expression="grin"
+            idle
             playerName={$currentUser?.displayName ?? 'You'}
           />
+          <a class="hero-customize-btn" href="/customize">Customize</a>
         </div>
       {/if}
     </header>
@@ -470,6 +474,65 @@
   .hub-hero {
     text-align: center;
     animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .hub-hero.has-monkey {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    text-align: left;
+  }
+
+  .hero-text {
+    min-width: 0;
+  }
+
+  .has-monkey .wordmark {
+    font-size: clamp(1.4rem, 5vw, 2.05rem);
+  }
+
+  .has-monkey .diamond-accent {
+    display: none;
+  }
+
+  .hero-monkey {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.65rem;
+    flex-shrink: 0;
+  }
+
+  .hero-customize-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-faint);
+    border: 1px solid var(--accent-border);
+    border-radius: 2px;
+    text-decoration: none;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .hero-customize-btn:hover {
+    background: var(--accent-border);
+    transform: translateY(-1px);
+  }
+
+  @media (max-width: 560px) {
+    .hub-hero.has-monkey {
+      flex-direction: column;
+      text-align: center;
+    }
   }
 
   .title-frame {

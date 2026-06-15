@@ -16,6 +16,8 @@
      * so the preview updates live before the equip round-trips.
      */
     hat?: HatId | null;
+    /** Layer ambient idle motion (breathing, blink, sway) on the model. */
+    idle?: boolean;
   }
 
   let {
@@ -24,6 +26,7 @@
     talkAmplitude = 0,
     playerName = 'You',
     hat = undefined,
+    idle = false,
   }: Props = $props();
 
   // Resolve the hat to render: explicit prop wins, else the equipped hat.
@@ -55,6 +58,7 @@
         expression={expression}
         talkAmplitude={talkAmplitude}
         hat={resolvedHat}
+        idle={idle}
       />
     </T.Group>
   </Canvas>

@@ -650,6 +650,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       player.titleBadgeId = DEFAULT_COSMETICS.titleBadgeId;
       player.titleText = DEFAULT_COSMETICS.titleText;
       player.hat = DEFAULT_COSMETICS.hatId;
+      player.glasses = DEFAULT_COSMETICS.glassesId;
       return;
     }
     try {
@@ -662,6 +663,7 @@ export class WavelengthRoom extends DurableObject<Env> {
       p.titleBadgeId = cosmetics.titleBadgeId;
       p.titleText = cosmetics.titleText;
       p.hat = cosmetics.hatId;
+      p.glasses = cosmetics.glassesId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }

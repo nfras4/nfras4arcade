@@ -467,6 +467,7 @@ export class ImpostorRoom extends DurableObject<Env> {
       p.player.titleBadgeId = cosmetics.titleBadgeId;
       p.player.titleText = cosmetics.titleText;
       p.player.hat = cosmetics.hatId;
+      p.player.glasses = cosmetics.glassesId;
     } catch (err) {
       console.error('resolveCosmeticsForPlayer failed', { playerId, err });
     }

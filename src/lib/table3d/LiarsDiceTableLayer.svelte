@@ -392,6 +392,7 @@
               director.voiceAmplitudes[player.id] ?? 0,
             )}
             hat={(player.hat ?? 'none') as import('./core/rig.js').HatId}
+            glasses={(player.glasses ?? 'none') as import('./core/rig.js').GlassesId}
           />
         </T.Group>
       {/if}

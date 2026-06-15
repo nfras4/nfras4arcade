@@ -26,13 +26,14 @@
     FULL_TABLE_ARC,
     type SeatAssignment,
   } from './core/seats.js';
-  import type { HatId, ExpressionName } from './core/rig.js';
+  import type { HatId, ExpressionName, GlassesId } from './core/rig.js';
 
   interface ScenePlayer {
     id: string;
     name: string;
     isBot: boolean;
     hat?: string | null;
+    glasses?: string | null;
   }
 
   let {
@@ -131,6 +132,7 @@
             expression={expressionFor(player.id)}
             talkAmplitude={amplitudes[player.id] ?? 0}
             hat={(player.hat ?? 'none') as HatId}
+            glasses={(player.glasses ?? 'none') as GlassesId}
           />
         </T.Group>
       {/if}

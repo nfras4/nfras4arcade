@@ -386,7 +386,7 @@
         <p class="room-code">Room <strong>{state.code}</strong></p>
         {#if table3dOk}
           <div class="lobby-table-3d">
-            <BarrelTableScene players={state.players.map((p) => ({ id: p.id, name: p.name, isBot: p.isBot }))} myId={pid} />
+            <BarrelTableScene players={state.players.map((p) => ({ id: p.id, name: p.name, isBot: p.isBot, hat: p.hat, glasses: p.glasses }))} myId={pid} />
           </div>
         {/if}
 

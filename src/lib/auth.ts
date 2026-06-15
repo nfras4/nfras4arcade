@@ -54,15 +54,21 @@ export const gameHistory = writable<GameHistoryEntry[]>([]);
 export const perGameStats = writable<PerGameStat[]>([]);
 export const isLoggedIn = derived(currentUser, ($user) => $user !== null);
 
+// Private helper — zeros out all auth stores in one place. Called by fetchUser
+// on non-OK, by authedFetch on 401, and by logout on success.
+function clearAuthState(): void {
+  currentUser.set(null);
+  userStats.set(null);
+  userBadges.set([]);
+  gameHistory.set([]);
+  perGameStats.set([]);
+}
+
 export async function fetchUser(): Promise<AuthUser | null> {
   try {
     const res = await fetch('/api/auth/me');
     if (!res.ok) {
-      currentUser.set(null);
-      userStats.set(null);
-      userBadges.set([]);
-      gameHistory.set([]);
-      perGameStats.set([]);
+      clearAuthState();
       return null;
     }
     const data: {
@@ -94,6 +100,35 @@ async function readAuthError(res: Response, fallback: string): Promise<string> {
   return data?.error || data?.message || fallback;
 }
 
+/**
+ * Thin fetch wrapper that clears auth state on a 401 so a stale session
+ * (expired cookie or server-side row deletion) automatically signs the user
+ * out mid-session rather than leaving a zombie logged-in nav.
+ *
+ * The raw Response is always returned to the caller — redirect / error UI is
+ * the caller's responsibility, not ours.
+ */
+export async function authedFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    clearAuthState();
+    // Also evict the guest identity so a re-join after expiry cannot reuse
+    // the same guest_<id> (mirrors the logout clearing below).
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('arcade-guest-id');
+        sessionStorage.removeItem('arcade-guest-id');
+      }
+    } catch {
+      // storage may be unavailable; ignore
+    }
+  }
+  return res;
+}
+
 export async function login(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
   let res: Response;
   try {
@@ -109,8 +144,16 @@ export async function login(email: string, password: string): Promise<{ ok: bool
     return { ok: false, error: 'Network error. Check your connection and try again.' };
   }
   if (!res.ok) return { ok: false, error: await readAuthError(res, 'Login failed') };
+
+  // Fully hydrate all stores (level, chips, badges, cosmetics, owner crown).
+  // fetchUser() does NOT throw on a flaky /api/auth/me — it calls clearAuthState()
+  // and returns null. So we must restore the partial data.user afterward when
+  // hydration came back empty, otherwise a transient /me hiccup would null out a
+  // login that actually succeeded and render a logged-out nav.
   const data: { user?: AuthUser } = await res.json();
   if (data.user) currentUser.set(data.user);
+  const hydrated = await fetchUser().catch(() => null);
+  if (!hydrated && data.user) currentUser.set(data.user);
   return { ok: true };
 }
 
@@ -130,13 +173,35 @@ export async function register(
     return { ok: false, error: 'Network error. Check your connection and try again.' };
   }
   if (!res.ok) return { ok: false, error: await readAuthError(res, 'Registration failed') };
+
+  // Same full-hydration pattern as login(): fetchUser() nulls state on a flaky
+  // /me, so restore the partial data.user when hydration returns empty.
   const data: { user?: AuthUser } = await res.json();
   if (data.user) currentUser.set(data.user);
+  const hydrated = await fetchUser().catch(() => null);
+  if (!hydrated && data.user) currentUser.set(data.user);
   return { ok: true };
 }
 
-export async function logout(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST' });
+export async function logout(): Promise<{ ok: boolean; error?: string }> {
+  let res: Response;
+  try {
+    res = await fetch('/api/auth/logout', { method: 'POST' });
+  } catch {
+    // Network failure — server session is intact, do NOT clear stores so the
+    // caller can show 'Could not reach the server, you are still signed in'.
+    return { ok: false, error: 'Network error. Check your connection and try again.' };
+  }
+
+  if (!res.ok) {
+    // Non-OK (e.g. 500 from the server) — same: stay logged in so the user
+    // knows the session was not actually terminated.
+    const msg = await readAuthError(res, 'Logout failed');
+    return { ok: false, error: msg };
+  }
+
+  // Logout confirmed by server: clear everything.
+  clearAuthState();
   // Clear guest identity so a re-join after logout cannot reuse the same guest_<id>
   // (identity laundering prevention). Key duplicated here to avoid import cycle with guest.ts.
   try {
@@ -147,9 +212,5 @@ export async function logout(): Promise<void> {
   } catch {
     // storage may be unavailable; ignore
   }
-  currentUser.set(null);
-  userStats.set(null);
-  userBadges.set([]);
-  gameHistory.set([]);
-  perGameStats.set([]);
+  return { ok: true };
 }

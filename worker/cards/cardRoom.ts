@@ -26,6 +26,50 @@ function mapCardGameType(internal: string): GameType | null {
   }
 }
 
+/**
+ * Pure decision: should an incoming (non-reconnecting) join be registered as a
+ * spectator rather than seated as a live player?
+ *
+ * A join becomes a spectator when EITHER:
+ *  - the user explicitly asked to spectate (spectateIntent), OR
+ *  - the game is already in progress (phase !== 'lobby') — a mid-game seat must
+ *    never be filled by a fresh, hand-less player who isn't in turnOrder, OR
+ *  - the room is full (size >= max) — instead of bouncing with a bare error,
+ *    let them watch.
+ *
+ * Exported so it can be unit-tested without standing up the Durable Object.
+ */
+export function shouldJoinAsSpectator(
+  phase: CardGamePhase,
+  size: number,
+  max: number,
+  spectateIntent: boolean,
+): boolean {
+  if (spectateIntent) return true;
+  if (phase !== 'lobby') return true;
+  if (size >= max) return true;
+  return false;
+}
+
+/**
+ * Pure decision: pick the spectator id to promote into a freed seat, or null if
+ * no promotion should occur. Promotes the LONGEST-WAITING spectator, i.e. the
+ * first entry in insertion order (spectatorIds must be supplied in the Map's
+ * iteration order). Returns null when there's no free seat (size >= max) or no
+ * spectators are waiting.
+ *
+ * Exported for unit testing without the Durable Object.
+ */
+export function pickSpectatorToPromote(
+  spectatorIds: string[],
+  size: number,
+  max: number,
+): string | null {
+  if (size >= max) return null;
+  if (spectatorIds.length === 0) return null;
+  return spectatorIds[0];
+}
+
 const MAX_MESSAGE_SIZE = 2048;
 const ROOM_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes
 const DISCONNECT_TIMEOUT_MS = 30 * 1000; // 30 seconds before auto-forfeit
@@ -348,19 +392,7 @@ export abstract class CardRoom extends DurableObject<Env> {
           this.players.delete(id);
         }
       }
-      // Promote spectators to players. WHY hook: PokerRoom overrides
-      // canPromoteSpectator to atomically debit the buy-in from D1; failures
-      // skip the promotion and emit an error to the spectator.
-      const promotedIds: string[] = [];
-      for (const [specId, specName] of this.spectators) {
-        if (this.players.size >= this.maxPlayers) break;
-        const ok = await this.canPromoteSpectator(specId);
-        if (!ok) continue;
-        const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false, devices: [] };
-        this.players.set(specId, p);
-        promotedIds.push(specId);
-      }
-      for (const id of promotedIds) this.spectators.delete(id);
+      await this.promoteSpectators();
       this.broadcastState();
       // Back to lobby — keep the entry alive so spectators can still see it.
       await this.writeActiveRoom();
@@ -608,8 +640,13 @@ export abstract class CardRoom extends DurableObject<Env> {
       return;
     }
 
-    if (isSpectateIntent) {
-      // Register as spectator regardless of phase (intent-gated).
+    // Spectator registration covers three cases (see shouldJoinAsSpectator):
+    //   1. explicit spectate intent,
+    //   2. game already in progress (Finding 1 — never seat a hand-less player
+    //      mid-game; they'd pollute turnOrder gaps and end-of-game D1 writes),
+    //   3. room full (Finding 2 — auto-spectate instead of a bare 'full' error
+    //      with no path to watch; no client change required).
+    if (shouldJoinAsSpectator(this.phase, this.players.size, this.maxPlayers, isSpectateIntent)) {
       const storedName = await this.ctx.storage.get<string>(`name:${playerId}`);
       this.spectators.set(playerId, storedName || 'Spectator');
       this.sendToWs(ws, {
@@ -620,10 +657,6 @@ export abstract class CardRoom extends DurableObject<Env> {
       });
       this.broadcastState();
       await this.saveState();
-      return;
-    }
-    if (this.players.size >= this.maxPlayers) {
-      this.sendToWs(ws, { type: 'error', message: `Room is full (max ${this.maxPlayers} players)` });
       return;
     }
 
@@ -738,6 +771,13 @@ export abstract class CardRoom extends DurableObject<Env> {
         newHost.isHost = true;
         this.hostId = newHost.id;
       }
+      // Promote-on-vacancy (Finding 3): a lobby leave is the only event that
+      // truly frees a seat in fixed-size games like 2-player connect-four,
+      // where both seats stay occupied across rounds. Pull the longest-waiting
+      // spectator into the freed seat so they aren't permanently read-only.
+      if (this.players.size > 0 && this.spectators.size > 0) {
+        await this.promoteSpectators();
+      }
     } else {
       player.connected = false;
       // Schedule a disconnect timeout check for auto-forfeit
@@ -814,6 +854,43 @@ export abstract class CardRoom extends DurableObject<Env> {
    */
   protected async canPromoteSpectator(_specId: string): Promise<boolean> {
     return true;
+  }
+
+  /**
+   * Promote longest-waiting spectators into any free seats, respecting
+   * maxPlayers and the canPromoteSpectator gate.
+   *
+   * WHY hook: PokerRoom overrides canPromoteSpectator to atomically debit the
+   * buy-in from D1; failures skip that spectator (and MUST notify them) but do
+   * not block promotion of the next waiting spectator.
+   *
+   * Called on return-to-lobby (play_again) AND on promote-on-vacancy when a
+   * player leaves the lobby and frees a seat (Finding 3: fixed-size games like
+   * 2-player connect-four keep both seats occupied across rounds, so a lobby
+   * leave is the only event that genuinely frees a seat). Safe to call in any
+   * phase — callers decide when a vacancy exists. Subclass next_round handlers
+   * (president/chaseTheQueen) re-derive turnOrder from this.players, so any
+   * spectator already promoted here is automatically dealt into the next round.
+   * Returns the list of promoted spectator ids (caller decides whether to
+   * re-broadcast).
+   */
+  protected async promoteSpectators(): Promise<string[]> {
+    const promotedIds: string[] = [];
+    // Iterate a snapshot of the insertion-ordered spectator ids; the longest
+    // waiting spectator is first. We skip (not break on) a rejected spectator
+    // so a single gated reject can't starve everyone behind it.
+    for (const specId of Array.from(this.spectators.keys())) {
+      const pick = pickSpectatorToPromote([specId], this.players.size, this.maxPlayers);
+      if (!pick) break; // no free seat
+      const ok = await this.canPromoteSpectator(specId);
+      if (!ok) continue;
+      const specName = this.spectators.get(specId) || 'Player';
+      const p: CardPlayer = { id: specId, name: specName, hand: [], connected: true, isHost: false, devices: [] };
+      this.players.set(specId, p);
+      promotedIds.push(specId);
+    }
+    for (const id of promotedIds) this.spectators.delete(id);
+    return promotedIds;
   }
 
   // --- Bot management ---

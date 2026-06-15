@@ -9,6 +9,27 @@ const IP_WINDOW = 3_600_000;
 const EMAIL_LIMIT = 20;
 const EMAIL_WINDOW = 3_600_000;
 
+/**
+ * Maps a SQLite unique-constraint error message to a friendly { status, error }
+ * pair. Exported so it can be unit-tested without spinning up a full D1 environment.
+ *
+ * SQLite constraint violation messages take the form:
+ *   "UNIQUE constraint failed: <table>.<column>"
+ * D1 wraps these verbatim, so we match on the column reference.
+ */
+// Underscore prefix so SvelteKit permits this non-HTTP export from a +server.ts
+// endpoint (it is a pure helper, exported only for unit testing).
+export function _mapRegisterConstraintError(message: string): { status: number; error: string } {
+  const lower = message.toLowerCase();
+  if (lower.includes('users.email')) {
+    return { status: 409, error: 'Email already registered' };
+  }
+  if (lower.includes('player_profiles.display_name')) {
+    return { status: 409, error: 'That display name is taken' };
+  }
+  return { status: 500, error: 'Registration failed' };
+}
+
 export const POST: RequestHandler = async ({ request, platform }) => {
   const db = platform?.env?.DB;
   if (!db) return json({ error: 'Database not available' }, { status: 500 });
@@ -61,13 +82,25 @@ export const POST: RequestHandler = async ({ request, platform }) => {
   }
 
   try {
-    // Check if email already exists
+    // Check if email already exists (non-racing path; race handled in catch below).
     const existing = await db
       .prepare('SELECT id FROM users WHERE email = ?')
       .bind(email.toLowerCase())
       .first();
     if (existing) {
       return json({ error: 'Email already registered' }, { status: 409 });
+    }
+
+    // Pre-check for case-insensitive display name collision BEFORE the INSERT
+    // so the common case returns a clear 409 rather than a 500 from a
+    // constraint violation. A race between pre-check and INSERT is handled by
+    // the constraint mapping in the catch block below.
+    const existingName = await db
+      .prepare('SELECT id FROM player_profiles WHERE LOWER(display_name) = ?')
+      .bind(name.toLowerCase())
+      .first();
+    if (existingName) {
+      return json({ error: 'That display name is taken' }, { status: 409 });
     }
 
     const userId = crypto.randomUUID();
@@ -99,6 +132,15 @@ export const POST: RequestHandler = async ({ request, platform }) => {
     // Log the full error server-side; never echo D1/internal error messages to clients
     // (they leak schema details that speed up downstream exploitation).
     console.error('register failed', err);
+
+    // Map unique-constraint violations to friendly 409s. This covers races
+    // between the pre-checks above and the INSERT (TOCTOU window).
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.toLowerCase().includes('unique constraint failed')) {
+      const mapped = _mapRegisterConstraintError(message);
+      return json({ error: mapped.error }, { status: mapped.status });
+    }
+
     return json({ error: 'Registration failed' }, { status: 500 });
   }
 };

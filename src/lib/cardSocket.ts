@@ -3,6 +3,7 @@
  * but allows specifying the WS path per game type.
  */
 import { getGuestId } from './guest';
+import { shouldReconnect, reconnectDelay } from './reconnect';
 
 type MessageHandler = (msg: any) => void;
 
@@ -36,6 +37,7 @@ export class CardGameSocket {
   private isSpectateMode = false;
   private hasEverConnected = false;
   private reconnectCallbacks: Array<() => void> = [];
+  private reconnectAttempts = 0;
 
   constructor(wsPath: string) {
     this.wsPath = wsPath;
@@ -58,6 +60,8 @@ export class CardGameSocket {
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
+        // A clean open resets the backoff so the next genuine drop starts at 2s.
+        this.reconnectAttempts = 0;
         this.startPing();
         if (this.pendingJoin) {
           this.send({ type: 'join', code: roomCode });
@@ -90,8 +94,7 @@ export class CardGameSocket {
 
       this.ws.onclose = (event) => {
         this.stopPing();
-        if (event.code === 4001) return; // deliberate eviction; do not reconnect
-        this.scheduleReconnect();
+        this.scheduleReconnect(event.code);
       };
 
       this.ws.onerror = () => {
@@ -135,13 +138,19 @@ export class CardGameSocket {
 
   disconnect(): void {
     this.currentRoom = null;
+    this.reconnectAttempts = 0;
+    this.pendingJoin = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
     this.stopPing();
-    this.ws?.close();
-    this.ws = null;
+    if (this.ws) {
+      // Drop the close handler first so tearing down does not schedule a reconnect.
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
   }
 
   // Phase 3: swap the device role on the live socket. Closes the current
@@ -184,14 +193,23 @@ export class CardGameSocket {
     }
   }
 
-  private scheduleReconnect(): void {
+  private scheduleReconnect(closeCode = 1006): void {
     if (this.reconnectTimer || !this.currentRoom) return;
+    // 1000 (room dissolved/expired) and 4001 (eviction) must not reconnect; and
+    // bail after the ceiling so a dead room can't be hammered every 2s forever.
+    if (!shouldReconnect(closeCode, this.reconnectAttempts)) {
+      this.currentRoom = null;
+      this.reconnectAttempts = 0;
+      return;
+    }
+    const delay = reconnectDelay(this.reconnectAttempts);
+    this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
         this.pendingJoin = true;
         this.connect(this.currentRoom).catch(() => {});
       }
-    }, 2000);
+    }, delay);
   }
 }

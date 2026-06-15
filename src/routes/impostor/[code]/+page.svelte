@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { socket } from '$lib/ws';
   import {
     gameState, playerId, chatMessages, error, connected, votesIn, votedPlayerIds,
@@ -88,8 +88,12 @@
   }
 
   let reconnecting = $state(false);
+  let reconnectSettleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Setup socket listeners and handle reconnection on page refresh
+  // Setup socket listeners and handle reconnection on page refresh.
+  // Mount-only: state is read via untrack so this effect does NOT re-run on
+  // every broadcast — otherwise the teardown below would tear down and rebuild
+  // the socket on each state update.
   $effect(() => {
     const unsub = initSocketListeners();
     fetch('/api/categories')
@@ -97,21 +101,48 @@
       .then((data) => { categories = data as { name: string; difficulty: Difficulty }[]; })
       .catch(() => {});
 
-    // If no game state (page refresh), try to reconnect
-    if (!$gameState && !socket.connected) {
+    // If no game state (page refresh / deep link), try to reconnect.
+    const hasState = untrack(() => $gameState);
+    const asGuest = untrack(() => !$isLoggedIn);
+    if (!hasState && !socket.connected) {
       reconnecting = true;
-      socket.connect(code, !$isLoggedIn)
+      socket.connect(code, asGuest)
         .then(() => {
           socket.joinRoom(code);
           // Give the server a moment to respond with state
-          setTimeout(() => { reconnecting = false; }, 3000);
+          reconnectSettleTimer = setTimeout(() => { reconnecting = false; }, 3000);
         })
         .catch(() => {
           goto('/impostor');
         });
     }
 
-    return () => unsub();
+    // Tab close / external nav / bfcache: tell the DO we're leaving so the round
+    // can advance immediately rather than waiting out the hibernation timeout.
+    const onPageHide = () => {
+      if (socket.connected) socket.send({ type: 'leave_game' });
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('pagehide', onPageHide);
+    }
+
+    return () => {
+      unsub();
+      if (reconnectSettleTimer) {
+        clearTimeout(reconnectSettleTimer);
+        reconnectSettleTimer = null;
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('pagehide', onPageHide);
+      }
+      // Leaving by ANY route (back button, logo, in-app nav) — not just the
+      // Leave button — must drop the player server-side and tear down the
+      // singleton so it can't keep pinging, reconnect to the abandoned room, or
+      // push stale state into the lobby (the back-button "bounce" bug).
+      if (socket.connected) socket.send({ type: 'leave_game' });
+      socket.disconnect();
+      resetStores();
+    };
   });
 
   // Clear reconnecting flag once we have state

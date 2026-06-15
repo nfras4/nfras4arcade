@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage } from './types';
 import { getGuestId } from './guest';
+import { shouldReconnect, reconnectDelay } from './reconnect';
 
 type MessageHandler = (msg: ServerMessage) => void;
 
@@ -29,6 +30,7 @@ export class GameSocket {
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pendingJoin: ClientMessage | null = null;
   private currentRoom: string | null = null;
+  private reconnectAttempts = 0;
 
   connect(roomCode: string, _isGuest?: boolean): Promise<void> {
     this.currentRoom = roomCode;
@@ -43,6 +45,8 @@ export class GameSocket {
       this.ws = new WebSocket(url);
 
       this.ws.onopen = () => {
+        // A clean open resets the backoff so the next genuine drop starts at 2s.
+        this.reconnectAttempts = 0;
         this.startPing();
         if (this.pendingJoin) {
           this.send(this.pendingJoin);
@@ -61,9 +65,9 @@ export class GameSocket {
         } catch {}
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
         this.stopPing();
-        this.scheduleReconnect();
+        this.scheduleReconnect(event.code);
       };
 
       this.ws.onerror = () => {
@@ -97,13 +101,19 @@ export class GameSocket {
 
   disconnect(): void {
     this.currentRoom = null;
+    this.reconnectAttempts = 0;
+    this.pendingJoin = null;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
     this.stopPing();
-    this.ws?.close();
-    this.ws = null;
+    if (this.ws) {
+      // Drop the close handler first so tearing down does not schedule a reconnect.
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
   }
 
   get connected(): boolean {
@@ -123,8 +133,17 @@ export class GameSocket {
     }
   }
 
-  private scheduleReconnect(): void {
+  private scheduleReconnect(closeCode = 1006): void {
     if (this.reconnectTimer || !this.currentRoom) return;
+    // Never reconnect on a deliberate server close (1000/4001), and stop after
+    // the ceiling so a dissolved/expired room can't trigger an endless 2s storm.
+    if (!shouldReconnect(closeCode, this.reconnectAttempts)) {
+      this.currentRoom = null;
+      this.reconnectAttempts = 0;
+      return;
+    }
+    const delay = reconnectDelay(this.reconnectAttempts);
+    this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.currentRoom) {
@@ -132,7 +151,7 @@ export class GameSocket {
         this.pendingJoin = { type: 'join', code: this.currentRoom, name: '' };
         this.connect(this.currentRoom).catch(() => {});
       }
-    }, 2000);
+    }, delay);
   }
 }
 

@@ -103,6 +103,9 @@
   let previewFrameSvg: string | null = $state(null);
   let previewEmblemSvg: string | null = $state(null);
   let previewTitleSlug: string | null = $state(null);
+  // True when /api/auth/me resolves the hat to the Barrel Night crown, i.e. the
+  // crown override is currently active for this account (won within the week).
+  let crownActive = $state(false);
 
   let activeTab: TabId = $state('frame');
   let loading = $state(true);
@@ -274,11 +277,14 @@
             frame?: { svg: string } | null;
             emblem?: { svg: string } | null;
             titleBadge?: { id: string } | null;
+            hat?: { id: string } | null;
           };
         } = await meRes.json();
         previewFrameSvg = meData.user?.frame?.svg ?? null;
         previewEmblemSvg = meData.user?.emblem?.svg ?? null;
         previewTitleSlug = meData.user?.titleBadge?.id ?? null;
+        // The resolver hands back hat 'crown' only while the override window is live.
+        crownActive = meData.user?.hat?.id === 'crown';
       }
     } catch {
       errorMsg = 'Failed to load your loadout';
@@ -881,6 +887,20 @@
           id="panel-hat"
           aria-labelledby="tab-hat"
         >
+          <div class="crown-note" class:crown-note--active={crownActive} role="note">
+            <span class="crown-note-icon" aria-hidden="true">&#x1F451;</span>
+            {#if crownActive}
+              <span class="crown-note-text">
+                <strong>You're wearing the Barrel Night crown.</strong>
+                It overrides your hat everywhere until this week's bracket resets. Win again to keep it.
+              </span>
+            {:else}
+              <span class="crown-note-text">
+                <strong>The crown can't be bought.</strong>
+                Win <a href="/barrel-night">Barrel Night</a> and it auto-equips over your hat for the week.
+              </span>
+            {/if}
+          </div>
           {#if ownedHats.length === 0}
             <div class="empty-state card">
               <p>You don't own any hats yet.</p>
@@ -1315,6 +1335,44 @@
   .hat-emoji {
     font-size: 2rem;
     line-height: 1;
+  }
+
+  /* Caption explaining the Barrel Night crown — an earned-only hat override.
+     Gold-tinted to read as special; brightens when the crown is live. */
+  .crown-note {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.9rem;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+    background: rgba(200, 168, 75, 0.06);
+    border: 1px solid rgba(200, 168, 75, 0.28);
+    border-radius: 3px;
+  }
+
+  .crown-note--active {
+    color: var(--text);
+    background: rgba(200, 168, 75, 0.14);
+    border-color: rgba(200, 168, 75, 0.55);
+  }
+
+  .crown-note-icon {
+    font-size: 1.15rem;
+    line-height: 1;
+    flex: 0 0 auto;
+  }
+
+  .crown-note-text strong {
+    color: #d8bd6a;
+    font-weight: 700;
+  }
+
+  .crown-note-text a {
+    color: #d8bd6a;
+    text-decoration: underline;
   }
 
   .picker-none {
